@@ -1,5 +1,35 @@
-// input.js — keyboard, gamepad, touch (floating joystick + thruster cluster) and optional tilt steering
+// input.js — keyboard (rebindable), gamepad, touch (floating joystick + thruster cluster) and optional tilt steering
 (function () {
+  // rebindable keyboard actions: [id, label, default keys]. Held actions drive the car, the rest fire once per press
+  const ACTIONS = [
+    ['accel', 'Accelerate', ['KeyW', 'ArrowUp']],
+    ['brake', 'Brake / reverse', ['KeyS', 'ArrowDown']],
+    ['left', 'Steer left', ['KeyA', 'ArrowLeft']],
+    ['right', 'Steer right', ['KeyD', 'ArrowRight']],
+    ['hand', 'Handbrake drift', ['KeyX', 'ControlRight']],
+    ['jump', 'Under-thrusters (jump / hover)', ['Space']],
+    ['thrL', 'Left side thruster', ['KeyQ']],
+    ['thrR', 'Right side thruster', ['KeyE']],
+    ['boost', 'Rear thruster boost', ['ShiftLeft', 'ShiftRight']],
+    ['camera', 'Camera', ['KeyC']],
+    ['reset', 'Reset car', ['KeyR']],
+    ['pause', 'Pause', ['Escape', 'KeyP']],
+    ['mute', 'Mute', ['KeyM']],
+    ['fullscreen', 'Fullscreen', ['KeyF']],
+    ['hud', 'Hide HUD', ['KeyH']],
+  ];
+  const EVENT_ACTIONS = new Set(['camera', 'reset', 'pause', 'mute', 'fullscreen', 'hud']);
+  G.KEY_ACTIONS = ACTIONS;
+  G.defaultKeys = () => Object.fromEntries(ACTIONS.map(([id, , k]) => [id, k.slice()]));
+  // short readable name for a KeyboardEvent.code
+  G.keyName = (code) => {
+    if (!code) return '—';
+    const named = { Space: 'SPACE', Escape: 'ESC', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT',
+      ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', AltLeft: 'L-ALT', AltRight: 'R-ALT', Enter: 'ENTER', Tab: 'TAB', Backspace: 'BKSP', CapsLock: 'CAPS' };
+    if (named[code]) return named[code];
+    return code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'NUM ').toUpperCase();
+  };
+
   class Input {
     constructor() {
       this.keys = new Set();
@@ -10,16 +40,30 @@
       this.tilt = { on: false, neutral: null, val: 0 };
       this.autoAccel = false;
       this.sens = 1;
+      this.thrInvert = true; // side thrusters: the key / button names the thruster that fires (it pushes you the other way)
+      this.capture = null;   // while rebinding: called with the next key's code instead of driving
       this.lastDevice = 'keyboard';
+      this.setBinds(G.defaultKeys());
       this.bindKeys();
     }
 
+    setBinds(binds) {
+      this.binds = binds;
+      this.codeMap = new Map(); // code -> [actions]
+      for (const [id, codes] of Object.entries(binds)) for (const c of codes || []) if (c) {
+        if (!this.codeMap.has(c)) this.codeMap.set(c, []);
+        this.codeMap.get(c).push(id);
+      }
+    }
+    held(action) { for (const c of this.binds[action] || []) if (c && this.keys.has(c)) return true; return false; }
+
     bindKeys() {
-      const ev = { KeyC: 'camera', KeyR: 'reset', KeyP: 'pause', Escape: 'pause', KeyM: 'mute', KeyF: 'fullscreen', KeyH: 'hud' };
       window.addEventListener('keydown', (e) => {
+        if (this.capture) { e.preventDefault(); e.stopPropagation(); this.capture(e.code); return; }
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
-        if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
-        if (!e.repeat && ev[e.code]) this.events.push(ev[e.code]);
+        const acts = this.codeMap.get(e.code);
+        if (!e.ctrlKey && !e.metaKey && (acts || ['Space','ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code))) e.preventDefault();
+        if (!e.repeat && acts) for (const a of acts) if (EVENT_ACTIONS.has(a)) this.events.push(a);
         this.keys.add(e.code);
         this.lastDevice = 'keyboard';
         if (G.audio) G.audio.init(); // a race started straight after a reload has had no click to unlock sound yet
@@ -112,10 +156,17 @@
         refresh();
       };
       for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) cluster.addEventListener(type, onBtn, { passive: false });
+      this.updateHint();
+    }
+
+    updateHint() {
+      const h = this.touchRoot && this.touchRoot.querySelector('#t-hint');
+      if (h) h.textContent = this.tilt.on ? 'tilt to steer' : 'drag to steer';
     }
 
     enableTilt(on) {
       this.tilt.on = on;
+      this.updateHint();
       if (!on) return Promise.resolve(true);
       const add = () => {
         if (this._tiltBound) return;
@@ -155,17 +206,16 @@
     }
 
     update(dt, airborne) {
-      const k = this.keys, s = this.state;
-      const kl = k.has('KeyA') || k.has('ArrowLeft'), kr = k.has('KeyD') || k.has('ArrowRight');
-      const ku = k.has('KeyW') || k.has('ArrowUp'), kd = k.has('KeyS') || k.has('ArrowDown');
+      const s = this.state, h = (a) => this.held(a);
+      const kl = h('left'), kr = h('right'), ku = h('accel'), kd = h('brake');
       const target = (kr ? 1 : 0) - (kl ? 1 : 0);
       const rate = target === 0 ? 26 :(Math.sign(target) !== Math.sign(this.kSteer) ? 22 : 16);
       this.kSteer += G.clamp(target - this.kSteer, -rate * dt, rate * dt);
 
       let steer = this.kSteer, throttle = ku ? 1 : 0, brake = kd ? 1 : 0;
       let pitch = 0, roll = 0;
-      let jump = k.has('Space'), thrL = k.has('KeyQ'), thrR = k.has('KeyE'), boost = k.has('ShiftLeft') || k.has('ShiftRight');
-      let hand = k.has('KeyX') || k.has('ControlRight');
+      let jump = h('jump'), thrL = h('thrL'), thrR = h('thrR'), boost = h('boost');
+      let hand = h('hand');
 
       const gp = this.pollGamepad();
       if (gp) {
@@ -176,10 +226,14 @@
         jump = jump || gp.jump; thrL = thrL || gp.thrL; thrR = thrR || gp.thrR; boost = boost || gp.boost; hand = hand || gp.hand;
       }
 
-      if (this.touch.active) {
+      // tilt steering works from the first frame — no need to touch the stick zone before it kicks in
+      if (this.touchRoot && (this.touch.active || this.tilt.on)) {
         const tb = this.touch.btn;
         let ts = this.touch.steer * this.sens;
-        if (this.tilt.on) ts = G.clamp((this.tilt.val - (this.tilt.neutral || 0)) / 17, -1, 1) * this.sens;
+        if (this.tilt.on) {
+          const deg = this.tilt.val - (this.tilt.neutral || 0), dz = 1.5; // small dead zone so a steady hand drives straight
+          ts = G.clamp(Math.sign(deg) * Math.max(0, Math.abs(deg) - dz) / 16, -1, 1) * this.sens;
+        }
         if (Math.abs(ts) > Math.abs(steer)) steer = G.clamp(ts, -1, 1);
         const ty = this.touch.y;
         if (this.autoAccel) { if (!tb.has('brake')) throttle = Math.max(throttle, ty > 0.5 ? 0 : 1); }
@@ -190,6 +244,9 @@
         boost = boost || tb.has('boost'); hand = hand || tb.has('handbrake');
       }
 
+      // physics reads thrL / thrR as "slide left / right". Inverted (default): the key names the thruster that fires,
+      // so the left thruster pushes the car right. With the under-thrusters lit, L / R still pick that side's pair.
+      if (this.thrInvert && !jump) { const t = thrL; thrL = thrR; thrR = t; }
       s.steer = G.clamp(steer, -1, 1); s.throttle = throttle; s.brake = brake; s.handbrake = hand;
       s.jump = jump; s.thrL = thrL; s.thrR = thrR; s.boost = boost; s.pitch = pitch; s.rollAir = roll;
       return s;

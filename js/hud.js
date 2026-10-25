@@ -49,8 +49,10 @@
         this.n2st.textContent = { locked: 'EMPTY · RECHARGING', use: 'IN USE', full: 'FULL', charge: 'RECHARGING', wait: 'LAND TO RECHARGE' }[st];
       }
       this.n2wrap.classList.toggle('low', p.fuel < 20 || p.fuelLock);
-      this.tl.classList.toggle('on', p.th.L > 0.3 || p.th.SL > 0.3);
-      this.tr.classList.toggle('on', p.th.R > 0.3 || p.th.SR > 0.3);
+      // L / R light up for the key or button you're holding (inverted thrusters swap which way that pushes)
+      const inv = g.input.thrInvert, sl = inv ? p.th.SR : p.th.SL, sr = inv ? p.th.SL : p.th.SR;
+      this.tl.classList.toggle('on', p.th.L > 0.3 || sl > 0.3);
+      this.tr.classList.toggle('on', p.th.R > 0.3 || sr > 0.3);
       this.tb.classList.toggle('on', p.th.B > 0.3);
       this.alt.textContent = p.altitude > 1.5 ? `ALT ${p.altitude.toFixed(1)} m` : '';
       if (g.mode === 'race') {

@@ -15,6 +15,7 @@
   const DEFAULTS = {
     quality: G.isMobile ? 'medium' : 'high', tod: 'night', traffic: 'medium', laps: 3, rivals: 5, difficulty: 'normal', track: 'city',
     camera: 0, autoAccel: G.isTouch, tilt: false, sens: 1, showFps: false, touchUI: 'auto', vol: 0.7, shake: true,
+    thrInvert: true, keys: null, // keys: { action: [code, code] }, null = defaults
   };
 
   const RadialShader = {
@@ -41,6 +42,7 @@
       this.steam = new G.Particles(game.scene, Q.particles, { texture: puff, color: new T.Color(0.86, 0.9, 0.98).multiplyScalar(tod.steam) });
       this.smoke = new G.Particles(game.scene, Math.round(Q.particles * 0.35), { texture: puff, color: new T.Color(0.32, 0.32, 0.34).multiplyScalar(tod.steam) });
       this.sparks = new G.Particles(game.scene, 500, { texture: G.softSprite(), additive: true, color: new T.Color(5, 2.2, 0.6) });
+      this.leaves = new G.Particles(game.scene, 300, { texture: G.softSprite(), color: new T.Color(0.22, 0.36, 0.1).multiplyScalar(tod.steam) });
       this.rate = Q.particles / 4500;
       this.acc = new Map();
       this.v = new T.Vector3(); this.d = new T.Vector3(); this.u = new T.Vector3(); this.f = new T.Vector3();
@@ -89,7 +91,7 @@
           0.3 + Math.random() * 0.5, 0.18, 0.05, 1, { drag: 0.8, buoy: 0, grav: 14, spread: 2, spin: 0 });
       }
     }
-    update(dt) { this.steam.update(dt); this.smoke.update(dt); this.sparks.update(dt); }
+    update(dt) { this.steam.update(dt); this.smoke.update(dt); this.sparks.update(dt); this.leaves.update(dt); }
   }
 
   // ---------------- game ----------------
@@ -180,7 +182,8 @@
 
       this.hud = new G.HUD(this);
       this.input = new G.Input();
-      this.input.autoAccel = S.autoAccel; this.input.sens = S.sens;
+      this.input.autoAccel = S.autoAccel; this.input.sens = S.sens; this.input.thrInvert = S.thrInvert;
+      if (S.keys) this.input.setBinds(Object.assign(G.defaultKeys(), S.keys));
       if (S.tilt && G.isTouch) this.input.enableTilt(true);
       const useTouch = S.touchUI === 'on' || (S.touchUI === 'auto' && G.isTouch);
       if (useTouch) { document.body.classList.add('touch'); this.input.buildTouch($('touch')); }
@@ -268,6 +271,7 @@
       click('btn-restart', () => { this.pause(false, true); this.startRace(this.mode); });
       click('btn-quit', () => { this.pause(false, true); this.toMenu(); });
       click('btn-psettings', () => this.showPanel('settings'));
+      click('btn-pcontrols', () => this.showPanel('controls'));
       click('btn-again', () => this.startRace(this.mode));
       click('btn-rmenu', () => this.toMenu());
       click('btn-cam', () => this.cycleCam());
@@ -289,15 +293,84 @@
         el.addEventListener('change', () => { S[key] = el.checked; this.saveSettings(key); if (after) after(el.checked, el); });
       };
       tog('s-auto', 'autoAccel', (v) => (this.input.autoAccel = v));
-      tog('s-tilt', 'tilt', (v, el) => this.input.enableTilt(v).then((ok) => { if (!ok) { el.checked = false; S.tilt = false; this.saveSettings('tilt'); } }));
+      seg('s-thr', 'thrInvert', (v) => v === 'true');
       tog('s-fps', 'showFps', (v) => $('fps').classList.toggle('hidden', !v));
       tog('s-shake', 'shake');
       const rng = (id, key, after) => { const el = $(id); el.value = S[key]; el.addEventListener('input', () => { S[key] = Number(el.value); this.saveSettings(key); after && after(S[key]); }); };
       rng('s-vol', 'vol', (v) => G.audio.setVolume(v));
       rng('s-sens', 'sens', (v) => (this.input.sens = v));
       G.audio.setVolume(S.vol);
-      $('s-tilt-row').classList.toggle('hidden', !G.isTouch);
+      this.wireControls();
       this.updateBestUI();
+    }
+
+    // CONTROLS panel: thruster direction, touch steering (stick / tilt), rebindable keyboard
+    wireControls() {
+      const S = this.settings, inp = this.input;
+      $('ctl-touch').classList.toggle('hidden', !G.isTouch);
+      $('ctl-keys').classList.toggle('hidden', G.isMobile);
+      const thrHint = () => {
+        const k = (a) => (G.isMobile ? '' : G.keyName((inp.binds[a] || [])[0]) + ' / ') + (a === 'thrL' ? 'L' : 'R');
+        $('thr-hint').textContent = S.thrInvert
+          ? `${k('thrL')} fires the LEFT thruster and pushes you right · ${k('thrR')} fires the right one and pushes you left.`
+          : `${k('thrL')} slides you left · ${k('thrR')} slides you right.`;
+      };
+      thrHint();
+      $('s-thr').addEventListener('click', () => { inp.thrInvert = S.thrInvert; thrHint(); });
+
+      // steering: thumb stick or tilt (the tilt permission prompt on iOS needs this click)
+      const steerEl = $('s-steer');
+      const showSteer = () => {
+        steerEl.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === (S.tilt ? 'tilt' : 'stick')));
+        $('calib-row').classList.toggle('hidden', !S.tilt);
+        $('steer-hint').textContent = S.tilt
+          ? 'Turn the phone like a steering wheel. The stick zone still brakes (drag down) and accelerates if auto-accelerate is off.'
+          : 'Drag anywhere on the left half of the screen to steer.';
+      };
+      steerEl.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+        const want = b.dataset.v === 'tilt';
+        S.tilt = want; this.saveSettings('tilt'); showSteer();
+        inp.enableTilt(want).then((ok) => {
+          if (ok) { if (want) setTimeout(() => inp.calibrateTilt(), 300); return; }
+          S.tilt = false; this.saveSettings('tilt'); showSteer();
+          $('steer-hint').textContent = 'Tilt steering needs motion-sensor access, which was blocked on this device.';
+        });
+      }));
+      $('btn-calib').addEventListener('click', () => { inp.calibrateTilt(); G.audio.tone(900, 0.05, 0.08, 'triangle'); });
+      showSteer();
+
+      // keyboard rebinding: two slots per action; a key belongs to one action at a time
+      const box = $('keybinds');
+      let pending = null;
+      const save = () => { S.keys = inp.binds; G.store.set('settings', S); thrHint(); };
+      const render = () => {
+        box.innerHTML = G.KEY_ACTIONS.map(([id, label]) => `<div class="bind"><span>${label}</span>` +
+          [0, 1].map((slot) => `<button data-a="${id}" data-s="${slot}" class="${pending && pending.id === id && pending.slot === slot ? 'wait' : ''}">` +
+            (pending && pending.id === id && pending.slot === slot ? 'PRESS A KEY' : G.keyName((inp.binds[id] || [])[slot])) + '</button>').join('') + '</div>').join('');
+      };
+      const stop = () => { pending = null; inp.capture = null; render(); };
+      box.addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-a]');
+        if (!b) return;
+        pending = { id: b.dataset.a, slot: +b.dataset.s };
+        render();
+        inp.capture = (code) => {
+          const binds = inp.binds, { id, slot } = pending;
+          if (code === 'Escape') return stop();
+          const list = (binds[id] || []).slice();
+          if (code === 'Backspace' || code === 'Delete') list[slot] = null;
+          else {
+            for (const [a, codes] of Object.entries(binds)) binds[a] = (codes || []).map((c) => (c === code ? null : c)); // steal it from wherever it was
+            list[slot] = code;
+          }
+          binds[id] = list;
+          inp.setBinds(binds); save(); stop();
+        };
+      });
+      $('btn-keys-reset').addEventListener('click', () => { inp.setBinds(G.defaultKeys()); S.keys = null; G.store.set('settings', S); stop(); thrHint(); });
+      // leaving the panel mid-rebind cancels it
+      document.querySelectorAll('#controls [data-back]').forEach((b) => b.addEventListener('click', () => { if (pending) stop(); }));
+      render();
     }
 
     saveSettings(key) {
@@ -386,6 +459,7 @@
       this.raceTime = 0; this.score = 0; this.combo = 1; this.comboT = 0; this.finished = false;
       this.airT = 0; this.driftT = 0; this.driftScore = 0;
       for (const p of this.pickups) { p.active = true; p.g.visible = true; }
+      this.city.resetTrees();
       this.hud.show(true); this.hud.setMode(mode === 'race');
       $('menu').classList.remove('open');
       document.body.classList.add('playing');
@@ -482,6 +556,25 @@
       G.audio.impact(v); this.fx.burst(x, y, z, Math.min(40, 6 + v * 1.5), self.vel.x, 2, self.vel.z, 5);
       this.addShake(Math.min(0.7, v / 20));
       if (v > 8) { this.combo = 1; this.comboT = 0; }
+    }
+    // any roadster (player or rival) snapped a street tree: wood chips and leaves; the player also feels it
+    onTreeHit(body, tree, v) {
+      const d = body.pos.distanceTo(this.player.pos);
+      if (d < 90) {
+        const fx = this.fx;
+        for (let k = 0; k < 26; k++) {
+          fx.leaves.emit(tree.x + (Math.random() - 0.5) * 3, 3 + Math.random() * 4, tree.z + (Math.random() - 0.5) * 3,
+            body.vel.x * 0.3 + (Math.random() - 0.5) * 6, Math.random() * 3, body.vel.z * 0.3 + (Math.random() - 0.5) * 6,
+            1.6 + Math.random() * 1.6, 0.35, 0.25, 1, { drag: 1.6, buoy: 0, grav: 3, spin: 6 });
+        }
+        fx.burst(tree.x, 0.9, tree.z, 10, body.vel.x, 1.5, body.vel.z, 4);
+        G.audio.impact(Math.min(30, v * 0.6) * Math.max(0.15, 1 - d / 90));
+      }
+      if (body !== this.player) return;
+      this.addShake(Math.min(0.7, v / 40));
+      if (navigator.vibrate) try { navigator.vibrate(Math.min(90, 20 + v * 1.5)); } catch (e) { /* ignore */ }
+      this.combo = 1; this.comboT = 0;
+      if (this.state === 'race' || this.state === 'finished') this.hud.popup('TIMBER!', 'tree down', 'warn');
     }
     // N₂ meter cues: one sound as it runs dry, one when it is back to 100%
     fuelCues(p) {

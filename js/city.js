@@ -433,13 +433,17 @@
       const trunk = new T.InstancedMesh(trunkGeo, trunkMat, trees.length);
       const grate = new T.InstancedMesh(grateGeo, new T.MeshStandardMaterial({ color: 0x1c1d20, roughness: 0.55, metalness: 0.6 }), trees.length);
       const tr = G.rng(9), leafCol = new T.Color(), used = [0, 0];
+      const info = [];
       trees.forEach((t, i) => {
         const p = track.sample(t.s, {});
-        const lat = t.sg * (G.WALK_OUT - 1.4);
+        // mid-sidewalk, close enough to the kerb that a car riding the pavement has to thread between them
+        const lat = t.sg * (G.ROAD_HALF + 1.6);
         const x = p.x + p.rx * lat, z = p.z + p.rz * lat;
         const k = 0.85 + tr() * 0.35;
-        qq.setFromAxisAngle(up, tr() * Math.PI * 2);
-        m4.compose(ps.set(x, 0.16, z), qq, sc.set(k, k * (0.92 + tr() * 0.16), k));
+        const yaw = tr() * Math.PI * 2;
+        qq.setFromAxisAngle(up, yaw);
+        const sy = k * (0.92 + tr() * 0.16);
+        m4.compose(ps.set(x, 0.16, z), qq, sc.set(k, sy, k));
         trunk.setMatrixAt(i, m4);
         const L = leaves[kind[i]], j = used[kind[i]]++;
         L.setMatrixAt(j, m4);
@@ -447,10 +451,69 @@
         leafCol.setHSL(0.22 + tr() * 0.06, 0.25 + tr() * 0.2, 0.82 + tr() * 0.18);
         L.setColorAt(j, leafCol);
         m4.compose(ps.set(x, 0, z), qq, sc.set(1, 1, 1)); grate.setMatrixAt(i, m4);
+        info.push({ i, j, L, x, z, yaw, k, sy, alive: true, fall: 0, gone: 0, ax: 1, az: 0 });
       });
       for (const m of [trunk, grate, ...leaves]) { m.frustumCulled = false; scene.add(m); }
       for (const m of [trunk, ...leaves]) m.castShadow = Q.shadows;
+      for (const m of [trunk, ...leaves]) m.instanceMatrix.setUsage(T.DynamicDrawUsage);
+
+      // ---------- breakable trees: solid trunks that snap and topple when a car hits them ----------
+      const CELL = 10, grid = new Map(), gk = (cx, cz) => cx * 73856093 ^ cz * 19349663;
+      for (const t of info) {
+        const key = gk(Math.floor(t.x / CELL), Math.floor(t.z / CELL));
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key).push(t);
+      }
+      const TR = 0.35, fallen = new Set(), tq = new T.Quaternion(), tAxis = new T.Vector3();
+      const pose = (t) => {
+        // pivot at the base: lean over toward the fall direction, then sink and shrink away once it's down
+        tq.setFromAxisAngle(tAxis.set(t.ax, 0, t.az), Math.min(1, t.fall) * 1.45).multiply(qq.setFromAxisAngle(up, t.yaw));
+        const shrink = G.clamp(1 - t.gone, 0, 1);
+        m4.compose(ps.set(t.x, 0.16 - (1 - shrink) * 0.5, t.z), tq, sc.set(t.k * shrink, t.sy * shrink, t.k * shrink));
+        trunk.setMatrixAt(t.i, m4); t.L.setMatrixAt(t.j, m4);
+        trunk.instanceMatrix.needsUpdate = true; t.L.instanceMatrix.needsUpdate = true;
+      };
+      // body = a G.Player (the player or an AI rival); returns the tree it broke, if any
+      city.hitTrees = (b) => {
+        const pos = b.pos;
+        if (pos.y > 6) return null;
+        const cx = Math.floor(pos.x / CELL), cz = Math.floor(pos.z / CELL);
+        const fx = -2 * (b.q.x * b.q.z + b.q.w * b.q.y), fz = -(1 - 2 * (b.q.x * b.q.x + b.q.y * b.q.y)); // local -Z in world
+        const fl = Math.hypot(fx, fz) || 1, hx = fx / fl, hz = fz / fl;
+        for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) {
+          const list = grid.get(gk(cx + a, cz + c));
+          if (!list) continue;
+          for (const t of list) {
+            if (!t.alive) continue;
+            const dx = t.x - pos.x, dz = t.z - pos.z;
+            if (dx * dx + dz * dz > 9.5) continue;
+            const along = dx * hx + dz * hz, side = dx * -hz + dz * hx;
+            if (Math.abs(along) > 2.3 + TR || Math.abs(side) > 1.02 + TR) continue;
+            // snap: fall the way the car was going
+            const sp = Math.hypot(b.vel.x, b.vel.z);
+            const dirX = sp > 1 ? b.vel.x / sp : hx, dirZ = sp > 1 ? b.vel.z / sp : hz;
+            t.alive = false; t.fall = 0; t.gone = 0; t.ax = dirZ; t.az = -dirX; t.down = 0;
+            fallen.add(t);
+            return { tree: t, along, side, speed: sp };
+          }
+        }
+        return null;
+      };
+      city.resetTrees = () => {
+        for (const t of info) if (!t.alive) { t.alive = true; t.fall = 0; t.gone = 0; t.hidden = false; pose(t); }
+        fallen.clear();
+      };
+      city.updateTrees = (dt, focus) => {
+        for (const t of fallen) {
+          if (t.fall < 1) t.fall = Math.min(1, t.fall + dt * (0.6 + t.fall * 3)); // slow start, then it really goes
+          else if ((t.down += dt) > 2.5 && t.gone < 1) t.gone = Math.min(1, t.gone + dt * 1.5);
+          if (!t.hidden) { pose(t); if (t.gone >= 1) t.hidden = true; }
+          // grows back once it's long gone and out of sight
+          if (t.gone >= 1 && t.down > 35 && Math.hypot(t.x - focus.x, t.z - focus.z) > 160) { t.alive = true; t.fall = 0; t.gone = 0; t.hidden = false; pose(t); fallen.delete(t); }
+        }
+      };
     }
+    if (!city.hitTrees) { city.hitTrees = () => null; city.resetTrees = () => {}; city.updateTrees = () => {}; }
 
     // ---------- start / finish gantry ----------
     const g0 = track.sample(0, {});
@@ -503,6 +566,7 @@
       skyMat.uniforms.uTime.value = tAcc;
       beaconMat.color.setRGB(Math.sin(tAcc * 3) > 0.2 ? 6 : 0.4, 0.15, 0.12);
       if (treeTime) treeTime.value = tAcc;
+      city.updateTrees(dt, focus);
       // shadow camera follows the focus (player)
       sun.target.position.copy(focus);
       sun.position.copy(focus).addScaledVector(sunDir, 160);

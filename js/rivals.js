@@ -5,14 +5,17 @@
   const NAMES = ['NOVA', 'RAVEN', 'ION', 'COMET', 'BLITZ', 'VEGA', 'ORBIT'];
   const COLORS = [0xc0182a, 0x15171b, 0x1d4fd8, 0xf2b705, 0xe8f6ff, 0x6a1bb0, 0x0f8f6a];
   // lines the AI can hold: every lane running with the race, the first oncoming lane (if any), and a line just
-  // past each edge lane that slips past ramps (city: [1.8, 5.4, 9.0, -1.8, 0.1, 12.6]); rebuilt per track
+  // past each edge lane that slips past ramps — only where the whole car stays on the asphalt, never the sidewalk
+  // (city: [1.8, 5.4, 9.0, -1.8, 0.1]); rebuilt per track
   let CAND = [], CAND_COST = [];
   function buildCand() {
     const F = G.LANES_FWD, lo = Math.min(...F), hi = Math.max(...F);
     CAND = [...F]; CAND_COST = F.map(() => 0);
     if (G.LANES_ONC.length) { CAND.push(G.LANES_ONC[0]); CAND_COST.push(70); }
-    for (const l of [lo - 1.7, hi + 3.6]) if (Math.abs(l) < G.WALL - 1.5) { CAND.push(l); CAND_COST.push(10); }
+    for (const l of [lo - 1.7, hi + 1.6]) if (Math.abs(l) < G.ROAD_HALF - 1.4 && !CAND.includes(l)) { CAND.push(l); CAND_COST.push(10); }
   }
+  // the furthest a rival's aim point may sit from the centre line: kerb minus half a car and a little margin
+  const latMax = () => G.ROAD_HALF - 1.4;
   // rival skill: how close to the car's real limits the AI dares to drive. Same car, same physics, same keys —
   // aLat = cornering it trusts (m/s², tyres give ~16), aBrk = braking it plans with, top = speed cap (fraction
   // of a 100 m/s flat-out run), boost = boosts per second on straights, n2 = N₂ it keeps in reserve,
@@ -55,7 +58,7 @@
         r.pos = r.b.pos; r.th = r.b.th;
         this.list.push(r);
       }
-      this._s = {};
+      this._s = {}; this._m = {};
     }
 
     grid(startS, slots) {
@@ -177,8 +180,20 @@
     // pure-pursuit steering toward the lane, throttle/brake toward the target speed
     drive(r, tr, target, lat) {
       const b = r.b, inp = r.inp, v = r.v;
+      // keep off the sidewalk: an aim point that cuts a corner drags the car inward, so pull the aim back toward
+      // the centre by however far the car has already drifted past the edge of the asphalt
+      const lm = latMax();
+      lat = G.clamp(lat, -lm, lm);
+      const over = Math.abs(b.near.lat) - (lm - 0.4);
+      if (over > 0 && Math.sign(b.near.lat) === Math.sign(lat)) lat -= Math.sign(lat) * over * 3;
       const Ld = 7 + v * 0.42;
       const p = tr.sample(b.near.s + Ld, this._s);
+      // in a corner the straight line to the aim point bulges over the inside kerb: check where it passes halfway
+      // and slide the aim outward until that point is back on the asphalt
+      const m = tr.sample(b.near.s + Ld / 2, this._m);
+      const midLat = ((b.pos.x + p.x + p.rx * lat) / 2 - m.x) * m.rx + ((b.pos.z + p.z + p.rz * lat) / 2 - m.z) * m.rz;
+      const bulge = Math.abs(midLat) - (lm - 0.6);
+      if (bulge > 0) lat = G.clamp(lat - Math.sign(midLat) * bulge * 2, -lm, lm);
       const tx = p.x + p.rx * lat - b.pos.x, tz = p.z + p.rz * lat - b.pos.z;
       const f = _f.set(0, 0, -1).applyQuaternion(b.q);
       const fx = f.x, fz = f.z, rx = -fz, rz = fx; // car's right in the ground plane
@@ -192,7 +207,16 @@
       inp.brake = err < -1.5 && v > 2 ? G.clamp(-err / 4, 0, 1) : 0;
       // full throttle whenever there's room: the planner already leaves the margin
       if (err > 1) inp.throttle = 1;
-      inp.boost = false; inp.jump = false;
+      inp.boost = false; inp.jump = false; inp.thrL = inp.thrR = false;
+      // off a ramp at an angle there's no grip to steer with: fire a flank thruster if the landing spot is past the kerb
+      if (!b.grounded && b.altitude > 0.8) {
+        const vl = b.vel.x * m.rx + b.vel.z * m.rz;
+        const land = b.near.lat + vl * (Math.sqrt(2 * b.altitude / 9.8) + 0.35);
+        if (Math.abs(land) > lm - 1) {
+          const push = rx * m.rx + rz * m.rz > 0 ? 1 : -1; // +1: the car's right is the track's right
+          if (land * push > 0) inp.thrL = true; else inp.thrR = true;
+        }
+      }
     }
 
     emit(r, dt) {

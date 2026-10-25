@@ -571,6 +571,16 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
         }
       }
 
+      // --- street trees: solid until hit, then they snap and the car loses a good chunk of its speed ---
+      const city = this.game.city;
+      const th = city && city.hitTrees(this);
+      if (th) {
+        const keep = G.clamp(0.72 - th.speed * 0.003, 0.5, 0.72);
+        vel.x *= keep; vel.z *= keep;
+        w.y -= Math.sign(th.side || 1) * Math.sign(th.along || 1) * G.clamp(th.speed * 0.02, 0.2, 1.1);
+        this.onTreeHit(th.tree, th.speed);
+      }
+
       // safety: never fall through the world
       if (pos.y < -2) { pos.y = 0.5; vel.y = 0; }
 
@@ -589,6 +599,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     onFlipped() { this.game.resetPlayer(); }
     onTrafficHit(c, vrel, x, y, z) { this.game.onTrafficHit(c, vrel, x, y, z); }
     onCarHit(other, vrel, x, y, z) { this.game.onCarHit(this, other, vrel, x, y, z); }
+    onTreeHit(tree, v) { this.game.onTreeHit(this, tree, v); }
 
     syncModel() {
       const m = this.model;

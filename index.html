@@ -83,6 +83,7 @@
   <!-- RACE SETUP -->
   <div id="setup" class="panel card">
     <h2 id="setup-title">STREET RACE</h2>
+    <div class="scroll">
     <label>TRACK</label>
     <div class="seg" id="s-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button></div>
     <label>TRAFFIC</label>
@@ -97,6 +98,7 @@
     </div>
     <label>TIME OF DAY</label>
     <div class="seg" id="s-tod"><button data-v="night">NIGHT</button><button data-v="sunset">SUNSET</button></div>
+    </div>
     <div class="actions"><button data-back>BACK</button><button id="btn-go" class="primary">GO!</button></div>
   </div>
 
@@ -110,9 +112,6 @@
       <div class="seg" id="s-camera"><button data-v="0">CHASE</button><button data-v="1">FAR</button><button data-v="2">HOOD</button></div>
       <label>TOUCH CONTROLS</label>
       <div class="seg" id="s-touch"><button data-v="auto">AUTO</button><button data-v="on">ON</button><button data-v="off">OFF</button></div>
-      <div class="tog"><span>Auto-accelerate (touch)</span><input type="checkbox" id="s-auto" /></div>
-      <div class="tog" id="s-tilt-row"><span>Tilt to steer</span><input type="checkbox" id="s-tilt" /></div>
-      <div class="tog"><span>Steering sensitivity</span><input type="range" id="s-sens" min="0.5" max="1.6" step="0.05" /></div>
       <div class="tog"><span>Volume</span><input type="range" id="s-vol" min="0" max="1" step="0.05" /></div>
       <div class="tog"><span>Camera shake</span><input type="checkbox" id="s-shake" /></div>
       <div class="tog"><span>Show FPS</span><input type="checkbox" id="s-fps" /></div>
@@ -125,22 +124,29 @@
   <div id="controls" class="panel card">
     <h2>CONTROLS</h2>
     <div class="scroll ctl">
+      <label>SIDE THRUSTERS</label>
+      <div class="seg" id="s-thr"><button data-v="true">INVERTED</button><button data-v="false">CLASSIC</button></div>
+      <p class="hint" id="thr-hint"></p>
+      <div id="ctl-touch">
+        <label>STEERING</label>
+        <div class="seg" id="s-steer"><button data-v="stick">THUMB STICK</button><button data-v="tilt">TILT PHONE</button></div>
+        <p class="hint" id="steer-hint"></p>
+        <div class="tog" id="calib-row"><span>Hold the phone how you'll play, then</span><button id="btn-calib">CENTER TILT</button></div>
+        <div class="tog"><span>Auto-accelerate</span><input type="checkbox" id="s-auto" /></div>
+        <div class="tog"><span>Steering sensitivity</span><input type="range" id="s-sens" min="0.5" max="1.6" step="0.05" /></div>
+      </div>
+      <div id="ctl-keys">
+        <label>KEYBOARD <i>· click a key to rebind · Del clears · Esc cancels</i></label>
+        <div id="keybinds" class="binds"></div>
+        <div class="binds-foot"><button id="btn-keys-reset">RESET KEYS</button></div>
+      </div>
       <div class="cols">
         <div>
-          <h3>KEYBOARD</h3>
-          <p><kbd>W</kbd>/<kbd>↑</kbd> accelerate · <kbd>S</kbd>/<kbd>↓</kbd> brake / reverse</p>
-          <p><kbd>A</kbd><kbd>D</kbd> steer · <kbd>X</kbd> handbrake drift</p>
-          <p><kbd>Q</kbd>/<kbd>E</kbd> side thrusters — slide left / right (great for steering in the air)</p>
-          <p><kbd>Space</kbd> all four under-thrusters (jump / hover)</p>
-          <p><kbd>Shift</kbd> rear thruster BOOST</p>
-          <p><kbd>Space</kbd>+<kbd>Q</kbd> / <kbd>Space</kbd>+<kbd>E</kbd> one side's under-thrusters only — roll / flip</p>
-          <p><kbd>C</kbd> camera · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen · <kbd>H</kbd> hide HUD</p>
+          <h3>TOUCH</h3>
+          <p>Left half: floating stick — drag sideways to steer (unless tilt is on), down to brake.</p>
+          <p>Right cluster: <b>BOOST</b>, <b>JUMP</b>, <b>L</b>/<b>R</b> side thrusters, <b>BRAKE</b>, <b>DRIFT</b>. Hold <b>JUMP</b> and slide onto <b>L</b>/<b>R</b> to flip.</p>
         </div>
         <div>
-          <h3>TOUCH</h3>
-          <p>Left half: floating stick — drag sideways to steer, down to brake.</p>
-          <p>Right cluster: <b>BOOST</b>, <b>JUMP</b>, <b>L</b>/<b>R</b> side thrusters, <b>BRAKE</b>, <b>DRIFT</b>. Hold <b>JUMP</b> and slide onto <b>L</b>/<b>R</b> to flip.</p>
-          <p>Auto-accelerate is on by default. Tilt steering is in Settings.</p>
           <h3>GAMEPAD</h3>
           <p>RT gas · LT brake · A jump · LB/RB side thrusters (A + LB/RB flips) · X boost · B drift · Y camera · right stick pitch/roll in the air</p>
         </div>
@@ -158,6 +164,7 @@
       <button id="btn-resume" class="primary">RESUME</button>
       <button id="btn-restart">RESTART</button>
       <button id="btn-psettings">SETTINGS</button>
+      <button id="btn-pcontrols">CONTROLS</button>
       <button id="btn-quit">QUIT TO MENU</button>
     </div>
   </div>
