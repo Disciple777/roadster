@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#07080c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Roadster Thruster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>{ const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/style.css?v=' + Date.now(); document.head.appendChild(l); }</script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-tl">
+      <div class="race-only box"><small>POS</small><b><span id="h-pos">1</span><em>/<span id="h-posn">1</span></em></b></div>
+      <div class="race-only box"><small>LAP</small><b id="h-lap">1/3</b></div>
+      <div class="box"><small>TIME</small><b id="h-time">0:00.00</b><span id="h-best" class="sub"></span></div>
+    </div>
+    <div class="hud-tr">
+      <canvas id="minimap" width="180" height="180"></canvas>
+    </div>
+    <div class="hud-score"><b id="h-score">0</b><span id="h-combo"></span></div>
+    <div class="hud-br" id="hud-speedo">
+      <svg viewBox="0 0 100 100" class="speedo">
+        <circle cx="50" cy="50" r="45" class="track" stroke-dasharray="283" stroke-dashoffset="70.75" transform="rotate(135 50 50)" />
+        <circle id="h-arc" cx="50" cy="50" r="45" class="arc" stroke-dasharray="283" stroke-dashoffset="283" transform="rotate(135 50 50)" />
+      </svg>
+      <div class="speed"><b id="h-speed">0</b><small>KM/H</small><span id="h-gear"></span></div>
+      <div id="hud-n2" class="n2">
+        <div class="n2-head"><span class="n2-lbl">THRUST</span><b id="h-n2pct">100%</b></div>
+        <div class="n2-row">
+          <div class="n2-bar"><div id="h-n2"></div><i class="n2-min"></i></div>
+          <div class="thr"><span id="t-l">L</span><span id="t-b">B</span><span id="t-r">R</span></div>
+        </div>
+        <div id="h-n2st" class="n2-st">FULL</div>
+      </div>
+    </div>
+    <div id="h-alt"></div>
+    <div id="popups"></div>
+    <div id="h-msg"></div>
+    <div id="h-board"></div>
+    <div class="hud-btns">
+      <button id="btn-cam" class="ibtn" title="Camera (C)">&#x1F3A5;&#xFE0E;</button>
+      <button id="btn-full" class="ibtn" title="Fullscreen (F)">&#x26F6;</button>
+      <button id="btn-pause" class="ibtn" title="Pause (Esc)">&#x275A;&#x275A;</button>
+    </div>
+  </div>
+  <div id="countdown"></div>
+  <div id="fps" class="hidden"></div>
+  <div id="touch"></div>
+
+  <!-- MENU -->
+  <div id="menu" class="panel menu">
+    <div class="logo">
+      <div class="logo-top">ROADSTER</div>
+      <div class="logo-bot">THRUSTER</div>
+      <div class="logo-tag">cold-gas street racing</div>
+    </div>
+    <div class="menu-btns">
+      <button id="btn-race" class="big primary">STREET RACE</button>
+      <button id="btn-free" class="big">FREE RIDE</button>
+      <div class="row2">
+        <button id="btn-settings">SETTINGS</button>
+        <button id="btn-controls">CONTROLS</button>
+      </div>
+      <div id="menu-best" class="best"></div>
+    </div>
+  </div>
+
+  <!-- RACE SETUP -->
+  <div id="setup" class="panel card">
+    <h2 id="setup-title">STREET RACE</h2>
+    <label>TRACK</label>
+    <div class="seg" id="s-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button></div>
+    <label>TRAFFIC</label>
+    <div class="seg" id="s-traffic"><button data-v="off">OFF</button><button data-v="light">LIGHT</button><button data-v="medium">MEDIUM</button><button data-v="heavy">HEAVY</button><button data-v="insane">INSANE</button></div>
+    <div class="race-opt">
+      <label>LAPS</label>
+      <div class="seg" id="s-laps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="5">5</button></div>
+      <label>RIVALS</label>
+      <div class="seg" id="s-rivals"><button data-v="0">0</button><button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7</button></div>
+      <label>RIVAL SKILL</label>
+      <div class="seg" id="s-diff"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="pro">PRO</button></div>
+    </div>
+    <label>TIME OF DAY</label>
+    <div class="seg" id="s-tod"><button data-v="night">NIGHT</button><button data-v="sunset">SUNSET</button></div>
+    <div class="actions"><button data-back>BACK</button><button id="btn-go" class="primary">GO!</button></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="settings" class="panel card">
+    <h2>SETTINGS</h2>
+    <div class="scroll">
+      <label>GRAPHICS</label>
+      <div class="seg" id="s-quality"><button data-v="potato">POTATO</button><button data-v="low">LOW</button><button data-v="medium">MED</button><button data-v="high">HIGH</button><button data-v="ultra">ULTRA</button></div>
+      <label>CAMERA</label>
+      <div class="seg" id="s-camera"><button data-v="0">CHASE</button><button data-v="1">FAR</button><button data-v="2">HOOD</button></div>
+      <label>TOUCH CONTROLS</label>
+      <div class="seg" id="s-touch"><button data-v="auto">AUTO</button><button data-v="on">ON</button><button data-v="off">OFF</button></div>
+      <div class="tog"><span>Auto-accelerate (touch)</span><input type="checkbox" id="s-auto" /></div>
+      <div class="tog" id="s-tilt-row"><span>Tilt to steer</span><input type="checkbox" id="s-tilt" /></div>
+      <div class="tog"><span>Steering sensitivity</span><input type="range" id="s-sens" min="0.5" max="1.6" step="0.05" /></div>
+      <div class="tog"><span>Volume</span><input type="range" id="s-vol" min="0" max="1" step="0.05" /></div>
+      <div class="tog"><span>Camera shake</span><input type="checkbox" id="s-shake" /></div>
+      <div class="tog"><span>Show FPS</span><input type="checkbox" id="s-fps" /></div>
+      <div id="reload-note" class="note hidden">Graphics / time-of-day changes apply after reload — press BACK to reload.</div>
+    </div>
+    <div class="actions"><button data-back class="primary">BACK</button></div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls" class="panel card">
+    <h2>CONTROLS</h2>
+    <div class="scroll ctl">
+      <div class="cols">
+        <div>
+          <h3>KEYBOARD</h3>
+          <p><kbd>W</kbd>/<kbd>↑</kbd> accelerate · <kbd>S</kbd>/<kbd>↓</kbd> brake / reverse</p>
+          <p><kbd>A</kbd><kbd>D</kbd> steer · <kbd>X</kbd> handbrake drift</p>
+          <p><kbd>Q</kbd>/<kbd>E</kbd> side thrusters — slide left / right (great for steering in the air)</p>
+          <p><kbd>Space</kbd> all four under-thrusters (jump / hover)</p>
+          <p><kbd>Shift</kbd> rear thruster BOOST</p>
+          <p><kbd>Space</kbd>+<kbd>Q</kbd> / <kbd>Space</kbd>+<kbd>E</kbd> one side's under-thrusters only — roll / flip</p>
+          <p><kbd>C</kbd> camera · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen · <kbd>H</kbd> hide HUD</p>
+        </div>
+        <div>
+          <h3>TOUCH</h3>
+          <p>Left half: floating stick — drag sideways to steer, down to brake.</p>
+          <p>Right cluster: <b>BOOST</b>, <b>JUMP</b>, <b>L</b>/<b>R</b> side thrusters, <b>BRAKE</b>, <b>DRIFT</b>. Hold <b>JUMP</b> and slide onto <b>L</b>/<b>R</b> to flip.</p>
+          <p>Auto-accelerate is on by default. Tilt steering is in Settings.</p>
+          <h3>GAMEPAD</h3>
+          <p>RT gas · LT brake · A jump · LB/RB side thrusters (A + LB/RB flips) · X boost · B drift · Y camera · right stick pitch/roll in the air</p>
+        </div>
+      </div>
+      <h3>TIPS</h3>
+      <p>Under-thrusters burn N₂ fast — jump over traffic, near-miss cars, drift and do barrel rolls to refill it. Hit the ramps with boost for huge air. Blue canisters give +35 N₂.</p>
+    </div>
+    <div class="actions"><button data-back class="primary">BACK</button></div>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="pause" class="panel card small">
+    <h2>PAUSED</h2>
+    <div class="vbtns">
+      <button id="btn-resume" class="primary">RESUME</button>
+      <button id="btn-restart">RESTART</button>
+      <button id="btn-psettings">SETTINGS</button>
+      <button id="btn-quit">QUIT TO MENU</button>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results" class="panel card">
+    <h2 id="res-title">VICTORY</h2>
+    <div id="res-rows" class="res-rows"></div>
+    <div id="res-stats" class="res-stats"></div>
+    <div class="actions"><button id="btn-rmenu">MENU</button><button id="btn-again" class="primary">RACE AGAIN</button></div>
+  </div>
+
+  <div id="rotate"><div><div class="phone"></div><p>Rotate to landscape for the best experience</p><button id="rot-ok">PLAY ANYWAY</button></div></div>
+
+  <div id="loading">
+    <div class="logo"><div class="logo-top">ROADSTER</div><div class="logo-bot">THRUSTER</div></div>
+    <div class="spinner"></div>
+    <div id="load-text">Loading engine…</div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+    import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+    import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+    window.THREE = THREE;
+    window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry };
+    const BUILD = Date.now();
+    const files = ['util', 'track', 'city', 'particles', 'car', 'traffic', 'rivals', 'audio', 'input', 'hud', 'game'];
+    const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
+    (async () => {
+      try { for (const f of files) await load(f); G.boot(); }
+      catch (e) { document.getElementById('load-text').textContent = 'Error: ' + e.message; console.error(e); }
+    })();
+  </script>
+</body>
+</html>

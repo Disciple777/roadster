@@ -1,0 +1,17 @@
+# Roadster Thruster: static site. No directory listings, and never serve anything
+# config-, env- or backup-shaped even if it ends up on the server by mistake.
+Options -Indexes
+
+<FilesMatch "(?i)^\.?(config|env)">
+    Require all denied
+</FilesMatch>
+<FilesMatch "(?i)\.(sql|local|example|sample|dist|bak|backup|old|orig|save|swp|tmp|log|ini|inc|sh|yml|yaml|lock|md)(\.[a-z0-9]+)?$">
+    Require all denied
+</FilesMatch>
+
+# the page itself is always re-checked, so a new version's buttons arrive with its scripts
+<IfModule mod_headers.c>
+    <FilesMatch "\.html?$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>

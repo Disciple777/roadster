@@ -1,0 +1,13 @@
+{
+  "name": "roadsterthruster",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "node tools/deploy.mjs",
+    "deploy:dry": "node tools/deploy.mjs --dry-run"
+  },
+  "dependencies": {
+    "basic-ftp": "^5.0.5"
+  }
+}
