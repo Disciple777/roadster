@@ -653,6 +653,16 @@
       this.addScore(Math.round(q.pts * (1 + tight)), 6, q.name, perfect ? 'DEAD CENTRE' : '', perfect ? 'big' : '');
       G.audio.whoosh();
     }
+    onLoop() { this.addScore(1500, 15, 'LOOP THE LOOP!', '', 'big'); this.addShake(0.3); }
+    onBomb(body, m) {
+      for (let k = 0; k < 3; k++) this.fx.burst(m.x, m.y, m.z, 45, 0, 3 + k * 3, 0, 12 + k * 4);
+      G.audio.impact(55);
+      this.addShake(1);
+      if (navigator.vibrate) try { navigator.vibrate([80, 40, 160]); } catch (e) { /* ignore */ }
+      this.combo = 1; this.comboT = 0;
+      this.hud.popup('BOOM!', 'mine hit', 'warn');
+      this.damage(25);
+    }
     onHurdle(q) { this.addScore(q.name ? 600 : 300, 6, q.name || 'HURDLE CLEARED', ''); }
     onRooftop() { this.addScore(500, 10, 'ROOFTOP!', 'container landing', 'big'); }
 
@@ -1075,7 +1085,7 @@
       let fx = f.x, fz = f.z;
       const fl = Math.hypot(fx, fz);
       if (fl < 0.3 && p.speed > 3) { fx = p.vel.x; fz = p.vel.z; }
-      const targetYaw = Math.atan2(-fx, -fz);
+      const targetYaw = p.ride ? Math.atan2(-p.ride.lp.tx, -p.ride.lp.tz) : Math.atan2(-fx, -fz); // on a loop: keep looking down the street
       this.camFocusY = G.damp(this.camFocusY, p.pos.y, p.grounded ? 12 : 5, realDt);
 
       if (this.state === 'menu') {

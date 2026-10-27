@@ -337,6 +337,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       this.q.setFromAxisAngle(_v[0].set(0, 1, 0), Math.atan2(-p.tx, -p.tz));
       this.vel.set(p.tx * speed, 0, p.tz * speed);
       this.w.set(0, 0, 0);
+      this.ride = null;
       for (const w of this.wheels) { w.comp = 0.1; w.len = REST - 0.1; w.spinV = 0; }
       this.near.i = -1;
       tr.nearest(this.pos.x, this.pos.z, -1, this.near);
@@ -351,6 +352,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     }
 
     step(dt, inp) {
+      if (this.ride && this.game.course) { this.game.course.rideStep(this, dt, inp); return; } // on a loop: follows the track
       const pos = this.pos, vel = this.vel, q = this.q, w = this.w;
       const up = _v[0].set(0, 1, 0).applyQuaternion(q);
       const fwd = _v[1].set(0, 0, -1).applyQuaternion(q);

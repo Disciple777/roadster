@@ -1,13 +1,14 @@
 // course.js — obstacle courses: set pieces laid along the circuit (barrier chicanes, needle gates, container jumps,
-// bollard slaloms, crate walls), solid obstacles you can land on, repair kits, and the bonuses for threading gaps,
-// clearing hurdles and landing on rooftops. Hull damage itself lives in game.js (game.damage).
+// bollard slaloms, crate walls, 360° loops), solid obstacles you can land on, floating mines over the dodge sections
+// (so you can't just fly the whole lap), repair kits, and the bonuses for threading gaps, clearing hurdles and
+// landing on rooftops. Hull damage itself lives in game.js (game.damage).
 (function () {
   const T = THREE;
 
   // the catalogue: each course is a sequence of set pieces dropped onto the current circuit. New kinds of course
   // (rooftop runs, canyon gaps…) slot in here as new piece builders + an entry.
   G.COURSES = {
-    street: { name: 'STUNT STREETS', seed: 7, pieces: ['chicane', 'needle', 'containers', 'slalom', 'crates', 'needle', 'containers', 'chicane', 'slalom', 'crates'] },
+    street: { name: 'STUNT STREETS', seed: 7, pieces: ['chicane', 'needle', 'containers', 'loop', 'slalom', 'crates', 'needle', 'containers', 'chicane', 'loop', 'slalom', 'crates'] },
   };
 
   // h: height (m) · dmg: hull damage per m/s of impact above 3 · breakable: smashes instead of stopping the car
@@ -28,7 +29,8 @@
       const tr = (this.track = game.track);
       this.L = tr.length;
       this.obs = []; this.kickers = []; this.gates = []; this.hurdles = []; this.kits = [];
-      this.near = []; this.nearK = [];
+      this.loops = []; this.bombs = [];
+      this.near = []; this.nearK = []; this.nearB = [];
       this.rand = G.rng(this.def.seed * 9973 + (G.TRACK_ID === 'highway' ? 1 : 0));
       this.layout();
       this.obs.sort((a, b) => a.s - b.s);
@@ -39,7 +41,7 @@
     // ---------- layout ----------
     layout() {
       const L = this.L, ramps = this.track.ramps;
-      const LEN = { chicane: 36, needle: 50, containers: 46, slalom: 98, crates: 16 };
+      const LEN = { chicane: 36, needle: 50, containers: 46, slalom: 98, crates: 16, loop: 34 };
       let s = 150, i = 0;
       while (s < L - 220) {
         const kind = this.def.pieces[i % this.def.pieces.length];
@@ -85,6 +87,7 @@
         this.hurdle(ss, KIND.barrier.h);
       };
       wall(s, m); wall(s + 32, -m);
+      this.bombRow(s + 16);
     }
     // a full-width wall with one narrow slot marked by tall pillars: thread it for big points
     needle(s) {
@@ -98,6 +101,7 @@
         this.gate(ss, c, gap, n ? 700 : 500, n ? 'NEEDLE THREADED' : 'GATE THREADED');
         this.hurdle(ss, KIND.barrier.h);
       }
+      this.bombRow(s + 21);
     }
     // a kicker into a block of containers: land on the roof, or take the narrow alley through the middle
     containers(s) {
@@ -122,6 +126,23 @@
         const ss = s + r * 18, c = (r & 1 ? 1 : -1) * R * 0.45;
         for (let x = -R + 1.2; x < R - 0.6; x += 2.4) if (Math.abs(x - c) > gap / 2) this.add('bollard', ss, x, 0.5, 0.5);
         this.gate(ss, c, gap, 150, 'SLALOM');
+      }
+      this.bombRow(s + 18); this.bombRow(s + 72);
+    }
+    // a 360° loop: enter on the yellow lane, keep your speed up (about 85 km/h at least), come out a lane over
+    loop(s) {
+      const R = G.ROAD_HALF, side = this.rand() < 0.5 ? 1 : -1;
+      const lat = -side * (R - 4.5), p = this.track.sample(s + 12, {});
+      this.loops.push({ s: G.wrap(s + 12, this.L), lat, R: 9, w: 6, shift: side * 7.5, x: p.x + p.rx * lat, z: p.z + p.rz * lat, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz });
+    }
+    // floating mines across the street: a couple low, most of them up where you'd fly over the ground obstacles
+    bombRow(s) {
+      const R = G.ROAD_HALF, hs = [6.5, 10, 14, 18, 22, 26];
+      for (let j = hs.length - 1; j > 0; j--) { const k = (this.rand() * (j + 1)) | 0; [hs[j], hs[k]] = [hs[k], hs[j]]; }
+      for (let k = 0; k < 5; k++) {
+        const lat = -R + 2 + (k + 0.2 + this.rand() * 0.6) * (2 * R - 4) / 5;
+        const p = this.track.pointAt(s + (this.rand() - 0.5) * 6, lat, {});
+        this.bombs.push({ s: G.wrap(s, this.L), x: p.x, z: p.z, y0: hs[k] + this.rand() * 2, y: 0, ph: this.rand() * 6.28, alive: true, t: 0 });
       }
     }
     // a wall of crates: smash through (slows you) or use the kicker in the middle to fly over
@@ -186,6 +207,62 @@
         this.kickers.forEach((k, j) => { this.poseBox(m, k, k.w, k.h, k.len, 0); im.setMatrixAt(j, m); });
         grp.add(im);
       }
+      // loops: a ribbon of road with glowing rails, plus a yellow entry lane
+      if (this.loops.length) {
+        const rm = new T.MeshStandardMaterial({ color: 0x30343c, roughness: 0.6, metalness: 0.3, emissive: 0x0a1420, side: T.DoubleSide });
+        const railM = new T.MeshBasicMaterial({ color: new T.Color(0.4, 2.2, 3.2), toneMapped: false });
+        const laneM = new T.MeshStandardMaterial({ color: 0xffc21a, roughness: 0.6, emissive: 0x6a4a00, emissiveIntensity: 0.8 });
+        this.mats.push(rm, railM, laneM);
+        const N = 120, P = new T.Vector3();
+        for (const lp of this.loops) {
+          const pos = [], idx = [], edges = [[], []];
+          for (let i = 0; i <= N; i++) {
+            this.loopPoint(lp, (i / N) * Math.PI * 2, P);
+            for (let e = 0; e < 2; e++) {
+              const o = (e ? 1 : -1) * lp.w / 2;
+              const v = new T.Vector3(P.x + lp.rx * o, P.y + 0.03, P.z + lp.rz * o);
+              pos.push(v.x, v.y, v.z);
+              edges[e].push(v);
+            }
+            if (i < N) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+          }
+          const rg = new T.BufferGeometry();
+          rg.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); rg.setIndex(idx); rg.computeVertexNormals();
+          const ribbon = new T.Mesh(rg, rm);
+          ribbon.receiveShadow = !!Q.shadows; ribbon.castShadow = !!Q.shadows;
+          grp.add(ribbon); this.geos.push(rg);
+          for (const e of edges) {
+            const tg = new T.TubeGeometry(new T.CatmullRomCurve3(e), N, 0.14, 6, false);
+            grp.add(new T.Mesh(tg, railM)); this.geos.push(tg);
+          }
+          // entry lane: 14 m of yellow leading into the loop, and a stripe where you come out
+          const lg = new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+          this.geos.push(lg);
+          for (const [lat, len, off] of [[lp.lat, 14, -7], [lp.lat + lp.shift, 8, 4]]) {
+            const p = this.track.sample(lp.s + off, {});
+            const o = { x: p.x + p.rx * lat, z: p.z + p.rz * lat, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz };
+            const lane = new T.Mesh(lg, laneM);
+            lane.matrixAutoUpdate = false;
+            this.poseBox(lane.matrix, o, lp.w * 0.6, 0.04, len, 0);
+            grp.add(lane);
+          }
+        }
+      }
+      // mines: dark spiked spheres with a blinking red light on top
+      if (this.bombs.length) {
+        const n = this.bombs.length;
+        const bg = new T.SphereGeometry(1, 16, 12), sg = new T.CylinderGeometry(0.07, 0.07, 2.7, 6), lg = new T.SphereGeometry(0.34, 10, 8);
+        const bm = new T.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.45, metalness: 0.7, emissive: 0x4a0808 });
+        const sm = new T.MeshStandardMaterial({ color: 0x6a6e74, roughness: 0.4, metalness: 0.8 });
+        const lm = new T.MeshBasicMaterial({ color: new T.Color(5, 0.3, 0.2), toneMapped: false });
+        this.geos.push(bg, sg, lg); this.mats.push(bm, sm, lm);
+        this.bombBody = new T.InstancedMesh(bg, bm, n);
+        this.bombSpikes = new T.InstancedMesh(sg, sm, n * 3);
+        this.bombLight = new T.InstancedMesh(lg, lm, n);
+        for (const im of [this.bombBody, this.bombSpikes, this.bombLight]) { im.frustumCulled = false; im.instanceMatrix.setUsage(T.DynamicDrawUsage); grp.add(im); }
+        this.bombBody.castShadow = !!Q.shadows;
+        this.inst.bombBody = this.bombBody; this.inst.bombSpikes = this.bombSpikes; this.inst.bombLight = this.bombLight;
+      }
       // repair kits: white box, red cross, green halo
       const kitMat = new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0x404040, roughness: 0.4 });
       const crossMat = new T.MeshBasicMaterial({ color: new T.Color(4, 0.4, 0.5), toneMapped: false });
@@ -240,6 +317,7 @@
     }
 
     collide(b) {
+      if (b === this.game.player) { this.enterLoops(b); this.hitBombs(b); }
       const fwd = _a.set(0, 0, -1).applyQuaternion(b.q); fwd.y = 0;
       if (fwd.lengthSq() < 0.01) fwd.set(0, 0, -1);
       fwd.normalize();
@@ -278,6 +356,71 @@
       }
     }
 
+    // ---------- loops ----------
+    // point on the loop at angle th (0 = entry, 2π = exit): up and over, drifting sideways so it clears itself
+    loopPoint(lp, th, out) {
+      const a = lp.R * Math.sin(th), lat = lp.shift * th / (Math.PI * 2);
+      out.set(lp.x + lp.tx * a + lp.rx * lat, lp.R * (1 - Math.cos(th)), lp.z + lp.tz * a + lp.rz * lat);
+      return out;
+    }
+    enterLoops(b) {
+      if (b.ride || b.pos.y > 1.2) return;
+      for (const lp of this.loops) {
+        const dx = b.pos.x - lp.x, dz = b.pos.z - lp.z;
+        const along = dx * lp.tx + dz * lp.tz, side = dx * lp.rx + dz * lp.rz;
+        if (along < 0 || along > 1.6 || Math.abs(side) > lp.w / 2 - 0.4) continue;
+        const v = b.vel.x * lp.tx + b.vel.z * lp.tz;
+        if (v < 6) continue;
+        b.ride = { lp, th: along / lp.R, v, off: G.clamp(side, -lp.w / 2 + 1, lp.w / 2 - 1) };
+        return;
+      }
+    }
+    // while on the loop the car follows the track exactly; gravity bleeds speed on the way up, and if it runs out
+    // before the top the car simply falls off
+    rideStep(b, dt, inp) {
+      const r = b.ride, lp = r.lp, g = G.GRAV;
+      if (!b.frozen) r.v += (inp.throttle * 10 - inp.brake * 14) * dt;
+      r.v -= g * Math.sin(r.th) * dt;
+      r.th += (r.v / lp.R) * dt;
+      const done = r.th >= Math.PI * 2;
+      if (done) r.th = Math.PI * 2;
+      const th = r.th, c = Math.cos(th), s = Math.sin(th);
+      this.loopPoint(lp, th, b.pos);
+      b.pos.x += lp.rx * r.off; b.pos.z += lp.rz * r.off;
+      // car frame: forward along the loop, up toward its centre
+      const fw = _a.set(lp.tx * c, s, lp.tz * c), up = _p.set(-lp.tx * s, c, -lp.tz * s);
+      const rt = _sv.crossVectors(fw, up);
+      _m.makeBasis(rt, up, _b.copy(fw).negate());
+      b.q.setFromRotationMatrix(_m);
+      b.vel.copy(fw).multiplyScalar(r.v);
+      b.w.copy(rt).multiplyScalar(r.v / lp.R);
+      b.grounded = true; b.contacts = 4; b.altitude = 0; b.speed = Math.abs(r.v); b.fwdSpeed = r.v; b.sideSlip = 0; b.slipMax = 0;
+      b.steerAngle = 0; b.rollAcc = 0; b.pitchAcc = 0;
+      for (const wh of b.wheels) { wh.contact = true; wh.slip = 0; wh.spinV = r.v / 0.34; wh.spin += wh.spinV * dt; }
+      this.track.nearest(b.pos.x, b.pos.z, b.near.i, b.near);
+      const fall = th > 0.3 && th < Math.PI * 1.7 && (r.v < 2 || (r.v * r.v) / lp.R < -g * c);
+      if (done || fall) {
+        b.ride = null;
+        if (done) { b.pos.y = 0.02; b.vel.y = 0; b.w.set(0, 0, 0); this.game.onLoop(); }
+        else this.game.hud.popup('TOO SLOW', 'hit the loop faster', 'warn');
+      }
+    }
+
+    // ---------- mines ----------
+    hitBombs(b) {
+      const cy = b.pos.y + 0.6;
+      for (const m of this.nearB) {
+        if (!m.alive) continue;
+        const dx = b.pos.x - m.x, dy = cy - m.y, dz = b.pos.z - m.z, d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > 2.9 * 2.9) continue;
+        m.alive = false; m.t = 25;
+        const d = Math.sqrt(d2) || 1;
+        b.vel.x += (dx / d) * 10; b.vel.y += (dy / d) * 6 + 5; b.vel.z += (dz / d) * 10;
+        b.w.x += (Math.random() - 0.5) * 5; b.w.y += (Math.random() - 0.5) * 3; b.w.z += (Math.random() - 0.5) * 5;
+        this.game.onBomb(b, m);
+      }
+    }
+
     smash(o, b) {
       o.alive = false;
       const sp = 0.5 + Math.random() * 0.5;
@@ -310,7 +453,7 @@
     // a spot to drop the car after a reset: step forward until nothing solid is near this lane
     freeSpot(s, lat) {
       for (let k = 0; k < 20; k++) {
-        const hit = this.obs.some((o) => o.alive && Math.abs(G.wrap(o.s - s + 20, this.L) - 20) < o.hl + 6 && Math.abs(o.lat - lat) < o.hw + 2) ||
+        const hit = this.loops.some((q) => Math.abs(G.wrap(q.s - s + 20, this.L) - 20) < q.R + 6 && Math.abs(q.lat + q.shift / 2 - lat) < Math.abs(q.shift) / 2 + q.w / 2 + 1.5) || this.obs.some((o) => o.alive && Math.abs(G.wrap(o.s - s + 20, this.L) - 20) < o.hl + 6 && Math.abs(o.lat - lat) < o.hw + 2) ||
           this.kickers.some((q) => Math.abs(G.wrap(q.s - s + 20, this.L) - 20) < q.len / 2 + 4 && Math.abs(q.lat - lat) < q.w / 2 + 1.5);
         if (!hit) return s;
         s += 6;
@@ -321,6 +464,7 @@
     reset() {
       for (const o of this.obs) if (o.k.breakable) { o.alive = true; o.fly = null; }
       for (const k of this.kits) { k.active = true; k.g.visible = true; }
+      for (const m of this.bombs) { m.alive = true; m.t = 0; }
       this.dirty = true; this.lastS = null; this.roofDone = new Set();
     }
 
@@ -331,6 +475,32 @@
       this.gather(p, this.near, 30);
       this.nearK.length = 0;
       for (const k of this.kickers) { const dx = k.x - p.pos.x, dz = k.z - p.pos.z; if (dx * dx + dz * dz < 40 * 40) this.nearK.push(k); }
+
+      // mines: bob and drift a little, blink, come back a while after going off
+      this.nearB.length = 0;
+      if (this.bombs.length) {
+        const bb = this.bombBody, bs = this.bombSpikes, bl = this.bombLight, t = g.t;
+        const blink = Math.sin(t * 7) > 0.2 ? 1 : 0.35;
+        this.bombs.forEach((m, j) => {
+          if (!m.alive) { m.t -= dt; if (m.t <= 0) m.alive = true; }
+          m.y = m.y0 + Math.sin(t * 1.3 + m.ph) * 0.6;
+          if (m.alive) {
+            _p.set(m.x, m.y, m.z); _q.setFromEuler(_e.set(0, t * 0.5 + m.ph, 0.3)); _sv.set(1, 1, 1);
+            _m.compose(_p, _q, _sv); bb.setMatrixAt(j, _m);
+            for (let k = 0; k < 3; k++) {
+              _q.setFromEuler(_e.set(k === 1 ? Math.PI / 2 : 0, t * 0.5 + m.ph, k === 2 ? Math.PI / 2 : 0.3));
+              _m.compose(_p, _q, _sv); bs.setMatrixAt(j * 3 + k, _m);
+            }
+            _p.y += 1.02; _sv.setScalar(blink); _m.compose(_p, _q.identity(), _sv); bl.setMatrixAt(j, _m);
+            const dx = m.x - p.pos.x, dz = m.z - p.pos.z;
+            if (dx * dx + dz * dz < 30 * 30) this.nearB.push(m);
+          } else {
+            _m.makeScale(0, 0, 0); bb.setMatrixAt(j, _m); bl.setMatrixAt(j, _m);
+            for (let k = 0; k < 3; k++) bs.setMatrixAt(j * 3 + k, _m);
+          }
+        });
+        bb.instanceMatrix.needsUpdate = bs.instanceMatrix.needsUpdate = bl.instanceMatrix.needsUpdate = true;
+      }
 
       // flying crates
       const m = _m;
@@ -391,6 +561,6 @@
       for (const im of Object.values(this.inst)) im.dispose();
     }
   }
-  const _a = new T.Vector3(), _p = new T.Vector3(), _sv = new T.Vector3(), _q = new T.Quaternion(), _e = new T.Euler(), _m = new T.Matrix4();
+  const _a = new T.Vector3(), _b = new T.Vector3(), _p = new T.Vector3(), _sv = new T.Vector3(), _q = new T.Quaternion(), _e = new T.Euler(), _m = new T.Matrix4();
   G.Course = Course;
 })();
