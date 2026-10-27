@@ -30,7 +30,15 @@
     }
 
     show(b) { this.el.classList.toggle('hidden', !b); }
-    setMode(race) { this.el.classList.toggle('free', !race); }
+    setMode(mode) { this.el.classList.toggle('free', mode === 'free'); this.el.classList.toggle('course', mode === 'course'); }
+    // obstacle course hull meter; flash it when it takes a knock
+    hull(h, hit) {
+      const box = this.hullBox || (this.hullBox = $('h-hullbox'));
+      $('h-hull').textContent = Math.max(0, Math.round(h)) + '%';
+      $('h-hullbar').style.width = Math.max(0, h) + '%';
+      box.classList.toggle('mid', h < 60 && h >= 30); box.classList.toggle('low', h < 30);
+      if (hit) { box.classList.remove('hit'); void box.offsetWidth; box.classList.add('hit'); }
+    }
 
     update(dt, g) {
       const p = g.player;
@@ -55,11 +63,11 @@
       this.tr.classList.toggle('on', p.th.R > 0.3 || sr > 0.3);
       this.tb.classList.toggle('on', p.th.B > 0.3);
       this.alt.textContent = p.altitude > 1.5 ? `ALT ${p.altitude.toFixed(1)} m` : '';
-      if (g.mode === 'race') {
+      if (g.mode !== 'free') {
         this.pos.textContent = g.place; this.posn.textContent = g.racers;
         this.lap.textContent = Math.min(g.lap, g.laps) + '/' + g.laps;
         this.time.textContent = G.fmtTime(g.raceTime);
-        this.best.textContent = g.bestLap < 1e8 ? 'BEST ' + G.fmtTime(g.bestLap) : '';
+        this.best.textContent = g.mode === 'course' ? (g.courseBest ? 'BEST ' + g.courseBest.toLocaleString() : '') : g.bestLap < 1e8 ? 'BEST ' + G.fmtTime(g.bestLap) : '';
       } else {
         this.time.textContent = G.fmtTime(g.raceTime);
       }
@@ -108,6 +116,15 @@
         c.fillStyle = '#' + r.color.toString(16).padStart(6, '0');
         c.beginPath(); c.arc(r.pos.x, r.pos.z, 9, 0, 7); c.fill();
         c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke();
+      }
+      // other phones in a multiplayer race
+      if (g.remotes) for (const r of g.remotes.list) {
+        if (r.alpha < 0.05) continue;
+        c.globalAlpha = r.alpha;
+        c.fillStyle = '#' + r.color.toString(16).padStart(6, '0');
+        c.beginPath(); c.arc(r.pos.x, r.pos.z, 10, 0, 7); c.fill();
+        c.strokeStyle = '#fff'; c.lineWidth = 3; c.stroke();
+        c.globalAlpha = 1;
       }
       c.restore();
       // player arrow (always up)

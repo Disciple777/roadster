@@ -231,8 +231,12 @@
         const tb = this.touch.btn;
         let ts = this.touch.steer * this.sens;
         if (this.tilt.on) {
-          const deg = this.tilt.val - (this.tilt.neutral || 0), dz = 1.5; // small dead zone so a steady hand drives straight
-          ts = G.clamp(Math.sign(deg) * Math.max(0, Math.abs(deg) - dz) / 16, -1, 1) * this.sens;
+          // smooth the sensor jitter (light, so it doesn't add lag), then an expo curve over a wide range: small wobbles
+          // make small corrections instead of a swing you have to catch on the other side; full lock at ~30 degrees
+          const raw = this.tilt.val - (this.tilt.neutral || 0);
+          this.tilt.f = this.tilt.f == null ? raw : G.damp(this.tilt.f, raw, 14, dt);
+          const dz = 2.5, x = G.clamp(Math.max(0, Math.abs(this.tilt.f) - dz) / 28, 0, 1);
+          ts = Math.sign(this.tilt.f) * x * (0.3 + 0.7 * x * x) * this.sens;
         }
         if (Math.abs(ts) > Math.abs(steer)) steer = G.clamp(ts, -1, 1);
         const ty = this.touch.y;

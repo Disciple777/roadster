@@ -25,8 +25,9 @@
   <!-- HUD -->
   <div id="hud" class="hidden">
     <div class="hud-tl">
-      <div class="race-only box"><small>POS</small><b><span id="h-pos">1</span><em>/<span id="h-posn">1</span></em></b></div>
+      <div class="race-only pos-only box"><small>POS</small><b><span id="h-pos">1</span><em>/<span id="h-posn">1</span></em></b></div>
       <div class="race-only box"><small>LAP</small><b id="h-lap">1/3</b></div>
+      <div class="course-only box hull" id="h-hullbox"><small>HULL</small><b id="h-hull">100%</b><div class="hull-bar"><i id="h-hullbar"></i></div></div>
       <div class="box"><small>TIME</small><b id="h-time">0:00.00</b><span id="h-best" class="sub"></span></div>
     </div>
     <div class="hud-tr">
@@ -72,6 +73,8 @@
     <div class="menu-btns">
       <button id="btn-race" class="big primary">STREET RACE</button>
       <button id="btn-free" class="big">FREE RIDE</button>
+      <button id="btn-course" class="big">OBSTACLE COURSE</button>
+      <button id="btn-mp" class="big">MULTIPLAYER</button>
       <div class="row2">
         <button id="btn-settings">SETTINGS</button>
         <button id="btn-controls">CONTROLS</button>
@@ -86,11 +89,15 @@
     <div class="scroll">
     <label>TRACK</label>
     <div class="seg" id="s-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button></div>
+    <div class="traffic-opt">
     <label>TRAFFIC</label>
     <div class="seg" id="s-traffic"><button data-v="off">OFF</button><button data-v="light">LIGHT</button><button data-v="medium">MEDIUM</button><button data-v="heavy">HEAVY</button><button data-v="insane">INSANE</button></div>
+    </div>
     <div class="race-opt">
       <label>LAPS</label>
       <div class="seg" id="s-laps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="5">5</button></div>
+    </div>
+    <div class="rival-opt">
       <label>RIVALS</label>
       <div class="seg" id="s-rivals"><button data-v="0">0</button><button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7</button></div>
       <label>RIVAL SKILL</label>
@@ -100,6 +107,42 @@
     <div class="seg" id="s-tod"><button data-v="night">NIGHT</button><button data-v="sunset">SUNSET</button></div>
     </div>
     <div class="actions"><button data-back>BACK</button><button id="btn-go" class="primary">GO!</button></div>
+  </div>
+
+  <!-- MULTIPLAYER: host or join a room -->
+  <div id="mp" class="panel card">
+    <h2>MULTIPLAYER</h2>
+    <div class="scroll">
+      <label>YOUR NAME</label>
+      <input id="mp-name" class="txt" maxlength="12" autocomplete="off" spellcheck="false" />
+      <label>HOST A ROOM</label>
+      <div class="seg" id="s-mptrack"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button></div>
+      <button id="btn-host" class="primary wide">HOST</button>
+      <label>JOIN A ROOM</label>
+      <div class="joinrow"><input id="mp-code" class="txt code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" autocapitalize="characters" /><button id="btn-join" class="primary">JOIN</button></div>
+      <div id="mp-status" class="mp-status"></div>
+      <p class="hint">Up to 4 phones race each other over the internet. Works best with everyone on the same Wi-Fi. The room code is only used to find each other; the race itself goes straight between the phones.</p>
+    </div>
+    <div class="actions"><button data-back>BACK</button></div>
+  </div>
+
+  <!-- LOBBY -->
+  <div id="lobby" class="panel card">
+    <h2>ROOM <span id="lb-code" class="lb-code"></span></h2>
+    <div class="scroll">
+      <label>DRIVERS <i id="lb-count"></i></label>
+      <div id="lb-players" class="res-rows"></div>
+      <div id="lb-host-opts">
+        <label>LAPS</label>
+        <div class="seg" id="s-mplaps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="5">5</button></div>
+        <label>TRAFFIC</label>
+        <div class="seg" id="s-mptraffic"><button data-v="off">OFF</button><button data-v="light">LIGHT</button><button data-v="medium">MEDIUM</button><button data-v="heavy">HEAVY</button><button data-v="insane">INSANE</button></div>
+        <label>AI RIVALS</label>
+        <div class="seg" id="s-mpai"><button data-v="0">0</button><button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button></div>
+      </div>
+      <div id="lb-status" class="mp-status"></div>
+    </div>
+    <div class="actions"><button id="btn-leave">LEAVE</button><button id="btn-mpstart" class="primary">START RACE</button></div>
   </div>
 
   <!-- SETTINGS -->
@@ -162,7 +205,7 @@
     <h2>PAUSED</h2>
     <div class="vbtns">
       <button id="btn-resume" class="primary">RESUME</button>
-      <button id="btn-restart">RESTART</button>
+      <button id="btn-restart" class="sp-only">RESTART</button>
       <button id="btn-psettings">SETTINGS</button>
       <button id="btn-pcontrols">CONTROLS</button>
       <button id="btn-quit">QUIT TO MENU</button>
@@ -197,7 +240,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry };
     const BUILD = Date.now();
-    const files = ['util', 'track', 'city', 'particles', 'car', 'traffic', 'rivals', 'audio', 'input', 'hud', 'game'];
+    const files = ['util', 'track', 'city', 'particles', 'car', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'course', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }

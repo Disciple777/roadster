@@ -200,7 +200,10 @@
       this.toMenu();
       let auto = null;
       try { auto = sessionStorage.getItem('rt-autostart'); sessionStorage.removeItem('rt-autostart'); } catch (e) { /* ignore */ }
-      if (auto === 'race' || auto === 'free') this.startRace(auto);
+      if (auto === 'race' || auto === 'free' || auto === 'course') this.startRace(auto);
+      let mpAuto = null;
+      try { mpAuto = JSON.parse(sessionStorage.getItem('rt-mp') || 'null'); sessionStorage.removeItem('rt-mp'); } catch (e) { /* ignore */ }
+      if (mpAuto) { this.showPanel('mp'); if (mpAuto.act === 'host') this.mpHost(); else this.mpJoin(mpAuto.code, true); }
       $('loading').classList.add('hidden');
       this.last = performance.now();
       renderer.setAnimationLoop((t) => this.frame(t));
@@ -258,6 +261,7 @@
       const click = (id, fn) => $(id).addEventListener('click', (e) => { G.audio.init(); G.audio.tone(700, 0.05, 0.08, 'triangle'); fn(e); });
       click('btn-race', () => this.showPanel('setup', 'race'));
       click('btn-free', () => this.showPanel('setup', 'free'));
+      click('btn-course', () => this.showPanel('setup', 'course'));
       click('btn-settings', () => this.showPanel('settings'));
       click('btn-controls', () => this.showPanel('controls'));
       document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => this.backPanel()));
@@ -269,11 +273,11 @@
       click('btn-pause', () => this.pause(true));
       click('btn-resume', () => this.pause(false));
       click('btn-restart', () => { this.pause(false, true); this.startRace(this.mode); });
-      click('btn-quit', () => { this.pause(false, true); this.toMenu(); });
+      click('btn-quit', () => { this.pause(false, true); if (this.mpGrid) this.mpLeave(); else this.toMenu(); });
       click('btn-psettings', () => this.showPanel('settings'));
       click('btn-pcontrols', () => this.showPanel('controls'));
-      click('btn-again', () => this.startRace(this.mode));
-      click('btn-rmenu', () => this.toMenu());
+      click('btn-again', () => (this.net ? this.mpEnter() : this.mpGrid ? this.mpLeave() : this.startRace(this.mode)));
+      click('btn-rmenu', () => (this.mpGrid ? this.mpLeave() : this.toMenu()));
       click('btn-cam', () => this.cycleCam());
       click('btn-full', () => this.fullscreen());
       click('rot-ok', () => $('rotate').classList.add('dismissed'));
@@ -284,10 +288,17 @@
         if (!el) return; // an older cached index.html may not have this control yet
         const set = (v) => el.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === String(v)));
         set(S[key]);
-        el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { S[key] = conv(b.dataset.v); set(S[key]); this.saveSettings(key); }));
+        const sets = (segSets[key] = segSets[key] || []);
+        sets.push(set);
+        el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { S[key] = conv(b.dataset.v); sets.forEach((f) => f(S[key])); this.saveSettings(key); }));
       };
+      const segSets = {};
       seg('s-traffic', 'traffic'); seg('s-laps', 'laps', Number); seg('s-rivals', 'rivals', Number); seg('s-diff', 'difficulty'); seg('s-tod', 'tod'); seg('s-track', 'track');
       seg('s-quality', 'quality'); seg('s-camera', 'camera', Number); seg('s-touch', 'touchUI');
+      seg('s-mptrack', 'track'); seg('s-mplaps', 'laps', Number);
+      if (!S.mpTraffic) S.mpTraffic = 'medium';
+      if (S.mpAI === undefined) S.mpAI = 0;
+      seg('s-mptraffic', 'mpTraffic'); seg('s-mpai', 'mpAI', Number);
       const tog = (id, key, after) => {
         const el = $(id); el.checked = !!S[key];
         el.addEventListener('change', () => { S[key] = el.checked; this.saveSettings(key); if (after) after(el.checked, el); });
@@ -301,6 +312,7 @@
       rng('s-sens', 'sens', (v) => (this.input.sens = v));
       G.audio.setVolume(S.vol);
       this.wireControls();
+      this.wireMP(click);
       this.updateBestUI();
     }
 
@@ -391,7 +403,7 @@
     }
 
     showPanel(name, mode) {
-      if (mode) { this.pendingMode = mode; $('setup-title').textContent = mode === 'race' ? 'STREET RACE' : 'FREE RIDE'; $('setup').classList.toggle('free', mode === 'free'); }
+      if (mode) { this.pendingMode = mode; $('setup-title').textContent = mode === 'race' ? 'STREET RACE' : mode === 'course' ? G.COURSES.street.name : 'FREE RIDE'; $('setup').classList.toggle('free', mode === 'free'); $('setup').classList.toggle('course', mode === 'course'); }
       this.panelStack = this.panelStack || [];
       const cur = document.querySelector('.panel.open');
       if (cur) { this.panelStack.push(cur.id); cur.classList.remove('open'); }
@@ -425,6 +437,9 @@
       this.hud.show(false);
       document.body.classList.remove('playing');
       if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
+      if (this.remotes) { this.remotes.dispose(); this.remotes = null; }
+      if (this.course) { this.course.dispose(); this.course = null; }
+      this.mpGrid = null; this.mpWorld = null;
       this.player.place(this.track.length - 18, 5.4, 0);
       this.player.frozen = true;
       this.timeScale = 1;
@@ -439,33 +454,41 @@
       G.audio.init();
       if (G.isMobile && !document.fullscreenElement) this.fullscreen();
       // rebuild traffic & rivals
+      // multiplayer: every phone builds the same traffic from the host's seed; the AI rivals live on the host only
+      const mp = this.net && mode === 'race' ? this.mpGrid : null, mpo = mp ? this.mpOpts : null;
       if (this.traffic) this.traffic.dispose();
-      this.traffic = S.traffic === 'off' ? null : new G.Traffic(this, S.traffic);
+      this.traffic = mp ? (mpo.traffic === 'off' ? null : G.mpSeeded(mpo.seed, () => new G.Traffic(this, mpo.traffic)))
+        : S.traffic === 'off' || mode === 'course' ? null : new G.Traffic(this, S.traffic);
+      // obstacle course: the set pieces stay built between runs; smashed crates and used repair kits come back
+      if (mode === 'course') { if (!this.course) this.course = new G.Course(this, 'street'); this.course.reset(); }
+      else if (this.course) { this.course.dispose(); this.course = null; }
+      this.courseKey = 'courseBest_' + G.TRACK_ID; this.courseBest = G.store.get(this.courseKey, 0);
+      this.player.health = 100; this.destroyed = false;
       if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
-      const nR = mode === 'race' ? S.rivals : 0;
-      this.racers = nR + 1;
-      this.laps = mode === 'race' ? S.laps : 0;
+      const nR = mode === 'race' && !mp ? S.rivals : mp && this.net.isHost ? mpo.ai.length : 0;
+      this.racers = mp ? mp.length + mpo.ai.length : nR + 1;
+      this.laps = mode === 'race' ? (mp ? this.mpLaps : S.laps) : mode === 'course' ? S.laps : 0;
       const slots = [];
       for (let k = 0; k < this.racers; k++) slots.push({ ds: -12 - Math.floor(k / 2) * 10 - (k % 2) * 4, lat: G.TRACK.grid[k % 2] });
-      const pSlot = mode === 'race' ? Math.min(this.racers - 1, Math.floor(this.racers / 2)) : 0;
+      const pSlot = mp ? Math.max(0, mp.findIndex((q) => q.id === this.net.myId)) : mode === 'race' ? Math.min(this.racers - 1, Math.floor(this.racers / 2)) : 0;
       const ps = slots.splice(pSlot, 1)[0];
       this.player.place(ps.ds, ps.lat, 0);
       this.player.fuel = 100; this.player.fuelLock = false; this._fuelFull = true; this._fuelLock = false;
       this.player.frozen = true;
       this.progress = ps.ds;
       this.lastS = G.wrap(ps.ds, L);
-      if (nR > 0) { this.rivals = new G.Rivals(this, nR); this.rivals.grid(0, slots); }
+      if (nR > 0) { this.rivals = new G.Rivals(this, nR); this.rivals.grid(0, mp ? slots.slice(mp.length - 1) : slots); }
       this.lap = 1; this.lapStart = 0; this.lastLapIdx = 0; this.lapTimes = [];
-      this.raceTime = 0; this.score = 0; this.combo = 1; this.comboT = 0; this.finished = false;
+      this.raceTime = 0; this.score = 0; this.combo = 1; this.comboT = 0; this.finished = false; this.mpFinishTime = 0;
       this.airT = 0; this.driftT = 0; this.driftScore = 0;
       for (const p of this.pickups) { p.active = true; p.g.visible = true; }
       this.city.resetTrees();
-      this.hud.show(true); this.hud.setMode(mode === 'race');
+      this.hud.show(true); this.hud.setMode(mode); this.hud.hull(100);
       $('menu').classList.remove('open');
       document.body.classList.add('playing');
       this.input.calibrateTilt();
       this.state = 'countdown';
-      this.cdT = mode === 'race' ? 3.999 : 1.5;
+      this.cdT = mode !== 'free' ? 3.999 : 1.5;
       this.cdLast = -1;
       this.camIntro = 0;
     }
@@ -494,6 +517,7 @@
         const blocked = this.traffic.cars.some((c) => Math.abs(c.lat - lat) < 2.5 && this.traffic.zoneDist(c.s, s) < c.t.len / 2 + 6);
         if (!blocked) break; s += 12;
       }
+      if (this.course) s = this.course.freeSpot(s, lat);
       this.player.place(s, lat, Math.min(this.player.speed * 0.6, 30));
       this.player.fuel = Math.max(this.player.fuel, 30);
       this.hud.popup('RESET', '', 'warn');
@@ -536,6 +560,7 @@
       else if (vrel > 8) this.hud.popup(c.loose ? 'TAKEDOWN' : 'CRASH', c.t.name, 'warn');
     }
     onWallHit(pos, vn, vt) {
+      if (vn > 6) this.damage((vn - 6) * 1.2);
       if (vn < 2.5) return;
       this.fx.burst(pos.x, pos.y + 0.4, pos.z, Math.min(40, vn * 3), this.player.vel.x, 1, this.player.vel.z, 5);
       G.audio.impact(vn);
@@ -574,7 +599,77 @@
       this.addShake(Math.min(0.7, v / 40));
       if (navigator.vibrate) try { navigator.vibrate(Math.min(90, 20 + v * 1.5)); } catch (e) { /* ignore */ }
       this.combo = 1; this.comboT = 0;
+      this.damage(6);
       if (this.state === 'race' || this.state === 'finished') this.hud.popup('TIMBER!', 'tree down', 'warn');
+    }
+
+    // ---------------- obstacle course ----------------
+    // hull damage only counts in a course run; at zero the car is done
+    damage(n) {
+      const p = this.player;
+      if (!this.course || this.state !== 'race' || this.destroyed || n <= 0) return;
+      p.health = Math.max(0, p.health - n);
+      this.hud.hull(p.health, n >= 2);
+      if (p.health <= 0) this.destroy();
+      else if (n > 12) this.hud.popup('HEAVY DAMAGE', `HULL ${Math.round(p.health)}%`, 'warn');
+    }
+    repair(n) {
+      const p = this.player;
+      if (this.destroyed) return;
+      const was = p.health;
+      p.health = Math.min(100, p.health + n);
+      this.hud.hull(p.health);
+      this.hud.popup('REPAIR KIT', `HULL +${Math.round(p.health - was)}%`, '');
+      G.audio.pickup();
+    }
+    destroy() {
+      const p = this.player;
+      this.destroyed = true;
+      for (let k = 0; k < 4; k++) this.fx.burst(p.pos.x, p.pos.y + 0.8, p.pos.z, 60, p.vel.x * 0.4, 6 + k * 2, p.vel.z * 0.4, 14);
+      G.audio.impact(60);
+      this.addShake(1);
+      p.vel.y += 7; p.w.x += (Math.random() - 0.5) * 6; p.w.z += (Math.random() - 0.5) * 6;
+      if (navigator.vibrate) try { navigator.vibrate([120, 60, 220]); } catch (e) { /* ignore */ }
+      this.finishCourse(true);
+    }
+    onObstacleHit(body, o, v, x, y, z) {
+      if (body !== this.player || v < 1.5) return;
+      this.fx.burst(x, y, z, Math.min(50, 6 + v * 2), body.vel.x * 0.3, 2, body.vel.z * 0.3, 6);
+      G.audio.impact(v);
+      this.addShake(Math.min(0.9, v / 22));
+      if (navigator.vibrate && v > 5) try { navigator.vibrate(Math.min(120, v * 4)); } catch (e) { /* ignore */ }
+      if (v > 5) { this.combo = 1; this.comboT = 0; }
+      this.damage(Math.min(40, (v - 3) * o.k.dmg)); // a single knock is capped at 40%
+    }
+    onCrateSmash(body, o, v) {
+      if (body !== this.player) return;
+      this.fx.burst(o.x, 0.8, o.z, 18, body.vel.x * 0.5, 3, body.vel.z * 0.5, 7);
+      G.audio.impact(Math.min(20, v * 0.4));
+      this.addShake(0.15);
+      if (this.state === 'race' && this.t - (this._crateT || 0) > 0.25) { this._crateT = this.t; this.addScore(100, 2, 'CRATE SMASH', ''); }
+    }
+    onGate(q, tight) {
+      const perfect = tight > 0.75;
+      this.addScore(Math.round(q.pts * (1 + tight)), 6, q.name, perfect ? 'DEAD CENTRE' : '', perfect ? 'big' : '');
+      G.audio.whoosh();
+    }
+    onHurdle(q) { this.addScore(q.name ? 600 : 300, 6, q.name || 'HURDLE CLEARED', ''); }
+    onRooftop() { this.addScore(500, 10, 'ROOFTOP!', 'container landing', 'big'); }
+
+    finishCourse(destroyed) {
+      this.state = 'finished';
+      this.finished = true;
+      const p = this.player;
+      const done = this.lapTimes.length;
+      const best = this.score > this.courseBest;
+      if (best) { this.courseBest = this.score; G.store.set(this.courseKey, this.score); }
+      this.hud.message(destroyed ? 'DESTROYED' : 'COURSE COMPLETE', 2500);
+      $('res-title').textContent = destroyed ? 'DESTROYED' : best ? 'NEW HIGH SCORE' : 'COURSE COMPLETE';
+      const rows = this.lapTimes.map((t, i) => `<div class="row"><span class="p">${i + 1}</span><span class="n">LAP ${i + 1}</span><span class="t">${G.fmtTime(t)}</span></div>`);
+      if (destroyed) rows.push(`<div class="row gone"><span class="p">${done + 1}</span><span class="n">LAP ${done + 1} · WRECKED</span><span class="t">DNF</span></div>`);
+      $('res-rows').innerHTML = rows.join('');
+      $('res-stats').innerHTML = `<div><b>${this.score.toLocaleString()}</b><small>SCORE</small></div><div><b>${Math.round(p.health)}%</b><small>HULL LEFT</small></div><div><b>${this.courseBest.toLocaleString()}</b><small>BEST SCORE</small></div>`;
+      setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
     }
     // N₂ meter cues: one sound as it runs dry, one when it is back to 100%
     fuelCues(p) {
@@ -585,12 +680,178 @@
     }
     addShake(a) { if (this.settings.shake) this.shake = Math.max(this.shake, a); }
 
+    // ---------------- multiplayer ----------------
+    wireMP(click) {
+      const S = this.settings;
+      if (!S.mpName) { S.mpName = 'DRIVER' + ((Math.random() * 90 + 10) | 0); G.store.set('settings', S); }
+      const nameEl = $('mp-name'), codeEl = $('mp-code');
+      nameEl.value = S.mpName;
+      // typing a name must not drive the car or toggle fullscreen
+      for (const el of [nameEl, codeEl]) el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && el === nameEl) el.blur(); });
+      nameEl.addEventListener('change', () => { S.mpName = nameEl.value.replace(/[^\w \-.!?]/g, '').trim().slice(0, 12).toUpperCase() || S.mpName; nameEl.value = S.mpName; G.store.set('settings', S); });
+      codeEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.mpJoin(codeEl.value); });
+      click('btn-mp', () => { this.mpStatus(''); this.showPanel('mp'); });
+      click('btn-host', () => this.mpHost());
+      click('btn-join', () => this.mpJoin(codeEl.value));
+      click('btn-leave', () => this.mpLeave());
+      click('btn-mpstart', () => this.mpStart());
+    }
+    mpStatus(text, err, id = 'mp-status') { const el = $(id); el.textContent = text || ''; el.classList.toggle('err', !!err); }
+    mpEvents() {
+      return {
+        roster: (pl) => this.mpRoster(pl),
+        start: (m) => this.mpOnStart(m),
+        state: (id, m) => {
+          if (!this.remotes || !this.mpGrid || m.r !== this.mpRace) return;
+          const r = this.remotes.get(id), had = r && r.fin;
+          this.remotes.onState(id, m, this.mpGrid.find((q) => q.id === id) || this.mpOpts.ai.find((q) => q.id === id));
+          if (m.f && !had && this.finished) this.mpResults();
+        },
+        left: (id, name) => {
+          const r = this.remotes && this.remotes.get(id);
+          if (!r || r.gone) return;
+          this.remotes.markGone(id);
+          this.racers = 1 + this.remotes.list.filter((q) => !q.gone).length + (this.rivals ? this.rivals.list.length : 0);
+          if (this.state !== 'menu') this.hud.popup(name + ' LEFT', '', 'warn');
+          if (this.finished) this.mpResults();
+        },
+        lost: (text) => this.mpLost(text),
+        world: (m, from) => { if (this.mpWorld) this.mpWorld.onMsg(m, from); },
+      };
+    }
+    async mpHost() {
+      const S = this.settings;
+      if (this.net || this._mpBusy) return;
+      // another circuit means rebuilding the world: reload, then open the room
+      if (S.track !== G.TRACK_ID) { try { sessionStorage.setItem('rt-mp', JSON.stringify({ act: 'host' })); } catch (e) { /* ignore */ } location.reload(); return; }
+      this._mpBusy = true;
+      this.mpStatus('Opening a room…');
+      const net = new G.Net(this.mpEvents());
+      try { await net.host(S.mpName, G.TRACK_ID); this.net = net; this.mpStatus(''); this.mpEnter(); }
+      catch (e) { net.leave(); this.mpStatus(e.message, true); }
+      this._mpBusy = false;
+    }
+    async mpJoin(code, retried) {
+      const S = this.settings;
+      if (this.net || this._mpBusy) return;
+      code = String(code || '').toUpperCase().trim();
+      $('mp-code').value = code;
+      this._mpBusy = true;
+      this.mpStatus('Connecting to ' + code + '…');
+      const net = new G.Net(this.mpEvents());
+      try {
+        await net.join(code, S.mpName);
+        if (net.track !== G.TRACK_ID) {
+          net.leave();
+          if (retried) throw new Error('Could not load the host\'s track');
+          // the host races another circuit: load it and come straight back
+          S.track = net.track; G.store.set('settings', S);
+          try { sessionStorage.setItem('rt-mp', JSON.stringify({ act: 'join', code })); } catch (e) { /* ignore */ }
+          this.mpStatus('Loading the host\'s track…');
+          location.reload(); return;
+        }
+        this.net = net; this.mpStatus(''); this.mpEnter();
+      } catch (e) { net.leave(); this.mpStatus(e.message, true); }
+      this._mpBusy = false;
+    }
+    // into the lobby (also between races): the world goes back to the menu idle, the room stays open
+    mpEnter() {
+      this.toMenu();
+      $('menu').classList.remove('open');
+      $('lobby').classList.add('open');
+      document.body.classList.add('mp');
+      $('btn-again').textContent = 'LOBBY'; $('btn-rmenu').textContent = 'LEAVE';
+      this.mpRoster(this.net.players);
+    }
+    mpRoster(players) {
+      const net = this.net;
+      if (!net) return;
+      const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+      $('lb-code').textContent = net.code;
+      $('lb-count').textContent = `· ${players.length}/${G.MP_MAX}`;
+      $('lb-players').innerHTML = players.map((p, i) => `<div class="row ${p.id === net.myId ? 'me' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${hex(p.color)}"></span>` +
+        `<span class="n">${p.name}${p.id === net.myId ? ' (YOU)' : ''}</span><span class="t">${p.id === 0 ? 'HOST' : ''}</span></div>`).join('');
+      $('lb-host-opts').classList.toggle('hidden', !net.isHost);
+      $('btn-mpstart').classList.toggle('hidden', !net.isHost);
+      $('btn-mpstart').disabled = players.length < 2;
+      if (net.isHost) this.mpStatus(players.length < 2 ? `Waiting for drivers: tell them the code ${net.code}` : 'Ready when you are.', false, 'lb-status');
+      else this.mpStatus('Waiting for the host to start the race…', false, 'lb-status');
+    }
+    mpStart() {
+      if (!this.net || !this.net.isHost || this.net.players.length < 2) return;
+      this.mpOnStart(this.net.startRace(this.settings.laps, { traffic: this.settings.mpTraffic, ai: this.settings.mpAI }));
+    }
+    mpOnStart(m) {
+      const net = this.net;
+      if (!net) return;
+      this.mpRace = m.race; this.mpLaps = m.laps;
+      this.mpOpts = { traffic: m.traffic || 'off', seed: m.seed || 1, ai: m.ai || [] };
+      const grid = m.grid.map((id) => net.players.find((q) => q.id === id)).filter(Boolean);
+      const mine = grid.find((q) => q.id === net.myId);
+      this.mpColor = mine ? mine.color : 0xff2a3c; this.mpName = mine ? mine.name : this.settings.mpName;
+      if (this.state === 'paused') this.pause(false, true);
+      this.mpGrid = grid;
+      this.startRace('race');
+      if (this.remotes) this.remotes.dispose();
+      this.remotes = new G.Remotes(this);
+      for (const q of this.mpOpts.ai) if (!net.isHost) this.remotes.ensure(q);
+      this.mpWorld = new G.MPWorld(this, net, m.race);
+      for (const q of grid) if (q.id !== net.myId) this.remotes.ensure(q);
+      $('lobby').classList.remove('open');
+      // GO lands at the same moment on every phone: the start message took about half a ping to get here
+      if (!net.isHost) this.cdT = Math.max(0.5, m.cd - net.rtt / 2000);
+    }
+    // the race goes on without the room; the results keep whoever was seen finishing
+    mpLost(text) {
+      const net = this.net;
+      this.net = null;
+      if (net) net.leave();
+      if (this.remotes) for (const r of this.remotes.list) r.gone = true;
+      if (this.mpGrid && this.state !== 'menu') {
+        this.hud.message(text.toUpperCase(), 2500);
+        this.racers = 1;
+        if (this.finished) this.mpResults();
+        return;
+      }
+      this.mpLeave();
+      this.showPanel('mp');
+      this.mpStatus(text, true);
+    }
+    mpLeave() {
+      if (this.net) { this.net.leave(); this.net = null; }
+      document.body.classList.remove('mp');
+      $('btn-again').textContent = 'RACE AGAIN'; $('btn-rmenu').textContent = 'MENU';
+      this.toMenu();
+    }
+    // send our car, move theirs
+    mpFrame(dt, driving) {
+      if (this.remotes) this.remotes.update(dt, this.t);
+      if (this.mpWorld && this.net && driving) this.mpWorld.update(dt, (this.acc || 0) / Math.max(this.timeScale, 0.05));
+      if (this.net && this.mpGrid && driving) this.net.tick(dt, this.player, this.progress, this.mpFinishTime, (this.acc || 0) / Math.max(this.timeScale, 0.05));
+    }
+    // results board: finished drivers by time, then those still racing by distance, then drop-outs
+    mpResults() {
+      const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+      const rows = [{ name: this.mpName, time: this.mpFinishTime, me: true, color: this.mpColor }];
+      if (this.rivals) for (const r of this.rivals.list) rows.push({ name: r.name, time: r.finished ? r.finishTime : 0, s: r.s, color: r.color });
+      if (this.remotes) for (const r of this.remotes.list) rows.push({ name: r.name, time: r.fin || 0, s: r.s, gone: r.gone && !r.fin, color: r.color });
+      const rank = (r) => (r.time ? 0 : r.gone ? 2 : 1);
+      rows.sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? a.time - b.time : b.s - a.s));
+      const myPlace = rows.findIndex((r) => r.me) + 1;
+      $('res-title').textContent = myPlace === 1 ? 'VICTORY' : `P${myPlace} OF ${rows.length}`;
+      $('res-rows').innerHTML = rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''} ${r.gone ? 'gone' : ''}"><span class="p">${r.time ? i + 1 : '–'}</span><span class="dot" style="background:${hex(r.color)}"></span>` +
+        `<span class="n">${r.name}${r.me ? ' (YOU)' : ''}</span><span class="t">${r.time ? G.fmtTime(r.time) : r.gone ? 'DNF' : 'RACING…'}</span></div>`).join('');
+      $('res-stats').innerHTML = `<div><b>${this.score.toLocaleString()}</b><small>STUNT SCORE</small></div><div><b>${G.fmtTime(Math.min(...this.lapTimes))}</b><small>BEST LAP</small></div><div><b>${G.fmtTime(this.bestLap)}</b><small>ALL-TIME BEST</small></div>`;
+      this.place = myPlace;
+      return myPlace;
+    }
+
     // ---------------- loop ----------------
     frame(now) {
       if (window.innerWidth !== this._w || window.innerHeight !== this._h) this.resize();
       let dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
       this.last = now;
-      if (this.state === 'paused') { this.consumeEvents(); this.render(0); return; }
+      if (this.state === 'paused') { this.consumeEvents(); this.mpFrame(dt, true); this.render(0); return; }
       dt *= this.timeScale;
       this.t += dt;
       const p = this.player;
@@ -601,11 +862,11 @@
       if (st === 'countdown') this.updateCountdown(dt);
       if (st === 'wreck') {
         this.wreckT += dt / Math.max(this.timeScale, 0.01);
-        this.timeScale = this.wreckT < 1.0 ? 0.3 : 1;
+        this.timeScale = this.wreckT < 1.0 && !this.mpGrid ? 0.3 : 1; // no slow-mo online: the host runs everyone's AI and traffic
         if (this.wreckT > 1.6) { this.timeScale = 1; this.state = 'race'; this.resetPlayer(); }
       }
       const driving = st === 'race' || st === 'countdown' || st === 'finished' || st === 'wreck';
-      const ctrl = st === 'race' || st === 'finished' ? inp : NO_INPUT;
+      const ctrl = (st === 'race' || st === 'finished') && !this.destroyed ? inp : NO_INPUT;
       if (st === 'countdown') { p.frozen = true; }
       else if (st !== 'menu') p.frozen = false;
 
@@ -635,7 +896,9 @@
         if (st === 'race' || st === 'finished') this.traffic.detectStunts(p);
       }
       if (this.rivals) this.rivals.update(dt, st === 'race' || st === 'finished' || st === 'wreck', p, this.progress);
+      this.mpFrame(dt, driving);
 
+      if (this.course) this.course.update(dt, st === 'race');
       if (st === 'race') this.updateRace(dt);
       if (driving) this.updateStunts(dt, ctrl);
       this.updatePickups(dt);
@@ -648,6 +911,7 @@
       p.throttle = ctrl.throttle;
       p.ambThrust = 0;
       if (this.rivals) for (const r of this.rivals.list) { const d = r.pos.distanceTo(p.pos); if (d < 60) p.ambThrust += (r.th.L + r.th.B) * (1 - d / 60) * 0.3; }
+      if (this.remotes) for (const r of this.remotes.list) { const d = r.pos.distanceTo(p.pos); if (d < 60 && r.alpha > 0.5) p.ambThrust += (r.th.L + r.th.B) * (1 - d / 60) * 0.3; }
       G.audio.update(p, driving && st !== 'paused');
       this.render(dt);
     }
@@ -667,10 +931,11 @@
       this.cdT -= dt;
       this.camIntro = Math.min(1, this.camIntro + dt / 2.6);
       const n = Math.ceil(this.cdT);
-      if (this.mode === 'race' && n !== this.cdLast && n >= 1 && n <= 3) { this.hud.countdown(String(n)); G.audio.beep(false); }
+      if (this.mode !== 'free' && n !== this.cdLast && n >= 1 && n <= 3) { this.hud.countdown(String(n)); G.audio.beep(false); }
       this.cdLast = n;
       if (this.cdT <= 0) {
         this.state = 'race';
+        this.goAt = performance.now();
         this.hud.countdown('GO!', true);
         G.audio.beep(true);
         this.camIntro = 1;
@@ -683,23 +948,26 @@
     }
 
     updateRace(dt) {
-      this.raceTime += dt;
+      if (this.mpGrid) this.raceTime = (performance.now() - this.goAt) / 1000; else this.raceTime += dt;
       const L = this.track.length;
-      if (this.mode === 'race') {
+      if (this.mode !== 'free') {
         const lapIdx = Math.floor(this.progress / L);
         if (lapIdx > this.lastLapIdx && this.progress > 0) {
           this.lastLapIdx = lapIdx;
           const lt = this.raceTime - this.lapStart;
           this.lapStart = this.raceTime;
           this.lapTimes.push(lt);
-          const isBest = lt < this.bestLap && lt > 25;
+          const course = this.mode === 'course';
+          const isBest = !course && lt < this.bestLap && lt > 25;
           if (isBest) { this.bestLap = lt; G.store.set(this.bestKey, lt); }
-          if (lapIdx >= this.laps) { this.finish(); return; }
+          if (course) this.addScore(1000 + Math.round(this.player.health) * 10, 20, 'LAP CLEAR', `HULL ${Math.round(this.player.health)}%`, 'big');
+          if (lapIdx >= this.laps) { if (course) this.finishCourse(false); else this.finish(); return; }
           this.hud.message(lapIdx === this.laps - 1 ? 'FINAL LAP' : `LAP ${lapIdx + 1}`, 1600);
           this.hud.popup('LAP ' + G.fmtTime(lt), isBest ? 'NEW BEST' : '', isBest ? 'big' : '');
         }
         this.lap = Math.max(1, lapIdx + 1);
         let place = 1;
+        if (this.remotes) for (const r of this.remotes.list) if (!r.gone && (r.fin || r.s > this.progress)) place++;
         if (this.rivals) for (const r of this.rivals.list) {
           if (r.finished) { place++; continue; }
           if (r.s > this.progress) place++;
@@ -712,6 +980,14 @@
     finish() {
       this.state = 'finished';
       this.finished = true;
+      if (this.mpGrid) {
+        this.mpFinishTime = this.raceTime;
+        if (this.net) this.net.tick(1, this.player, this.progress, this.mpFinishTime); // tell the room right away
+        const myPlace = this.mpResults();
+        this.hud.message(myPlace === 1 ? 'YOU WIN!' : `FINISHED P${myPlace}`, 2500);
+        setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
+        return;
+      }
       const L = this.track.length;
       const rows = [{ name: 'YOU', time: this.raceTime, me: true }];
       if (this.rivals) for (const r of this.rivals.list) {
@@ -829,7 +1105,7 @@
         const n = this.track.nearest(cx, cz, p.near.i, this._cn || (this._cn = {}));
         if (Math.abs(n.lat) > 15) { const k = Math.abs(n.lat) - 15; cx -= n.rx * Math.sign(n.lat) * k; cz -= n.rz * Math.sign(n.lat) * k; }
         let cyPos = this.camFocusY + hgt;
-        if (this.state === 'countdown' && this.mode === 'race') {
+        if (this.state === 'countdown' && this.mode !== 'free') {
           // intro swoop from the side
           const k = 1 - Math.pow(1 - this.camIntro, 3);
           const a = this.camYaw + (1 - k) * 2.2;

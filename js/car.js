@@ -299,7 +299,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   const MASS = 1400;
   const POWER = 520000, FMAX = 19000, BRAKE = 26000, KDRAG = 0.55, DOWNF = 0.9;
   const MU = 1.35, CLAT_F = 9500, CLAT_R = 10000;
-  const F_UNDER = 1.35 * MASS * GRAV, F_BACK = 1.7 * MASS * GRAV, F_SIDE = 0.8 * MASS * GRAV;
+  const F_UNDER = 1.35 * MASS * GRAV, F_BACK = 1.7 * MASS * GRAV, F_SIDE = 1.3 * MASS * GRAV;
   const BODY_PTS = [
     [0.95, 0.22, 2.1], [-0.95, 0.22, 2.1], [0.95, 0.22, -2.1], [-0.95, 0.22, -2.1],
     [0.55, 1.18, 0.4], [-0.55, 1.18, 0.4], [0.55, 1.05, -0.5], [-0.55, 1.05, -0.5],
@@ -346,6 +346,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     ground(x, z, yRef) {
       this.game.track.groundAt(x, z, gq);
       if (this.game.traffic) this.game.traffic.roofAt(x, z, yRef, gq, this.tnear);
+      if (this.game.course) this.game.course.groundAt(x, z, yRef, gq);
       return gq;
     }
 
@@ -580,6 +581,9 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
         w.y -= Math.sign(th.side || 1) * Math.sign(th.along || 1) * G.clamp(th.speed * 0.02, 0.2, 1.1);
         this.onTreeHit(th.tree, th.speed);
       }
+
+      // --- obstacle-course set pieces ---
+      if (this.game.course) this.game.course.collide(this);
 
       // safety: never fall through the world
       if (pos.y < -2) { pos.y = 0.5; vel.y = 0; }

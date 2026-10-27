@@ -235,5 +235,6 @@
   const _f = new T.Vector3();
   G.Rivals = Rivals;
   G.RIVAL_COLORS = COLORS;
+  G.RIVAL_NAMES = NAMES;
   G.RIVAL_SKILL = SKILL;
 })();
