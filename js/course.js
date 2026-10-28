@@ -48,7 +48,7 @@
         const len = LEN[kind];
         // keep clear of the circuit's own jump ramps (they'd launch you straight into a wall)
         const clash = ramps.find((r) => r.s > s - 90 && r.s < s + len + 40);
-        if (clash) { s = clash.s + 90; continue; }
+        if (clash) { s = Math.max(s, clash.s + 90) + 1; continue; } // always step forward: s = r.s + 90 can round back into the same clash
         if (s + len > L - 200) break;
         this[kind](s);
         if (kind === 'containers' || this.rand() < 0.55) this.addKit(s + len + 22 + this.rand() * 10, this.laneLat());
