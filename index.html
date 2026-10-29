@@ -75,6 +75,7 @@
       <button id="btn-free" class="big">FREE RIDE</button>
       <button id="btn-course" class="big">OBSTACLE COURSE</button>
       <button id="btn-mp" class="big">MULTIPLAYER</button>
+      <button id="btn-board" class="big">LEADERBOARD</button>
       <div class="row2">
         <button id="btn-settings">SETTINGS</button>
         <button id="btn-controls">CONTROLS</button>
@@ -95,7 +96,16 @@
     </div>
     <div class="race-opt">
       <label>LAPS</label>
-      <div class="seg" id="s-laps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="5">5</button></div>
+      <div class="seg race-laps" id="s-laps"><button data-v="2">2 · OFFICIAL</button><button data-v="3">3</button></div>
+      <div class="seg course-laps" id="s-claps"><button data-v="1">1 · OFFICIAL</button><button data-v="3">3</button></div>
+      <p class="hint">Only official-length runs go on the leaderboard.</p>
+      <label>DRIVER NAME</label>
+      <input id="s-name" class="txt" maxlength="12" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="course-opt">
+      <label>GHOSTS</label>
+      <div class="seg" id="s-ghosts"><button data-v="on">ON</button><button data-v="off">OFF</button></div>
+      <p class="hint">Race your own best run (blue) and the top run by another driver (orange).</p>
     </div>
     <div class="rival-opt">
       <label>RIVALS</label>
@@ -107,6 +117,16 @@
     <div class="seg" id="s-tod"><button data-v="night">NIGHT</button><button data-v="sunset">SUNSET</button></div>
     </div>
     <div class="actions"><button data-back>BACK</button><button id="btn-go" class="primary">GO!</button></div>
+  </div>
+
+  <!-- LEADERBOARD: best official run per driver, per track and mode -->
+  <div id="board" class="panel card">
+    <h2>LEADERBOARD</h2>
+    <div class="seg" id="b-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button></div>
+    <div class="seg" id="b-mode"><button data-v="race">STREET RACE · 2 LAPS</button><button data-v="course">OBSTACLE COURSE · 1 LAP</button></div>
+    <div id="b-rows" class="res-rows board-rows"></div>
+    <div id="b-mine" class="hint"></div>
+    <div class="actions"><button data-back class="primary">BACK</button></div>
   </div>
 
   <!-- MULTIPLAYER: host or join a room -->
@@ -134,7 +154,7 @@
       <div id="lb-players" class="res-rows"></div>
       <div id="lb-host-opts">
         <label>LAPS</label>
-        <div class="seg" id="s-mplaps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="5">5</button></div>
+        <div class="seg" id="s-mplaps"><button data-v="2">2</button><button data-v="3">3</button></div>
         <label>TRAFFIC</label>
         <div class="seg" id="s-mptraffic"><button data-v="off">OFF</button><button data-v="light">LIGHT</button><button data-v="medium">MEDIUM</button><button data-v="heavy">HEAVY</button><button data-v="insane">INSANE</button></div>
         <label>AI RIVALS</label>
@@ -219,6 +239,7 @@
     <h2 id="res-title">VICTORY</h2>
     <div id="res-rows" class="res-rows"></div>
     <div id="res-stats" class="res-stats"></div>
+    <div id="res-board" class="hint res-board"></div>
     <div class="actions"><button id="btn-rmenu">MENU</button><button id="btn-again" class="primary">RACE AGAIN</button></div>
   </div>
 
@@ -242,7 +263,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry };
     const BUILD = Date.now();
-    const files = ['util', 'tuning', 'track', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'course', 'game'];
+    const files = ['util', 'tuning', 'track', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'ghost', 'course', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }

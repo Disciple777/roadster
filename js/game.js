@@ -13,9 +13,9 @@
   };
 
   const DEFAULTS = {
-    quality: G.isMobile ? 'medium' : 'high', tod: 'night', traffic: 'medium', laps: 3, rivals: 5, difficulty: 'normal', track: 'city',
+    quality: G.isMobile ? 'medium' : 'high', tod: 'night', traffic: 'medium', laps: 2, courseLaps: 1, rivals: 5, difficulty: 'normal', track: 'city',
     camera: 0, autoAccel: G.isTouch, tilt: false, sens: 1, showFps: false, touchUI: 'auto', vol: 0.7, shake: true,
-    thrInvert: true, keyPreset: 1, keysBy: {}, // keysBy: { preset: { action: [code, code] } }, missing = that layout's defaults
+    thrInvert: true, ghosts: 'on', keyPreset: 1, keysBy: {}, // keysBy: { preset: { action: [code, code] } }, missing = that layout's defaults
   };
 
   const RadialShader = {
@@ -98,6 +98,8 @@
   class Game {
     constructor() {
       this.settings = Object.assign({}, DEFAULTS, G.store.get('settings', {}));
+      // v2 laps: street races default to 2 laps and courses to 1 (the official lengths); 3 is the long option
+      if (this.settings.lapsV !== 2) { Object.assign(this.settings, { laps: 2, courseLaps: 1, lapsV: 2 }); G.store.set('settings', this.settings); }
       this.Q = QUALITY[this.settings.quality] || QUALITY.high;
       this.state = 'loading';
       this.mode = 'race';
@@ -297,9 +299,9 @@
         el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { S[key] = conv(b.dataset.v); sets.forEach((f) => f(S[key])); this.saveSettings(key); }));
       };
       const segSets = {};
-      seg('s-traffic', 'traffic'); seg('s-laps', 'laps', Number); seg('s-rivals', 'rivals', Number); seg('s-diff', 'difficulty'); seg('s-tod', 'tod'); seg('s-track', 'track');
+      seg('s-traffic', 'traffic'); seg('s-laps', 'laps', Number); seg('s-claps', 'courseLaps', Number); seg('s-rivals', 'rivals', Number); seg('s-diff', 'difficulty'); seg('s-tod', 'tod'); seg('s-track', 'track');
       seg('s-quality', 'quality'); seg('s-camera', 'camera', Number); seg('s-touch', 'touchUI');
-      seg('s-mptrack', 'track'); seg('s-mplaps', 'laps', Number);
+      seg('s-mptrack', 'track'); seg('s-mplaps', 'laps', Number); seg('s-ghosts', 'ghosts');
       if (!S.mpTraffic) S.mpTraffic = 'medium';
       if (S.mpAI === undefined) S.mpAI = 0;
       seg('s-mptraffic', 'mpTraffic'); seg('s-mpai', 'mpAI', Number);
@@ -317,6 +319,7 @@
       G.audio.setVolume(S.vol);
       this.wireControls();
       this.wireMP(click);
+      this.wireBoard(click);
       this.updateBestUI();
     }
 
@@ -445,6 +448,47 @@
 
     cycleCam() { this.camMode = (this.camMode + 1) % 3; this.settings.camera = this.camMode; G.store.set('settings', this.settings); }
 
+    // ---------------- leaderboard ----------------
+    wireBoard(click) {
+      this.board = { track: G.TRACK_ID, mode: 'race', req: 0 };
+      click('btn-board', () => { this.board.track = G.TRACK_ID; this.showPanel('board'); this.loadBoard(); });
+      for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) {
+        $(id).addEventListener('click', (e) => {
+          const b = e.target.closest('button[data-v]');
+          if (b) { this.board[key] = b.dataset.v; this.loadBoard(); }
+        });
+      }
+    }
+    async loadBoard() {
+      const B = this.board, req = ++B.req, rowsEl = $('b-rows'), mineEl = $('b-mine');
+      for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === B[key]));
+      rowsEl.innerHTML = '<div class="empty">Loading…</div>'; mineEl.textContent = '';
+      let res;
+      try { res = await G.api.top(B.track, B.mode); } catch (e) { if (req === B.req) rowsEl.innerHTML = '<div class="empty">Leaderboard is offline right now.</div>'; return; }
+      if (req !== B.req) return;
+      const race = B.mode === 'race', esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+      rowsEl.innerHTML = res.rows.length
+        ? res.rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''}"><span class="p">${i + 1}</span><span class="n">${esc(r.name)}</span>` +
+            (race ? `<span class="t">${G.fmtTime(r.time_ms / 1000)}</span>` : `<span class="when">${G.fmtTime(r.time_ms / 1000)}</span><span class="t">${r.score.toLocaleString()}</span>`) + '</div>').join('')
+        : `<div class="empty">No official ${race ? '2-lap races' : 'course runs'} on this track yet. Be the first!</div>`;
+      const m = res.mine;
+      mineEl.textContent = m ? `Your best: #${m.rank} of ${res.total} · ${race ? G.fmtTime(m.time_ms / 1000) : m.score.toLocaleString() + ' pts'}` : `${res.total} driver${res.total === 1 ? '' : 's'} ranked`;
+    }
+    // send an official run to the leaderboard (a course run brings its replay for the ghosts)
+    submitRun(mode) {
+      const el = $('res-board'), off = G.OFFICIAL_LAPS[mode];
+      if (this.laps !== off) { el.textContent = `Practice run (${this.laps} laps). Only ${off}-lap runs are ranked.`; return; }
+      el.textContent = 'Sending to the leaderboard…';
+      const where = (G.TRACK_ID === 'highway' ? 'EXPRESSWAY' : 'DOWNTOWN') + (mode === 'race' ? ' street race' : ' obstacle course');
+      G.api.submit({
+        name: this.settings.mpName, track: G.TRACK_ID, mode, laps: this.laps,
+        time_ms: Math.round(this.raceTime * 1000), score: Math.round(this.score),
+        ghost: mode === 'course' ? this.ghostRec.data : undefined,
+      }).then((r) => {
+        el.innerHTML = `${r.best ? 'NEW PERSONAL BEST · ' : ''}<b>#${r.rank}</b> of ${r.total} on the ${where} leaderboard`;
+      }).catch(() => { el.textContent = 'Leaderboard offline: this run was not saved.'; });
+    }
+
     toMenu() {
       this.state = 'menu';
       this.closePanels();
@@ -455,6 +499,7 @@
       if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
       if (this.remotes) { this.remotes.dispose(); this.remotes = null; }
       if (this.course) { this.course.dispose(); this.course = null; }
+      if (this.ghosts) { this.ghosts.dispose(); this.ghosts = null; }
       this.mpGrid = null; this.mpWorld = null;
       this.player.place(this.track.length - 18, 5.4, 0);
       this.player.frozen = true;
@@ -478,12 +523,17 @@
       // obstacle course: the set pieces stay built between runs; smashed crates and used repair kits come back
       if (mode === 'course') { if (!this.course) this.course = new G.Course(this, 'street'); this.course.reset(); }
       else if (this.course) { this.course.dispose(); this.course = null; }
+      // ghosts: your best course run and the best by someone else, replayed alongside this one
+      this.ghostRec = this.ghostRec || new G.GhostRecorder(); this.ghostRec.reset();
+      if (mode === 'course' && S.ghosts !== 'off') { this.ghosts = this.ghosts || new G.Ghosts(this); this.ghosts.load(G.TRACK_ID); }
+      else if (this.ghosts) { this.ghosts.dispose(); this.ghosts = null; }
+      $('res-board').textContent = '';
       this.courseKey = 'courseBest_' + G.TRACK_ID; this.courseBest = G.store.get(this.courseKey, 0);
       this.player.health = 100; this.destroyed = false;
       if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
       const nR = mode === 'race' && !mp ? S.rivals : mp && this.net.isHost ? mpo.ai.length : 0;
       this.racers = mp ? mp.length + mpo.ai.length : nR + 1;
-      this.laps = mode === 'race' ? (mp ? this.mpLaps : S.laps) : mode === 'course' ? S.laps : 0;
+      this.laps = mode === 'race' ? (mp ? this.mpLaps : S.laps) : mode === 'course' ? S.courseLaps : 0;
       const slots = [];
       for (let k = 0; k < this.racers; k++) slots.push({ ds: -12 - Math.floor(k / 2) * 10 - (k % 2) * 4, lat: G.TRACK.grid[k % 2] });
       const pSlot = mp ? Math.max(0, mp.findIndex((q) => q.id === this.net.myId)) : mode === 'race' ? Math.min(this.racers - 1, Math.floor(this.racers / 2)) : 0;
@@ -706,6 +756,7 @@
       if (destroyed) rows.push(`<div class="row gone"><span class="p">${done + 1}</span><span class="n">LAP ${done + 1} · WRECKED</span><span class="t">DNF</span></div>`);
       $('res-rows').innerHTML = rows.join('');
       $('res-stats').innerHTML = `<div><b>${this.score.toLocaleString()}</b><small>SCORE</small></div><div><b>${Math.round(p.health)}%</b><small>HULL LEFT</small></div><div><b>${this.courseBest.toLocaleString()}</b><small>BEST SCORE</small></div>`;
+      if (destroyed) $('res-board').textContent = 'Wrecked runs are not ranked.'; else this.submitRun('course');
       setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
     }
     // N₂ meter cues: one sound as it runs dry, one when it is back to 100%
@@ -721,11 +772,12 @@
     wireMP(click) {
       const S = this.settings;
       if (!S.mpName) { S.mpName = 'DRIVER' + ((Math.random() * 90 + 10) | 0); G.store.set('settings', S); }
-      const nameEl = $('mp-name'), codeEl = $('mp-code');
-      nameEl.value = S.mpName;
+      // one driver name for multiplayer rooms and the leaderboard, editable in both places
+      const nameEls = [$('mp-name'), $('s-name')].filter(Boolean), codeEl = $('mp-code');
+      for (const el of nameEls) el.value = S.mpName;
       // typing a name must not drive the car or toggle fullscreen
-      for (const el of [nameEl, codeEl]) el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && el === nameEl) el.blur(); });
-      nameEl.addEventListener('change', () => { S.mpName = nameEl.value.replace(/[^\w \-.!?]/g, '').trim().slice(0, 12).toUpperCase() || S.mpName; nameEl.value = S.mpName; G.store.set('settings', S); });
+      for (const el of [...nameEls, codeEl]) el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && el !== codeEl) el.blur(); });
+      for (const el of nameEls) el.addEventListener('change', () => { S.mpName = el.value.replace(/[^\w \-.!?]/g, '').trim().slice(0, 12).toUpperCase() || S.mpName; for (const o of nameEls) o.value = S.mpName; G.store.set('settings', S); });
       codeEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.mpJoin(codeEl.value); });
       click('btn-mp', () => { this.mpStatus(''); this.showPanel('mp'); });
       click('btn-host', () => this.mpHost());
@@ -937,6 +989,7 @@
       this.mpFrame(dt, driving);
 
       if (this.course) this.course.update(dt, st === 'race');
+      if (this.ghosts) this.ghosts.update(st === 'countdown' ? 0 : this.raceTime, dt);
       if (st === 'race') this.updateRace(dt);
       if (driving) this.updateStunts(dt, ctrl);
       this.updatePickups(dt);
@@ -987,6 +1040,7 @@
 
     updateRace(dt) {
       if (this.mpGrid) this.raceTime = (performance.now() - this.goAt) / 1000; else this.raceTime += dt;
+      if (this.mode === 'course') this.ghostRec.sample(this.raceTime, this.player);
       const L = this.track.length;
       if (this.mode !== 'free') {
         const lapIdx = Math.floor(this.progress / L);
@@ -1035,6 +1089,7 @@
       rows.sort((a, b) => a.time - b.time);
       const myPlace = rows.findIndex((r) => r.me) + 1;
       this.hud.message(myPlace === 1 ? 'YOU WIN!' : `FINISHED P${myPlace}`, 2500);
+      this.submitRun('race');
       $('res-title').textContent = myPlace === 1 ? 'VICTORY' : `P${myPlace} OF ${rows.length}`;
       $('res-rows').innerHTML = rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${r.me ? '#ff2a3c' : '#' + r.color.toString(16).padStart(6, '0')}"></span><span class="n">${r.name}</span><span class="t">${G.fmtTime(r.time)}</span></div>`).join('');
       $('res-stats').innerHTML = `<div><b>${this.score.toLocaleString()}</b><small>STUNT SCORE</small></div><div><b>${G.fmtTime(Math.min(...this.lapTimes))}</b><small>BEST LAP</small></div><div><b>${G.fmtTime(this.bestLap)}</b><small>ALL-TIME BEST</small></div>`;

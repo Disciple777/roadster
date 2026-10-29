@@ -38,6 +38,7 @@ button.primary:hover { background: linear-gradient(135deg, #ff4152, #d81a33); }
 .actions button { min-width: 110px; }
 .vbtns { display: flex; flex-direction: column; gap: 10px; }
 #setup.free .race-opt, #setup.free .rival-opt, #setup.course .rival-opt, #setup.course .traffic-opt { display: none; }
+#setup.course .race-laps, #setup:not(.course) .course-laps, #setup:not(.course) .course-opt { display: none; }
 
 /* ---------- menu ---------- */
 .panel.menu { inset: 0; flex-direction: column; justify-content: space-between; gap: 18px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; padding: calc(28px + var(--sa-t)) calc(36px + var(--sa-r)) calc(28px + var(--sa-b)) calc(36px + var(--sa-l)); background: linear-gradient(90deg, rgba(4, 5, 9, 0.85) 0%, rgba(4, 5, 9, 0.35) 45%, transparent 70%); }
@@ -241,3 +242,12 @@ button.wide { width: 100%; margin-top: 8px; }
 .res-rows .ping { font-size: 12px; color: var(--dim); font-family: 'Orbitron'; }
 body.mp .sp-only { display: none; }
 button:disabled { opacity: 0.4; pointer-events: none; box-shadow: none; }
+
+/* leaderboard */
+#board .seg { margin-bottom: 8px; }
+.board-rows { margin-top: 6px; min-height: 120px; max-height: 46vh; max-height: 46dvh; }
+.board-rows .row { font-size: 15px; }
+.board-rows .when { font-size: 11px; color: var(--dim); font-family: 'Orbitron'; }
+.board-rows .empty { padding: 24px 8px; text-align: center; color: var(--dim); font-size: 14px; }
+.res-board { text-align: center; }
+.res-board b { color: #fff; }

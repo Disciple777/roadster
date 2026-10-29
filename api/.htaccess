@@ -1,0 +1,4 @@
+# Only index.php is an endpoint. The helpers and the server-only config are never served.
+<FilesMatch "(?i)^(lib\.php|config.*)$">
+    Require all denied
+</FilesMatch>
