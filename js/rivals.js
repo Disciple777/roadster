@@ -16,16 +16,23 @@
   }
   // the furthest a rival's aim point may sit from the centre line: kerb minus half a car and a little margin
   const latMax = () => G.ROAD_HALF - 1.4;
-  // rival skill: how close to the car's real limits the AI dares to drive. Same car, same physics, same keys —
-  // aLat = cornering it trusts (m/s², tyres give ~16), aBrk = braking it plans with, top = speed cap (fraction
-  // of a 100 m/s flat-out run), boost = boosts per second on straights, n2 = N₂ it keeps in reserve,
-  // react = seconds of reaction it leaves before braking, catchUp/ease = rubber band when behind/ahead of you
+  // rival skill: how close to the car's real limits the AI dares to drive. Same car, same physics, same keys.
+  // grip = share of the tyres' real cornering limit it trusts (the limit grows with speed: downforce),
+  // aBrk = braking it plans with (m/s²), top = speed cap (m/s), smart = plans the rear thruster (else random
+  // bursts, boost per second), n2 = N₂ it keeps in reserve, n2Rate = N₂/s it earns like a player earns from
+  // stunts, react = seconds of reaction it leaves before braking, jump = hops over traffic it can't get around,
+  // catchUp/ease = rubber band when behind/ahead of you
   const SKILL = {
-    easy:   { aLat: 10.5, aBrk: 8,    top: 0.74, boost: 0.15, n2: 70, react: 0.5,  catchUp: 1.06, ease: 0.85 },
-    normal: { aLat: 13,   aBrk: 10.5, top: 0.86, boost: 0.45, n2: 50, react: 0.3,  catchUp: 1.1,  ease: 0.94 },
-    hard:   { aLat: 15,   aBrk: 12.5, top: 0.96, boost: 1.2,  n2: 30, react: 0.15, catchUp: 1.12, ease: 1 },
-    pro:    { aLat: 17,   aBrk: 14,   top: 1.2,  boost: 3,    n2: 18, react: 0.08, catchUp: 1.15, ease: 1 },
+    easy:   { grip: 0.56, aBrk: 8,  top: 74,  boost: 0.15, smart: false, n2: 70, n2Rate: 0, react: 0.5,  jump: false, catchUp: 1.06, ease: 0.85 },
+    normal: { grip: 0.7,  aBrk: 11, top: 86,  boost: 0.45, smart: false, n2: 50, n2Rate: 1, react: 0.3,  jump: false, catchUp: 1.08, ease: 0.94 },
+    hard:   { grip: 0.88, aBrk: 14, top: 140, smart: true, n2: 30, n2Rate: 3, react: 0.15, jump: true,  catchUp: 1.06, ease: 1 },
+    pro:    { grip: 0.97, aBrk: 16, top: 999, smart: true, n2: 26, n2Rate: 7, react: 0.06, jump: true,  catchUp: 1.08, ease: 1 },
   };
+  // the tyres' sideways limit at speed v (m/s²): friction x (weight + downforce), from car.js
+  const A0 = 16.2, A1 = 0.0013;
+  // fastest a skill can take curvature k: v² k = grip (A0 + A1 v²)
+  const cornerV = (k, g) => (k <= A1 * g ? 999 : Math.sqrt((A0 * g) / (k - A1 * g)));
+  const UP_ACC = 4.2; // net climb of the under-thrusters (m/s²)
 
   let RivalBody = null;
   // defined lazily so G.Player is guaranteed to exist
@@ -51,7 +58,7 @@
         const r = {
           i, owner: this, name: NAMES[i % NAMES.length], color: COLORS[i % COLORS.length], model,
           s: 0, lastS: 0, latT: 0, v: 0, skill: 0.9 + Math.random() * 0.1,
-          boostT: 0, jumpT: 0, stuckT: 0, finished: false, finishTime: 0,
+          boostT: 0, jumpT: 0, jumpC: null, laneT: 0, stuckT: 0, finished: false, finishTime: 0,
           inp: { steer: 0, throttle: 0, brake: 0, handbrake: false, jump: false, thrL: false, thrR: false, boost: false, pitch: 0, rollAir: 0 },
         };
         r.b = new RB(game, model, r);
@@ -68,7 +75,7 @@
         r.b.place(startS + sl.ds, sl.lat, 0);
         r.b.fuel = 100; r.b.fuelLock = false; r.b.frozen = true;
         r.s = startS + sl.ds; r.lastS = G.wrap(r.s, L); r.latT = sl.lat;
-        r.finished = false; r.boostT = 0; r.jumpT = 0; r.stuckT = 0;
+        r.finished = false; r.boostT = 0; r.jumpT = 0; r.jumpC = null; r.stuckT = 0;
         r.b.syncModel();
       });
     }
@@ -84,7 +91,7 @@
       }
       b.place(s, lat, Math.min(b.speed * 0.6, 25));
       b.fuel = Math.max(b.fuel, 30);
-      r.latT = lat; r.stuckT = 0; r.jumpT = 0;
+      r.latT = lat; r.stuckT = 0; r.jumpT = 0; r.jumpC = null; r.boostT = 0;
     }
 
     // one physics substep for every rival (called next to the player's step)
@@ -124,31 +131,55 @@
 
     think(r, dt, tr, L, traffic, playerProg) {
       const b = r.b, sNow = b.near.s, v = r.v, K = SKILL[this.game.settings.difficulty] || SKILL.normal;
+      // rubber band: a rival behind you drives a touch braver and earns N₂ faster
+      const gap = r.s - playerProg, behind = gap < -60, ahead = gap > 160;
+      const grip = K.grip * r.skill * (gap < -120 ? K.catchUp : ahead ? K.ease : 1);
+      // N₂ a player would be earning from near misses and stunts along the way
+      if (b.grounded) b.fuel = Math.min(100, b.fuel + (K.n2Rate + (behind ? K.n2Rate : 0)) * dt);
       // speed plan: the fastest speed from which every corner ahead can still be braked down to in time
       const reach = v * K.react, horizon = v * v / (2 * K.aBrk) + reach + 40;
-      let target = 100 * K.top * r.skill, kHere = 0;
-      for (let d = 0; d < horizon; d += 6) {
+      let target = K.top, kAhead = 0;
+      for (let d = 0; d < horizon; d += 5) {
         const k = tr.curvatureAt(sNow + d);
-        if (d < 30) kHere = Math.max(kHere, k);
-        const vC = Math.sqrt(K.aLat / Math.max(k, 1e-4));
+        if (d < v * 2.2 + 20) kAhead = Math.max(kAhead, k);
+        const vC = cornerV(k, grip);
         target = Math.min(target, Math.sqrt(vC * vC + 2 * K.aBrk * Math.max(0, d - reach)));
       }
-      // rubber band
-      const gap = r.s - playerProg;
-      if (gap < -120) target *= K.catchUp; else if (gap > 160) target *= K.ease;
 
-      // traffic scan per lane (wrecks included — they report their real lane position)
+      // traffic scan per lane, in seconds-to-contact turned back into metres: a car going your way at 60 is no
+      // obstacle, a parked one or one coming the other way is. Wrecks report their real position.
       const clear = CAND.map(() => 220);
-      let curClear = 220, blockerV = 0;
-      if (traffic) for (const c of traffic.cars) {
-        let d = G.wrap(c.s - sNow, L);
-        if (d > L - 8) d -= L;
-        if (d > 160 || d < -6) continue;
-        const rch = c.t.wid / 2 + 1.25;
-        const gapD = d - c.t.len / 2 - 2.6;
-        for (let j = 0; j < CAND.length; j++) if (Math.abs(c.lat - CAND[j]) < rch) clear[j] = Math.min(clear[j], gapD);
-        if (Math.abs(c.lat - b.near.lat) < rch && gapD < curClear && b.altitude < c.t.hgt + 0.3) { curClear = gapD; blockerV = c.loose ? 0 : c.v * c.dir; }
+      let curClear = 220, curGap = 220, blocker = null, blockerV = 0;
+      const myLat = b.near.lat, vv = Math.max(v, 10);
+      const consider = (c, d, lat, latSpan, len, cv, hgt = c.t.hgt) => {
+        const gapD = d - len / 2 - 2.6;
+        const close = Math.max(1, vv - cv);
+        // a slow car far ahead still makes its lane worse than an empty one, so the move starts early
+        const eff = Math.min(220, gapD < 0 ? gapD : Math.min(gapD * vv / close, gapD + 60));
+        for (let j = 0; j < CAND.length; j++) if (Math.abs(lat - CAND[j]) < latSpan) clear[j] = Math.min(clear[j], eff);
+        if (Math.abs(lat - myLat) < latSpan && eff < curClear && b.altitude < hgt + 0.3) { curClear = eff; curGap = gapD; blocker = c.t ? c : null; blockerV = cv; }
+      };
+      if (traffic) {
+        for (const c of traffic.cars) {
+          let d = G.wrap(c.s - sNow, L);
+          if (d > L - 8) d -= L;
+          if (d > (c.dir < 0 ? 300 : 180) || d < -6) continue; // oncoming cars close fast: look further
+          consider(c, d, c.lat, c.t.wid / 2 + 1.5, c.t.len, c.loose ? 0 : c.v * c.dir);
+        }
+        // cross-street cars: where will they be, sideways, when we get there?
+        for (const c of traffic.xcars) {
+          let d = G.wrap(c.s - sNow, L);
+          if (d > L - 8) d -= L;
+          if (d > 180 || d < -4) continue;
+          const t0 = Math.max(0, d) / vv, w = (c.t.wid / 2 + 3) / vv + 0.3;
+          const mv = c.loose ? 0 : c.v * c.dir;
+          const u0 = c.u + mv * Math.max(0, t0 - w), u1 = c.u + mv * (t0 + w);
+          consider(c, d, (u0 + u1) / 2, Math.abs(u1 - u0) / 2 + c.t.len / 2 + 1.25, c.t.wid, 0);
+        }
       }
+      // the other racers (you included): don't ram the one ahead, pass it
+      for (const o of this.list) if (o !== r) this.considerCar(o.b, sNow, L, consider);
+      if (this.game.player) this.considerCar(this.game.player, sNow, L, consider);
       // jump ramps launch you into the next corner blind: line up beside them, like a racer would
       for (const rp of tr.ramps) {
         let d = G.wrap(rp.s - sNow, L);
@@ -157,24 +188,72 @@
         const rch = rp.w / 2 + 1.15, gapD = d - rp.len / 2 - 2.6;
         for (let j = 0; j < CAND.length; j++) if (Math.abs(rp.lat - CAND[j]) < rch) clear[j] = Math.min(clear[j], gapD);
       }
-      // choose lane
-      let best = 0, bs = -1e9;
+      // choose lane: the clearest, unless it's a long way across; once committed to a move, see it through
+      // for a moment instead of dithering between two half-blocked lanes
+      let best = 0, bs = -1e9, cur = 0;
       for (let j = 0; j < CAND.length; j++) {
-        const sc = Math.min(clear[j], 160) - Math.abs(CAND[j] - r.latT) * 2.5 - CAND_COST[j] + (CAND[j] === r.latT ? 12 : 0);
+        if (CAND[j] === r.latT) cur = j;
+        // getting there crosses the lanes in between: a car close ahead in one of them closes this option too
+        let cj = clear[j];
+        const lo = Math.min(myLat, CAND[j]) + 0.5, hi = Math.max(myLat, CAND[j]) - 0.5;
+        for (let k = 0; k < CAND.length; k++) if (k !== j && CAND[k] > lo && CAND[k] < hi && clear[k] < v * 1.2 + 15) cj = Math.min(cj, clear[k]);
+        const sc = Math.min(cj, 170) - Math.abs(CAND[j] - r.latT) * (2 + v * 0.02) - CAND_COST[j] + (CAND[j] === r.latT ? 18 : 0);
         if (sc > bs) { bs = sc; best = j; }
       }
-      r.latT = CAND[best];
-      // something slower ahead in our lane: cap speed so we could still stop behind it
-      if (curClear < 180) {
-        const bv = Math.max(blockerV, 0), room = Math.max(0, curClear - 3 - v * K.react);
+      r.laneT -= dt;
+      if (best !== cur && (r.laneT <= 0 || clear[cur] < v * 0.5)) { r.latT = CAND[best]; r.laneT = 0.5; }
+      else best = cur;
+
+      let hopping = false;
+      // boxed in with nowhere to go: hop over it on the under-thrusters (straight road ahead only)
+      if (r.jumpC) {
+        const c = r.jumpC;
+        let d = G.wrap(c.s - sNow, L);
+        if (d > L / 2) d -= L;
+        const span = c.xc ? c.t.wid : c.t.len;
+        if (d < -span / 2 - 3 || b.fuelLock || b.fuel < 3 || r.jumpT > 3.5) { r.jumpC = null; r.jumpT = 0; }
+      } else if (K.jump && blocker && blocker.t.hgt < 2.3 && clear[best] < curClear + 15 && v > 28 && v - blockerV > 10 && b.grounded && b.fuel > 32 && kAhead < 0.006) {
+        // keep the speed up toward it, then lift off just in time to clear its roof
+        const tRise = Math.sqrt((2 * (blocker.t.hgt + 0.6)) / UP_ACC) + 0.2;
+        const tHit = curGap / (v - blockerV);
+        if (tHit < tRise + 0.15) { if (tHit > tRise - 0.4) { r.jumpC = blocker; r.jumpT = 0; } }
+        else hopping = true;
+      }
+      // something ahead in our lane we can't jump: cap speed so we could still stop behind it
+      if (!r.jumpC && !hopping && curClear < 200) {
+        const bv = Math.max(blockerV, 0), room = Math.max(0, curGap - 3 - v * K.react);
         target = Math.min(target, Math.sqrt(bv * bv + 2 * K.aBrk * 0.8 * room));
       }
-      // boosts on straights (more often when trailing the player)
-      const boostRate = K.boost * (gap < -120 ? 2 : 1);
-      if (r.boostT <= 0 && b.fuel > K.n2 && kHere < 0.004 && v > 35 && target > v - 2 && Math.random() < dt * boostRate) r.boostT = 1 + Math.random() * 1.5;
-      if (r.boostT > 0) { r.boostT -= dt; if (b.fuelLock || b.fuel < K.n2 * 0.4 || target < v - 3 || curClear < 60) r.boostT = 0; }
+
+      // rear thruster
+      if (K.smart) {
+        // pull hard wherever there's speed to gain, keep a reserve for hops, and let the tank refill between bursts
+        const want = target > v + 3 && !b.fuelLock && (curClear > v * 1.2 || r.jumpC);
+        if (r.boostT > 0) { if (!want || b.fuel < K.n2) r.boostT = 0; }
+        else if (want && b.fuel > K.n2 + 18) r.boostT = 99;
+      } else {
+        const boostRate = K.boost * (behind ? 2 : 1);
+        if (r.boostT <= 0 && b.fuel > K.n2 && kAhead < 0.004 && v > 35 && target > v - 2 && Math.random() < dt * boostRate) r.boostT = 1 + Math.random() * 1.5;
+        if (r.boostT > 0) { r.boostT -= dt; if (b.fuelLock || b.fuel < K.n2 * 0.4 || target < v - 3 || curClear < 60) r.boostT = 0; }
+      }
       this.drive(r, tr, target, r.latT);
       r.inp.boost = r.boostT > 0;
+      if (r.jumpC) {
+        r.jumpT += dt;
+        // climb until the car is clear of the roof (measured from the road: over a car, altitude reads from
+        // its roof), then coast over it; once off the thrusters the flank ones keep the landing on the road
+        r.inp.jump = b.pos.y < r.jumpC.y + r.jumpC.t.hgt + 1.3 && !b.fuelLock;
+        if (r.inp.jump) r.inp.thrL = r.inp.thrR = false;
+      }
+    }
+
+    considerCar(ob, sNow, L, consider) {
+      if (!ob.near || ob.altitude > 2) return;
+      let d = G.wrap(ob.near.s - sNow, L);
+      if (d > L - 8) d -= L;
+      if (d > 120 || d < -3) return;
+      // a racer ahead speeds up too: only a clearly slower one counts as in the way
+      consider(ob, d, ob.near.lat, 2.3, 4.4, Math.max(0, ob.fwdSpeed || 0) + 4, 1.2);
     }
 
     // pure-pursuit steering toward the lane, throttle/brake toward the target speed

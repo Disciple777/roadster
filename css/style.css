@@ -51,6 +51,11 @@ button.primary:hover { background: linear-gradient(135deg, #ff4152, #d81a33); }
 .menu-btns .big { padding: 16px; font-size: 16px; text-align: left; }
 .menu-btns .row2 { display: flex; gap: 10px; }
 .menu-btns .row2 button { flex: 1; }
+/* donate link: PayPal in a new tab */
+.support { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 12px; border-radius: 10px; text-decoration: none; color: #ffd36a; background: rgba(255, 196, 60, 0.08); border: 1px solid rgba(255, 196, 60, 0.35); transition: background 0.15s, border-color 0.15s; }
+.support:hover, .support:focus-visible { background: rgba(255, 196, 60, 0.16); border-color: rgba(255, 196, 60, 0.7); }
+.support .s1 { font-family: 'Orbitron'; font-weight: 700; font-size: 13px; letter-spacing: 0.12em; }
+.support .s2 { font-size: 12px; letter-spacing: 0.06em; color: #d8c79c; }
 .best { font-family: 'Orbitron'; font-size: 12px; color: var(--dim); letter-spacing: 0.1em; min-height: 14px; }
 
 /* ---------- controls help ---------- */
@@ -59,6 +64,7 @@ button.primary:hover { background: linear-gradient(135deg, #ff4152, #d81a33); }
 .ctl .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 /* controls panel: hints, keybind table */
 .hint { margin: 6px 0 2px !important; font-size: 13px !important; color: var(--dim) !important; min-height: 18px; }
+.hint.official.ok { color: #ffd36a !important; }
 .tog button { padding: 8px 12px; font-size: 11px; }
 .binds { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 14px; }
 .bind { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; padding: 2px 0; }

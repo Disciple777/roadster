@@ -3,11 +3,12 @@
  * Roadster Thruster leaderboard & ghosts.
  *
  *   GET  ?a=top&track=city&mode=race[&id=…]       top 20 (race: fastest time, course: highest score)
- *   POST {a:"submit", id, name, track, mode, laps, time_ms, score[, ghost]}
+ *   POST {a:"submit", id, name, track, mode, laps, time_ms, score[, traffic, rivals, difficulty][, ghost]}
  *                                                 records an official run; returns the driver's rank
  *   GET  ?a=ghosts&track=city&course=street&id=…  your best course replay and the best one by someone else
  *
- * Only official runs count: 2 laps for a street race, 1 lap for the obstacle course.
+ * Only official runs count: a 2-lap street race in heavy traffic against 7 pro rivals, or 1 lap of the
+ * obstacle course.
  */
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
@@ -20,6 +21,7 @@ const TRACKS = ['city', 'highway'];
 const MODES = ['race', 'course'];
 const COURSES = ['street'];
 const OFFICIAL_LAPS = ['race' => 2, 'course' => 1];
+const OFFICIAL_RACE = ['traffic' => 'heavy', 'rivals' => 7, 'difficulty' => 'pro'];
 const TOP_N = 20;
 const GHOST_STRIDE = 8;          // t, x, y, z, qx, qy, qz, qw
 const GHOST_MAX_FRAMES = 9000;   // 15 minutes at 10 Hz
@@ -76,6 +78,8 @@ function submit(): void {
     $track = rd_pick('track', TRACKS);
     $mode = rd_pick('mode', MODES);
     if ((int) rd_in('laps', 0) !== OFFICIAL_LAPS[$mode]) rd_fail(400, 'not_official', 'Only official-length runs are ranked.');
+    if ($mode === 'race' && ((string) rd_in('traffic', '') !== OFFICIAL_RACE['traffic'] || (int) rd_in('rivals', 0) !== OFFICIAL_RACE['rivals']
+        || (string) rd_in('difficulty', '') !== OFFICIAL_RACE['difficulty'])) rd_fail(400, 'not_official', 'Ranked street races use heavy traffic and 7 pro rivals.');
     $time = (int) rd_in('time_ms', 0);
     $score = (int) rd_in('score', 0);
     if ($time < 15000 || $time > 3600000) rd_fail(400, 'bad_time');

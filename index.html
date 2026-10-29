@@ -80,6 +80,9 @@
         <button id="btn-settings">SETTINGS</button>
         <button id="btn-controls">CONTROLS</button>
       </div>
+      <a id="btn-support" class="support" href="https://www.paypal.com/donate/?business=oscargalvezmont%40gmail.com&amp;amount=5&amp;currency_code=USD&amp;item_name=Roadster%20Thruster%3A%20help%20fund%20multiplayer" target="_blank" rel="noopener">
+        <span class="s1">&#9829; SUPPORT</span><span class="s2">$5 or more helps fund multiplayer</span>
+      </a>
       <div id="menu-best" class="best"></div>
     </div>
   </div>
@@ -92,13 +95,13 @@
     <div class="seg" id="s-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button></div>
     <div class="traffic-opt">
     <label>TRAFFIC</label>
-    <div class="seg" id="s-traffic"><button data-v="off">OFF</button><button data-v="light">LIGHT</button><button data-v="medium">MEDIUM</button><button data-v="heavy">HEAVY</button><button data-v="insane">INSANE</button></div>
+    <div class="seg" id="s-traffic"><button data-v="off">OFF</button><button data-v="light">LIGHT</button><button data-v="medium">MEDIUM</button><button data-v="heavy">HEAVY ★</button><button data-v="insane">INSANE</button></div>
     </div>
     <div class="race-opt">
       <label>LAPS</label>
       <div class="seg race-laps" id="s-laps"><button data-v="2">2 · OFFICIAL</button><button data-v="3">3</button></div>
       <div class="seg course-laps" id="s-claps"><button data-v="1">1 · OFFICIAL</button><button data-v="3">3</button></div>
-      <p class="hint">Only official-length runs go on the leaderboard.</p>
+      <p class="hint official" id="s-official">Only official runs go on the leaderboard.</p>
       <label>DRIVER NAME</label>
       <input id="s-name" class="txt" maxlength="12" autocomplete="off" spellcheck="false" />
     </div>
@@ -109,9 +112,10 @@
     </div>
     <div class="rival-opt">
       <label>RIVALS</label>
-      <div class="seg" id="s-rivals"><button data-v="0">0</button><button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7</button></div>
+      <div class="seg" id="s-rivals"><button data-v="0">0</button><button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7 ★</button></div>
       <label>RIVAL SKILL</label>
-      <div class="seg" id="s-diff"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="pro">PRO</button></div>
+      <div class="seg" id="s-diff"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="pro">PRO ★</button></div>
+      <p class="hint">★ marks the official street-race setup: HEAVY traffic, 7 PRO rivals, 2 laps.</p>
     </div>
     <label>TIME OF DAY</label>
     <div class="seg" id="s-tod"><button data-v="night">NIGHT</button><button data-v="sunset">SUNSET</button></div>

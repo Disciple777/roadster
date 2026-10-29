@@ -1,8 +1,10 @@
 // board.js — online leaderboard & ghost storage (talks to api/index.php on the game's own server)
 (function () {
-  // local development talks to the live API but writes to its sandbox tables, so tests never reach the real board
-  const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-  const URL_ = LOCAL ? 'https://guatermelon.com/roadster/api/index.php?sandbox=1' : 'api/index.php';
+  // the page opened straight from disk (file://) can't reach a relative api/, so it talks to the live server;
+  // a local dev server (localhost) does too, but writes to the sandbox tables so tests never reach the real board
+  const LIVE = 'https://guatermelon.com/roadster/api/index.php';
+  const DEV = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const URL_ = location.protocol === 'file:' ? LIVE : DEV ? LIVE + '?sandbox=1' : 'api/index.php';
   const q = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 
   // anonymous driver id: random, kept in this browser (the server stores only a hash of it)
@@ -27,6 +29,20 @@
   }
 
   G.OFFICIAL_LAPS = { race: 2, course: 1 };
+  // a ranked street race is run on the same setup by everyone (the server checks it too)
+  G.OFFICIAL_RACE = { traffic: 'heavy', rivals: 7, difficulty: 'pro' };
+  // what keeps a run off the leaderboard, in words (empty: it's official)
+  G.unofficial = (mode, laps, S) => {
+    const miss = [];
+    if (laps !== G.OFFICIAL_LAPS[mode]) miss.push(`${G.OFFICIAL_LAPS[mode]} lap${G.OFFICIAL_LAPS[mode] > 1 ? 's' : ''}`);
+    if (mode === 'race') {
+      const O = G.OFFICIAL_RACE;
+      if (S.traffic !== O.traffic) miss.push(O.traffic.toUpperCase() + ' traffic');
+      if (S.rivals !== O.rivals) miss.push(O.rivals + ' rivals');
+      if (S.difficulty !== O.difficulty) miss.push(O.difficulty.toUpperCase() + ' skill');
+    }
+    return miss;
+  };
   G.api = {
     top: (track, mode) => call({ a: 'top', track, mode, id }),
     submit: (run) => call({}, Object.assign({ a: 'submit', id }, run)),

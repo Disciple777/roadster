@@ -296,7 +296,7 @@
         set(S[key]);
         const sets = (segSets[key] = segSets[key] || []);
         sets.push(set);
-        el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { S[key] = conv(b.dataset.v); sets.forEach((f) => f(S[key])); this.saveSettings(key); }));
+        el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { S[key] = conv(b.dataset.v); sets.forEach((f) => f(S[key])); this.saveSettings(key); this.updateOfficial(); }));
       };
       const segSets = {};
       seg('s-traffic', 'traffic'); seg('s-laps', 'laps', Number); seg('s-claps', 'courseLaps', Number); seg('s-rivals', 'rivals', Number); seg('s-diff', 'difficulty'); seg('s-tod', 'tod'); seg('s-track', 'track');
@@ -422,7 +422,7 @@
     }
 
     showPanel(name, mode) {
-      if (mode) { this.pendingMode = mode; $('setup-title').textContent = mode === 'race' ? 'STREET RACE' : mode === 'course' ? G.COURSES.street.name : 'FREE RIDE'; $('setup').classList.toggle('free', mode === 'free'); $('setup').classList.toggle('course', mode === 'course'); }
+      if (mode) { this.pendingMode = mode; $('setup-title').textContent = mode === 'race' ? 'STREET RACE' : mode === 'course' ? G.COURSES.street.name : 'FREE RIDE'; $('setup').classList.toggle('free', mode === 'free'); $('setup').classList.toggle('course', mode === 'course'); this.updateOfficial(); }
       this.panelStack = this.panelStack || [];
       const cur = document.querySelector('.panel.open');
       if (cur) { this.panelStack.push(cur.id); cur.classList.remove('open'); }
@@ -474,14 +474,24 @@
       const m = res.mine;
       mineEl.textContent = m ? `Your best: #${m.rank} of ${res.total} · ${race ? G.fmtTime(m.time_ms / 1000) : m.score.toLocaleString() + ' pts'}` : `${res.total} driver${res.total === 1 ? '' : 's'} ranked`;
     }
+    // setup panel: say whether this setup will be ranked
+    updateOfficial() {
+      const el = $('s-official'), mode = this.pendingMode;
+      if (!el || (mode !== 'race' && mode !== 'course')) return;
+      const miss = G.unofficial(mode, mode === 'race' ? this.settings.laps : this.settings.courseLaps, this.settings);
+      el.classList.toggle('ok', !miss.length);
+      el.textContent = miss.length ? `Practice setup. Ranked runs need ${miss.join(', ')}.` : '★ Official setup: this run goes on the leaderboard.';
+    }
     // send an official run to the leaderboard (a course run brings its replay for the ghosts)
     submitRun(mode) {
       const el = $('res-board'), off = G.OFFICIAL_LAPS[mode];
-      if (this.laps !== off) { el.textContent = `Practice run (${this.laps} laps). Only ${off}-lap runs are ranked.`; return; }
+      const miss = G.unofficial(mode, this.laps, this.settings);
+      if (miss.length) { el.textContent = `Practice run: ranked runs need ${miss.join(', ')}.`; return; }
       el.textContent = 'Sending to the leaderboard…';
       const where = (G.TRACK_ID === 'highway' ? 'EXPRESSWAY' : 'DOWNTOWN') + (mode === 'race' ? ' street race' : ' obstacle course');
       G.api.submit({
         name: this.settings.mpName, track: G.TRACK_ID, mode, laps: this.laps,
+        traffic: this.settings.traffic, rivals: this.settings.rivals, difficulty: this.settings.difficulty,
         time_ms: Math.round(this.raceTime * 1000), score: Math.round(this.score),
         ghost: mode === 'course' ? this.ghostRec.data : undefined,
       }).then((r) => {
