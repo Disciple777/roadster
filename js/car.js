@@ -294,19 +294,21 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   };
 
   // ---------------- player physics ----------------
-  const GRAV = 12;
-  const REST = 0.55, ANCHOR_Y = 0.8, WR = 0.36, KS = 40000, CS = 5600, CS_REB = 9500, MAXC = 0.36;
-  const MASS = 1400;
-  const POWER = 520000, FMAX = 19000, BRAKE = 26000, KDRAG = 0.55, DOWNF = 0.9;
-  const MU = 1.35, CLAT_F = 9500, CLAT_R = 10000;
-  const F_UNDER = 1.35 * MASS * GRAV, F_BACK = 1.7 * MASS * GRAV, F_SIDE = 1.3 * MASS * GRAV;
+  // the tweakable numbers live in js/tuning.js
+  const TU = G.TUNING;
+  const GRAV = TU.gravity;
+  const REST = 0.55, ANCHOR_Y = 0.8, WR = 0.36, KS = TU.springStiffness, CS = TU.damperBump, CS_REB = TU.damperRebound, MAXC = 0.36;
+  const MASS = TU.mass;
+  const POWER = TU.enginePower, FMAX = TU.maxDriveForce, BRAKE = TU.brakeForce, KDRAG = TU.airDrag, DOWNF = TU.downforce;
+  const MU = TU.tyreGrip, CLAT_F = TU.corneringFront, CLAT_R = TU.corneringRear;
+  const F_UNDER = TU.underThrust * MASS * GRAV, F_BACK = TU.rearThrust * MASS * GRAV, F_SIDE = TU.sideThrust * MASS * GRAV;
   const BODY_PTS = [
     [0.95, 0.22, 2.1], [-0.95, 0.22, 2.1], [0.95, 0.22, -2.1], [-0.95, 0.22, -2.1],
     [0.55, 1.18, 0.4], [-0.55, 1.18, 0.4], [0.55, 1.05, -0.5], [-0.55, 1.05, -0.5],
     [1.05, 0.6, 0], [-1.05, 0.6, 0], [0, 0.45, -2.35], [0, 0.6, 2.35], [0, 1.2, 2.0],
   ];
 
-  const altEffSide = (alt) => (alt < 22 ? 1 : Math.max(0.25, 1 - (alt - 22) / 26));
+  const altEffSide = (alt) => (alt < TU.thrustCeiling ? 1 : Math.max(0.25, 1 - (alt - TU.thrustCeiling) / TU.thrustFadeRange));
   const _v = [...Array(12)].map(() => new T.Vector3());
   const _q = new T.Quaternion(), _qi = new T.Quaternion();
   const gq = {};
@@ -367,7 +369,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       const spd = vel.length();
 
       // steering: tighter at low speed
-      const steerMax = G.lerp(0.72, 0.24, G.clamp(Math.abs(vF) / 110, 0, 1));
+      const steerMax = G.lerp(TU.steerLowSpeed, TU.steerHighSpeed, G.clamp(Math.abs(vF) / 110, 0, 1));
       this.steerAngle = inp.steer * steerMax;
 
       // throttle / brake / reverse
@@ -483,22 +485,22 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       // flank thrust goes through the centre of mass so it slides the car sideways without rolling it
       const side = this.th.SR - this.th.SL;
       if (Math.abs(side) > 0.01) F.addScaledVector(right, F_SIDE * side * altEffSide(this.altitude));
-      const altEff = this.altitude < 22 ? 1 : Math.max(0.25, 1 - (this.altitude - 22) / 26);
+      const altEff = altEffSide(this.altitude);
       if (this.th.L > 0.01) addForce(_v[5].copy(up).multiplyScalar(F_UNDER * this.th.L * altEff), _v[8].set(-0.62, 0.3, 0).applyQuaternion(q).add(pos));
       if (this.th.R > 0.01) addForce(_v[5].copy(up).multiplyScalar(F_UNDER * this.th.R * altEff), _v[8].set(0.62, 0.3, 0).applyQuaternion(q).add(pos));
       // under-thrusters hold the nose level: they roll the car side to side but never pitch it down
       const underOn = Math.min(1, this.th.L + this.th.R);
       if (underOn > 0.05) Tq.addScaledVector(right, (-fwd.y * 26000 - w.dot(right) * 7000) * underOn);
       if (this.th.B > 0.01) {
-        const eff = G.clamp(1 - Math.max(0, vF) / 185, 0.15, 1);
+        const eff = G.clamp(1 - Math.max(0, vF) / TU.rearThrustFadeSpeed, 0.15, 1);
         F.addScaledVector(fwd, F_BACK * this.th.B * eff);
       }
-      this.fuel -= (wantL + wantR) * 13 * dt + wantB * 17 * dt + (wantSL + wantSR) * 11 * dt;
+      this.fuel -= ((wantL + wantR) * TU.fuelUnder + wantB * TU.fuelRear + (wantSL + wantSR) * TU.fuelSide) * dt;
       // recharge on the ground, after a short pause since the thrusters were last fired
       this.fuelUse = wantL + wantR + wantB + wantSL + wantSR > 0;
       this.fuelIdle = this.fuelUse ? 0 : this.fuelIdle + dt;
-      this.fuelCharging = grounded && this.fuelIdle > 0.5 && this.fuel < 100;
-      if (this.fuelCharging) this.fuel += 8 * dt;
+      this.fuelCharging = grounded && this.fuelIdle > TU.fuelRechargeDelay && this.fuel < 100;
+      if (this.fuelCharging) this.fuel += TU.fuelRecharge * dt;
       this.fuel = G.clamp(this.fuel, 0, 100);
 
       // --- assists / air control ---
@@ -507,10 +509,10 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       const levelAxis = _v[8].crossVectors(up, worldUp);
       if (!grounded) {
         _q.copy(q);
-        const pitchT = _v[9].copy(right).multiplyScalar(inp.pitch * 7000);
-        const yawT = _v[10].copy(up).multiplyScalar(-inp.steer * 6500);
+        const pitchT = _v[9].copy(right).multiplyScalar(inp.pitch * TU.airPitch);
+        const yawT = _v[10].copy(up).multiplyScalar(-inp.steer * TU.airYaw);
         Tq.add(pitchT).add(yawT);
-        if (inp.rollAir) Tq.addScaledVector(fwd, inp.rollAir * 6000);
+        if (inp.rollAir) Tq.addScaledVector(fwd, inp.rollAir * TU.airRoll);
         if (!singleSide && !inp.rollAir && Math.abs(inp.pitch) < 0.1) Tq.addScaledVector(levelAxis, 5200);
         w.multiplyScalar(Math.exp(-0.9 * dt));
       } else {

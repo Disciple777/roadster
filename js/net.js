@@ -394,7 +394,7 @@
             this.tf %= 1 / FULL_HZ;
             const a = [];
             for (const c of tr.cars) if (c.loose) a.push(0, 0, 0, -1, 0); else a.push(r1(c.s), r2(c.lat), r1(c.v), c.lane, r1(c.vT));
-            net.broadcast({ t: 'tf', r: this.race, a, l: tr.cars.filter((c) => c.loose).map(looseOf) });
+            net.broadcast({ t: 'tf', r: this.race, a, l: tr.cars.filter((c) => c.loose).map(looseOf), x: g.xings.clock });
           } else if ((this.tl += dt) >= 1 / LOOSE_HZ) {
             this.tl %= 1 / LOOSE_HZ;
             const l = tr.cars.filter((c) => c.loose).map(looseOf);
@@ -423,6 +423,7 @@
       if (m.t === 'tk') { if (this.host) for (const e of m.l) this.applyLoose(tr, e, 0); return; }
       const lat = this.net.rtt / 2000; // how old the host's numbers are by now
       if (m.t === 'tf') {
+        if (m.x != null) this.game.xings.clock = m.x + lat; // everyone's lights change together
         const a = m.a, n = Math.min(tr.cars.length, a.length / 5);
         for (let i = 0; i < n; i++) {
           if (a[i * 5 + 3] < 0 || this.own[i] > now) continue;

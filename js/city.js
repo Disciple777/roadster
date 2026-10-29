@@ -139,7 +139,7 @@
         const lat = sg * (G.WALK_OUT + 1.5 + d / 2);
         const cx = p.x + p.rx * lat, cz = p.z + p.rz * lat;
         const yaw = Math.atan2(-p.tz, p.tx); // local X along the road, local Z (depth) lateral
-        if (!excluded(cx, cz, 10) && okCorners(cx, cz, w, d, yaw, G.WALK_OUT + 0.8))
+        if (!excluded(cx, cz, 10) && okCorners(cx, cz, w, d, yaw, G.WALK_OUT + 0.8) && !G.inCrossing(track, cx, cz, w / 2 + 2))
           blds.push({ x: cx, z: cz, w, d, h, yaw, row: true, sg, s: s + w / 2 });
         s += w + 1 + R() * 3;
       }
@@ -154,7 +154,7 @@
           const w = 13 + R() * 8, d = 13 + R() * 8;
           const dist = track.distToRoad(lx, lz, margin + 30);
           if (dist < 52 + Math.max(w, d) * 0.6 || dist > margin) continue;
-          if (excluded(lx, lz, 15)) continue;
+          if (excluded(lx, lz, 15) || G.inCrossing(track, lx, lz, Math.max(w, d) * 0.75 + 2)) continue;
           const cd = Math.hypot(lx - 0, lz - 30);
           let h = 12 + R() * 30 + 110 * Math.exp(-((cd / 420) ** 2)) * R();
           if (R() < 0.05) h += 60 + R() * 60;
@@ -316,7 +316,7 @@
 
     // ---------- street lights ----------
     const lamps = [];
-    for (const sg of [1, -1]) for (let s = sg > 0 ? 0 : 20; s < track.length; s += 40) lamps.push({ s, sg });
+    for (const sg of [1, -1]) for (let s = sg > 0 ? 0 : 20; s < track.length; s += 40) if (!G.nearCrossingS(track, s, 3)) lamps.push({ s, sg });
     const poleGeo = new T.CylinderGeometry(0.12, 0.18, 9, 6); poleGeo.translate(0, 4.5, 0);
     const armGeo = new T.BoxGeometry(0.15, 0.15, 3.2);
     const headGeo = new T.BoxGeometry(0.5, 0.14, 1.1);
@@ -365,6 +365,7 @@
     if (Q.level >= 2) {
       const trees = [];
       for (let s = 0; s < track.length - 40; s += 40) trees.push({ s: s + 13, sg: 1 }, { s: s + 27, sg: 1 }, { s: s + 7, sg: -1 }, { s: s + 33, sg: -1 });
+      for (let k = trees.length - 1; k >= 0; k--) if (G.nearCrossingS(track, trees[k].s, 3)) trees.splice(k, 1); // cross streets
       // one texture of overlapping leaves; dense in the middle, ragged at the rim so card edges never show
       const leafTex = G.canvasTexture(256, 256, (ctx, W, H) => {
         const r = G.rng(21);

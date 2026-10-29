@@ -1,14 +1,14 @@
 // course.js — obstacle courses: set pieces laid along the circuit (barrier chicanes, needle gates, container jumps,
-// bollard slaloms, crate walls, 360° loops), solid obstacles you can land on, floating mines over the dodge sections
-// (so you can't just fly the whole lap), repair kits, and the bonuses for threading gaps, clearing hurdles and
-// landing on rooftops. Hull damage itself lives in game.js (game.damage).
+// bollard slaloms, crate walls, 360° loops, air-ring chains, field-goal posts), solid obstacles you can land on,
+// floating mines over the dodge sections (so you can't just fly the whole lap), repair kits, and the bonuses for
+// threading gaps, clearing hurdles, flying through rings, kicking field goals and landing on rooftops. Hull damage itself lives in game.js (game.damage).
 (function () {
   const T = THREE;
 
   // the catalogue: each course is a sequence of set pieces dropped onto the current circuit. New kinds of course
   // (rooftop runs, canyon gaps…) slot in here as new piece builders + an entry.
   G.COURSES = {
-    street: { name: 'STUNT STREETS', seed: 7, pieces: ['chicane', 'needle', 'containers', 'loop', 'slalom', 'crates', 'needle', 'containers', 'chicane', 'loop', 'slalom', 'crates'] },
+    street: { name: 'STUNT STREETS', seed: 7, pieces: ['chicane', 'hoops', 'needle', 'containers', 'goal', 'loop', 'slalom', 'crates', 'hoops', 'needle', 'goal', 'containers', 'chicane', 'loop', 'slalom', 'crates'] },
   };
 
   // h: height (m) · dmg: hull damage per m/s of impact above 3 · breakable: smashes instead of stopping the car
@@ -18,6 +18,7 @@
     container: { h: 2.6, dmg: 1.2 },
     bollard: { h: 1.2, dmg: 0.8 },
     crate: { h: 1.5, dmg: 0, breakable: true },
+    post: { h: 6, dmg: 1.1 }, // goalpost stem: its top is the crossbar
   };
   const BOX_COLORS = [0x2f6fa8, 0xb8452c, 0x3d8a4a, 0xc9a227, 0x6b4aa0, 0x8a8f96];
   const PL = 4.6, PW = 2.05; // roadster footprint, same as traffic collisions
@@ -29,7 +30,8 @@
       const tr = (this.track = game.track);
       this.L = tr.length;
       this.obs = []; this.kickers = []; this.gates = []; this.hurdles = []; this.kits = [];
-      this.loops = []; this.bombs = [];
+      this.loops = []; this.bombs = []; this.rings = []; this.goals = [];
+      this.ringSets = 0; this.chain = { set: -1, k: -1, n: 0 };
       this.near = []; this.nearK = []; this.nearB = [];
       this.rand = G.rng(this.def.seed * 9973 + (G.TRACK_ID === 'highway' ? 1 : 0));
       this.layout();
@@ -41,7 +43,7 @@
     // ---------- layout ----------
     layout() {
       const L = this.L, ramps = this.track.ramps;
-      const LEN = { chicane: 36, needle: 50, containers: 46, slalom: 98, crates: 16, loop: 34 };
+      const LEN = { chicane: 36, needle: 50, containers: 46, slalom: 98, crates: 16, loop: 34, hoops: 96, goal: 50 };
       let s = 150, i = 0;
       while (s < L - 220) {
         const kind = this.def.pieces[i % this.def.pieces.length];
@@ -152,6 +154,26 @@
       for (let x = -R + 0.75; x < R; x += 1.5) this.add('crate', s + 6, x, 1.4, 1.4, { spin: this.rand() });
       this.hurdle(s + 6, KIND.crate.h);
     }
+    // a kicker into a chain of floating rings: hold the under-thrusters and fly through them all
+    hoops(s) {
+      const R = G.ROAD_HALF, c = G.clamp(this.laneLat(), -R + 4, R - 4), set = this.ringSets++, n = 5;
+      const wob = (this.rand() < 0.5 ? 1 : -1) * Math.min(3.5, R - 4);
+      this.kicker(s, c, 10, 5, 2.2);
+      for (let k = 0; k < n; k++) {
+        const ss = s + 18 + k * 16, lat = G.clamp(c + wob * Math.sin(k * 1.1), -R + 3, R - 3);
+        const p = this.track.pointAt(ss, lat, {}), t = this.track.sample(ss, {});
+        this.rings.push({ s: G.wrap(ss, this.L), lat, y: 4.5 + Math.sin(((k + 0.5) / n) * Math.PI) * 6, r: 2.7, set, k, n,
+          x: p.x, z: p.z, tx: t.tx, tz: t.tz, rx: t.rx, rz: t.rz, on: true, t: 0 });
+      }
+    }
+    // an American-football goalpost: launch off the kicker and fly between the uprights, over the crossbar
+    goal(s) {
+      const R = G.ROAD_HALF, c = G.clamp(this.laneLat(), -R + 5, R - 5), gs = s + 44;
+      this.kicker(s, c, 12, 5, 2.6);
+      this.add('post', gs, c, 0.6, 0.6);
+      const p = this.track.pointAt(gs, c, {}), t = this.track.sample(gs, {});
+      this.goals.push({ s: G.wrap(gs, this.L), lat: c, bar: KIND.post.h, half: 3.6, top: 17, x: p.x, z: p.z, tx: t.tx, tz: t.tz, rx: t.rx, rz: t.rz });
+    }
     addKit(s, lat) {
       const p = this.track.pointAt(s, lat, {});
       this.kits.push({ s: G.wrap(s, this.L), x: p.x, z: p.z, y: 1.3, active: true, t: 0 });
@@ -169,6 +191,7 @@
         container: new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.35 }),
         bollard: new T.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.5, emissive: 0xffb000, emissiveIntensity: 0.9 }),
         crate: new T.MeshStandardMaterial({ color: 0xb07a3e, roughness: 0.85 }),
+        post: new T.MeshStandardMaterial({ color: 0xffd400, roughness: 0.45, emissive: 0x806000, emissiveIntensity: 0.9 }),
       };
       this.mats = Object.values(mats);
       this.geos = [box];
@@ -263,6 +286,38 @@
         this.bombBody.castShadow = !!Q.shadows;
         this.inst.bombBody = this.bombBody; this.inst.bombSpikes = this.bombSpikes; this.inst.bombLight = this.bombLight;
       }
+      // rings: glowing hoops standing square to the road; they go dark for a while once flown through
+      if (this.rings.length) {
+        const tg = new T.TorusGeometry(1, 0.09, 10, 40), rm = new T.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+        this.geos.push(tg); this.mats.push(rm);
+        const im = (this.ringMesh = new T.InstancedMesh(tg, rm, this.rings.length));
+        im.frustumCulled = false;
+        this.rings.forEach((q, j) => {
+          const r = q.r;
+          m.set(q.rx * r, 0, -q.tx * r, q.x, 0, r, 0, q.y, q.rz * r, 0, -q.tz * r, q.z, 0, 0, 0, 1);
+          im.setMatrixAt(j, m);
+        });
+        grp.add(im); this.inst.rings = im;
+        this.ringColors();
+      }
+      // goalposts: the stem is a solid obstacle (above); crossbar and uprights sit on top of it
+      if (this.goals.length) {
+        const pm = mats.post, cyl = new T.CylinderGeometry(0.18, 0.18, 1, 10);
+        const flagM = new T.MeshBasicMaterial({ color: new T.Color(3.5, 0.5, 0.2), toneMapped: false, side: T.DoubleSide }), fg = new T.PlaneGeometry(0.9, 0.5);
+        this.geos.push(cyl, fg); this.mats.push(flagM);
+        for (const q of this.goals) {
+          const g = new T.Group();
+          g.matrixAutoUpdate = false;
+          g.matrix.set(q.rx, 0, -q.tx, q.x, 0, 1, 0, 0, q.rz, 0, -q.tz, q.z, 0, 0, 0, 1);
+          const bar = new T.Mesh(cyl, pm); bar.rotation.z = Math.PI / 2; bar.scale.y = q.half * 2 + 0.36; bar.position.y = q.bar; g.add(bar);
+          for (const sx of [-1, 1]) {
+            const up = new T.Mesh(cyl, pm); up.scale.y = q.top - q.bar; up.position.set(sx * q.half, (q.bar + q.top) / 2, 0); g.add(up);
+            const flag = new T.Mesh(fg, flagM); flag.position.set(sx * (q.half + 0.45), q.top - 0.3, 0); g.add(flag);
+          }
+          g.traverse((o) => { o.castShadow = !!Q.shadows; });
+          grp.add(g);
+        }
+      }
       // repair kits: white box, red cross, green halo
       const kitMat = new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0x404040, roughness: 0.4 });
       const crossMat = new T.MeshBasicMaterial({ color: new T.Color(4, 0.4, 0.5), toneMapped: false });
@@ -282,6 +337,12 @@
       }
     }
     // box basis: X across the road, Y up, Z against the race direction (so a model's -Z "front" faces forward)
+    ringColors() {
+      const im = this.ringMesh, col = new T.Color();
+      if (!im) return;
+      this.rings.forEach((q, j) => im.setColorAt(j, q.on ? col.setRGB(3.2, 2.1, 0.35) : col.setRGB(0.12, 0.13, 0.16)));
+      im.instanceColor.needsUpdate = true;
+    }
     poseBox(m, o, wid, h, len, y) {
       m.set(o.rx * wid, 0, -o.tx * len, o.x,
         0, h, 0, y,
@@ -465,6 +526,9 @@
       for (const o of this.obs) if (o.k.breakable) { o.alive = true; o.fly = null; }
       for (const k of this.kits) { k.active = true; k.g.visible = true; }
       for (const m of this.bombs) { m.alive = true; m.t = 0; }
+      for (const q of this.rings) { q.on = true; q.t = 0; }
+      this.chain = { set: -1, k: -1, n: 0 };
+      this.ringColors();
       this.dirty = true; this.lastS = null; this.roofDone = new Set();
     }
 
@@ -521,6 +585,11 @@
         this.dirty = false;
       }
 
+      // rings light back up a while after being flown through
+      let relit = false;
+      for (const q of this.rings) if (!q.on && (q.t -= dt) <= 0) { q.on = true; relit = true; }
+      if (relit) this.ringColors();
+
       // repair kits
       for (const k of this.kits) {
         if (!k.active) { k.t -= dt; if (k.t <= 0) { k.active = true; k.g.visible = true; } continue; }
@@ -543,6 +612,21 @@
             if (off < room + 0.2 && p.altitude < 2) g.onGate(q, G.clamp(1 - off / Math.max(room, 0.1), 0, 1));
           }
           for (const q of this.hurdles) if (crossed(q) && !p.grounded && p.pos.y > q.top + 0.1) g.onHurdle(q);
+          const cy = p.pos.y + 0.55;
+          for (const q of this.rings) if (q.on && crossed(q) && Math.hypot(p.near.lat - q.lat, cy - q.y) < q.r - 0.35) {
+            q.on = false; q.t = 30;
+            // a chain counts rings of one set taken in order without missing one
+            const ch = this.chain;
+            if (ch.set === q.set && ch.k === q.k - 1) ch.n++; else ch.n = 1;
+            ch.set = q.set; ch.k = q.k;
+            this.ringColors();
+            g.onRing(q, ch.n, ch.n === q.n);
+          }
+          for (const q of this.goals) if (crossed(q) && !p.grounded && cy > q.bar) {
+            const off = p.near.lat - q.lat;
+            if (Math.abs(off) < q.half - 0.3 && cy < q.top + 4) g.onFieldGoal(q, cy - q.bar);
+            else if (Math.abs(off) < q.half + 8) g.onFieldGoalMiss(off > 0 ? 'RIGHT' : 'LEFT');
+          }
         }
       }
       this.lastS = s;

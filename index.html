@@ -179,7 +179,9 @@
         <div class="tog"><span>Steering sensitivity</span><input type="range" id="s-sens" min="0.5" max="1.6" step="0.05" /></div>
       </div>
       <div id="ctl-keys">
-        <label>KEYBOARD <i>· click a key to rebind · Del clears · Esc cancels</i></label>
+        <label>KEYBOARD LAYOUT</label>
+        <div class="seg" id="s-keyset"></div>
+        <label>KEYS <i>· click a key to rebind · Del clears · Esc cancels</i></label>
         <div id="keybinds" class="binds"></div>
         <div class="binds-foot"><button id="btn-keys-reset">RESET KEYS</button></div>
       </div>
@@ -240,7 +242,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry };
     const BUILD = Date.now();
-    const files = ['util', 'track', 'city', 'particles', 'car', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'course', 'game'];
+    const files = ['util', 'tuning', 'track', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'course', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }

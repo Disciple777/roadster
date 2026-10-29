@@ -1,6 +1,6 @@
 // input.js — keyboard (rebindable), gamepad, touch (floating joystick + thruster cluster) and optional tilt steering
 (function () {
-  // rebindable keyboard actions: [id, label, default keys]. Held actions drive the car, the rest fire once per press
+  // rebindable keyboard actions: [id, label, default keys (layout 2)]. Held actions drive the car, the rest fire once per press
   const ACTIONS = [
     ['accel', 'Accelerate', ['KeyW', 'ArrowUp']],
     ['brake', 'Brake / reverse', ['KeyS', 'ArrowDown']],
@@ -19,8 +19,16 @@
     ['hud', 'Hide HUD', ['KeyH']],
   ];
   const EVENT_ACTIONS = new Set(['camera', 'reset', 'pause', 'mute', 'fullscreen', 'hud']);
+  // control layouts: 1 drives on the arrows with the side thrusters on A / D, 2 is the original WASD + Q / E
+  G.KEY_PRESETS = {
+    1: { name: 'ARROWS + A/D', keys: { accel: ['ArrowUp'], brake: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], thrL: ['KeyA'], thrR: ['KeyD'] } },
+    2: { name: 'WASD + Q/E', keys: {} },
+  };
   G.KEY_ACTIONS = ACTIONS;
-  G.defaultKeys = () => Object.fromEntries(ACTIONS.map(([id, , k]) => [id, k.slice()]));
+  G.defaultKeys = (preset = 1) => {
+    const over = (G.KEY_PRESETS[preset] || G.KEY_PRESETS[1]).keys;
+    return Object.fromEntries(ACTIONS.map(([id, , k]) => [id, (over[id] || k).slice()]));
+  };
   // short readable name for a KeyboardEvent.code
   G.keyName = (code) => {
     if (!code) return '—';
@@ -43,7 +51,7 @@
       this.thrInvert = true; // side thrusters: the key / button names the thruster that fires (it pushes you the other way)
       this.capture = null;   // while rebinding: called with the next key's code instead of driving
       this.lastDevice = 'keyboard';
-      this.setBinds(G.defaultKeys());
+      this.setBinds(G.defaultKeys(1));
       this.bindKeys();
     }
 

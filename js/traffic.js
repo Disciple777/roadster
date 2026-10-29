@@ -203,14 +203,20 @@
       const track = (this.track = game.track);
       // the counts are tuned for the 3.8 km, six-lane city loop: keep cars-per-lane-km about the same elsewhere
       const n = Math.round((DENSITY[density] ?? 95) * G.clamp(track.length * G.LANES.length / (3807 * 6), 0.5, 1.6));
+      // cross streets: a few cars per lane that loop across their junction (kept apart from this.cars, which
+      // multiplayer syncs lane by lane)
+      this.xings = game.xings && game.xings.list.length ? game.xings : null;
+      const perLane = density === 'light' ? 2 : density === 'heavy' || density === 'insane' ? 4 : 3;
+      const xn = this.xings ? this.xings.list.length * 2 * perLane : 0;
       this.cars = [];
+      this.xcars = [];
       this.near = [];
       this.group = new T.Group();
       game.scene.add(this.group);
       const totalW = TYPES.reduce((a, t) => a + t.weight, 0);
       const counts = TYPES.map(() => 0);
       const assign = [];
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < n + xn; i++) {
         let r = Math.random() * totalW, ti = 0;
         while (r > TYPES[ti].weight) { r -= TYPES[ti].weight; ti++; }
         assign.push(ti); counts[ti]++;
@@ -230,7 +236,7 @@
       });
       // blob shadows
       this.blobs = new T.InstancedMesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-        new T.MeshBasicMaterial({ map: G.blobShadowTexture(), color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false, blending: T.MultiplyBlending, premultipliedAlpha: true }), Math.max(1, n));
+        new T.MeshBasicMaterial({ map: G.blobShadowTexture(), color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false, blending: T.MultiplyBlending, premultipliedAlpha: true }), Math.max(1, n + xn));
       this.blobs.material.blending = T.CustomBlending;
       this.blobs.material.blendEquation = T.AddEquation;
       this.blobs.material.blendSrc = T.ZeroFactor;
@@ -239,10 +245,10 @@
       this.blobs.material.opacity = 1;
       this.blobs.frustumCulled = false; this.blobs.renderOrder = 1;
       this.group.add(this.blobs);
-      this.blobs.count = n;
+      this.blobs.count = n + xn;
 
       const col = new T.Color();
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < n + xn; i++) {
         const ti = assign[i], t = TYPES[ti];
         const mesh = this.meshes[ti];
         const idx = mesh.used++;
@@ -253,7 +259,16 @@
           loose: false, lvx: 0, lvy: 0, lvz: 0, yawV: 0, roll: 0, rollV: 0, pitch: 0, pitchV: 0, timer: 0,
           lastAlong: NaN, cd: 0, latV: 0,
         };
-        this.cars.push(c);
+        if (i < n) { this.cars.push(c); continue; }
+        // cross car: junction xi, heading dir along the junction's +r, u = position along it (0 = circuit centreline)
+        const k = i - n, per = 2 * perLane;
+        Object.assign(c, { xc: true, xi: (k / per) | 0, dir: k % per < perLane ? 1 : -1, u: 0 });
+        this.xcars.push(c);
+      }
+      this.all = this.cars.concat(this.xcars);
+      for (const c of this.xcars) {
+        const k = this.xcars.filter((o) => o.xi === c.xi && o.dir === c.dir).indexOf(c);
+        this.initCross(c, G.WALK_OUT + 6 + k * 13);
       }
       for (const m of this.meshes) if (m && m.bm.instanceColor) m.bm.instanceColor.needsUpdate = true;
       this._s = {}; this._n = {};
@@ -262,6 +277,58 @@
     }
 
     laneLat(lane) { return G.LANES[lane]; }
+
+    // ---------- cross streets ----------
+    // put a cross car `back` metres short of the circuit's centreline on its way in
+    initCross(c, back) {
+      c.u = -c.dir * back;
+      c.vT = G.rand(11, 15); c.v = c.vT * 0.7;
+      c.loose = false; c.roll = 0; c.pitch = 0; c.rollV = 0; c.pitchV = 0; c.yawV = 0; c.timer = 0; c.lastAlong = NaN; c.latV = 0;
+      this.placeCross(c);
+    }
+    placeCross(c) {
+      const X = this.xings.list[c.xi], off = -c.dir * G.XING.LANE; // drive on the right
+      c.x = X.x + X.rx * c.u + X.tx * off; c.z = X.z + X.rz * c.u + X.tz * off;
+      c.hx = X.rx * c.dir; c.hz = X.rz * c.dir;
+      c.yaw = Math.atan2(-c.hx, -c.hz);
+      c.y = Math.abs(c.u) > G.ROAD_HALF ? 0.17 : 0;
+      c.s = G.wrap(X.s + off, this.track.length); c.lat = c.u;
+    }
+    // follow the car ahead, stop at the line on red, loop back to the far end once across
+    updateCross(dt) {
+      const xs = this.xings, WO = G.WALK_OUT;
+      const groups = new Map();
+      for (const c of this.xcars) {
+        if (c.loose) continue;
+        const key = c.xi * 2 + (c.dir > 0 ? 1 : 0);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(c);
+      }
+      for (const arr of groups.values()) {
+        arr.sort((a, b) => a.dir * a.u - b.dir * b.u);
+        for (let k = 0; k < arr.length; k++) {
+          const c = arr[k], X = xs.list[c.xi], pos = c.dir * c.u;
+          let gap = 1e9, lv = 0;
+          if (k + 1 < arr.length) { const ld = arr[k + 1]; gap = ld.dir * ld.u - pos - (c.t.len + ld.t.len) / 2; lv = ld.v; }
+          const st = xs.cross(c.xi), line = -(WO + 0.6) - pos - c.t.len / 2;
+          if (st !== 'G' && line > -0.5 && (st === 'Y' ? line > (c.v * c.v) / 10 : line > (c.v * c.v) / 18 - 1) && line < gap) { gap = line; lv = 0; }
+          const safe = 4 + c.v * 0.9;
+          let target = c.vT;
+          if (gap < safe) target = Math.min(target, lv * G.clamp(gap / safe, 0, 1));
+          if (gap < 1.2) c.v = Math.min(c.v, lv * 0.9);
+          c.v = Math.max(0, c.v + G.clamp(target - c.v, -9 * dt, 3 * dt));
+          c.u += c.v * c.dir * dt;
+          // out the far end: rejoin at the back of the queue on the near end
+          const out = X.ext[c.dir > 0 ? 1 : 0], back = X.ext[c.dir > 0 ? 0 : 1];
+          if (c.dir * c.u > out) {
+            const tail = arr.reduce((m, o) => (o !== c ? Math.min(m, o.dir * o.u) : m), 1e9);
+            c.u = c.dir * Math.min(-back, tail - c.t.len - 7);
+            c.v = c.vT * 0.8;
+          }
+          this.placeCross(c);
+        }
+      }
+    }
     // the lanes running the same way as this one (indices into G.LANES)
     laneGroup(lane) { const nf = G.LANES_FWD.length; return lane < nf ? [0, nf] : [nf, G.LANES.length]; }
     // trucks and buses keep out of the fast (leftmost) third of their side
@@ -352,23 +419,28 @@
           // player as obstacle (traffic brakes a little for you)
           const safe = 5 + c.v * 1.0;
           let target = c.vT;
-          const lv = lead && lead.loose ? 0 : lead ? lead.v : 0;
+          let lv = lead && lead.loose ? 0 : lead ? lead.v : 0;
+          // traffic lights at the cross streets: the stop line acts like a parked car
+          const stop = this.xings ? this.xings.stopGap(c) : 1e9;
+          const atLight = stop < gap;
+          if (atLight) { gap = stop; lv = 0; }
           if (gap < safe) target = Math.min(target, lv * G.clamp(gap / safe, 0, 1));
           if (gap < 1.5) c.v = Math.min(c.v, lv * 0.9);
           c.v += G.clamp(target - c.v, -9 * dt, 2.8 * dt);
           c.v = Math.max(0, c.v);
           // lane change when stuck behind slower car
-          if (gap < safe * 1.6 && c.v < c.vT - 3 && Math.abs(c.lat - c.latT) < 0.2 && Math.random() < dt * 0.6) {
+          if (!atLight && gap < safe * 1.6 && c.v < c.vT - 3 && Math.abs(c.lat - c.latT) < 0.2 && Math.random() < dt * 0.6) {
             const [a, b] = this.laneGroup(c.lane);
             const nl = G.pick([c.lane - 1, c.lane + 1].filter((x) => x >= a && x < b));
             if (nl !== undefined && this.laneOk(c.t, nl) && this.freeAt(c, nl, c.s)) { c.lane = nl; c.latT = this.laneLat(nl); }
           }
         }
       }
+      if (this.xings) this.updateCross(dt);
       const pPos = player.pos;
       this.near.length = 0;
-      for (const c of this.cars) {
-        if (!c.loose) {
+      for (const c of this.all) {
+        if (c.xc && !c.loose) { /* moved in updateCross */ } else if (!c.loose) {
           const old = c.lat;
           c.lat = G.damp(c.lat, c.latT, 1.6, dt);
           c.latV = (c.lat - old) / dt;
@@ -402,10 +474,12 @@
       }
       c.yaw += c.yawV * dt; c.roll += c.rollV * dt; c.pitch += c.pitchV * dt;
       c.hx = -Math.sin(c.yaw); c.hz = -Math.cos(c.yaw);
-      // walls
+      // walls (a cross car still in its side street has none)
       this.track.nearest(c.x, c.z, -1, this._n);
       const lim = G.WALL - c.t.wid / 2;
-      if (Math.abs(this._n.lat) > lim) {
+      const X = c.xc ? this.xings.list[c.xi] : null;
+      const inSide = X && Math.abs((c.x - X.x) * X.tx + (c.z - X.z) * X.tz) < G.XING.HALF;
+      if (!inSide && Math.abs(this._n.lat) > lim) {
         const sg = Math.sign(this._n.lat), nx = this._n.rx * sg, nz = this._n.rz * sg;
         const pen = Math.abs(this._n.lat) - lim;
         c.x -= nx * pen; c.z -= nz * pen;
@@ -413,6 +487,12 @@
         if (vn > 0) { c.lvx -= nx * vn * 1.4; c.lvz -= nz * vn * 1.4; }
       }
       c.s = this._n.s; c.lat = this._n.lat;
+      // a knocked cross car goes back to its street once it has settled out of sight
+      if (c.xc) {
+        const dx = c.x - this.game.player.pos.x, dz = c.z - this.game.player.pos.z;
+        if (c.timer > 6 && dx * dx + dz * dz > 70 * 70) this.initCross(c, X.ext[c.dir > 0 ? 0 : 1]);
+        return;
+      }
       // a car that was only nudged and came to rest upright, lined up with its own side of the road, drives on
       if (onGround && c.timer > 1.5 && Math.hypot(c.lvx, c.lvz) < 0.6 && Math.abs(c.roll) < 0.15 && Math.abs(c.pitch) < 0.15) {
         const n = this._n, nf = G.LANES_FWD.length, lanes = c.dir > 0 ? G.LANES_FWD.map((_, i) => i) : G.LANES_ONC.map((_, i) => nf + i);
@@ -437,7 +517,7 @@
     // a knocked-loose car hitting other traffic: same OBB + mass impulse rules as a roadster hitting traffic
     collideLoose(c) {
       if (Math.hypot(c.lvx, c.lvz) < 2) return;
-      for (const o of this.cars) {
+      for (const o of this.all) {
         if (o === c) continue;
         const dx = o.x - c.x, dz = o.z - c.z;
         if (dx * dx + dz * dz > 100 || Math.abs(o.y - c.y) > 2.2) continue;
@@ -482,7 +562,7 @@
     writeInstances() {
       const m4 = this._m4 || (this._m4 = new T.Matrix4());
       const e = new T.Euler(0, 0, 0, 'YXZ'), q = new T.Quaternion(), p = new T.Vector3(), s1 = new T.Vector3(1, 1, 1), sb = new T.Vector3();
-      for (const c of this.cars) {
+      for (const c of this.all) {
         e.set(c.pitch, c.yaw, c.roll);
         q.setFromEuler(e);
         p.set(c.x, c.y, c.z);
@@ -520,7 +600,7 @@
     // traffic within r of a point (for AI roadsters, which need their own neighbourhood)
     gatherNear(x, z, r, out) {
       out.length = 0;
-      for (const c of this.cars) { const dx = c.x - x, dz = c.z - z; if (dx * dx + dz * dz < r * r) out.push(c); }
+      for (const c of this.all) { const dx = c.x - x, dz = c.z - z; if (dx * dx + dz * dz < r * r) out.push(c); }
       return out;
     }
 
@@ -591,7 +671,7 @@
         if (pl.pos.y > top - 0.3 && Math.abs(side) < c.t.wid / 2 + 1.5) {
           c.cd = 1.5; this.game.onJumpOver(c);
         } else if (edge > 0 && edge < 1.4 && pl.pos.y < top) {
-          c.cd = 1.5; this.game.onNearMiss(c, edge, c.dir < 0);
+          c.cd = 1.5; this.game.onNearMiss(c, edge, c.dir < 0 && !c.xc);
         }
       }
     }

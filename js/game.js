@@ -15,7 +15,7 @@
   const DEFAULTS = {
     quality: G.isMobile ? 'medium' : 'high', tod: 'night', traffic: 'medium', laps: 3, rivals: 5, difficulty: 'normal', track: 'city',
     camera: 0, autoAccel: G.isTouch, tilt: false, sens: 1, showFps: false, touchUI: 'auto', vol: 0.7, shake: true,
-    thrInvert: true, keys: null, // keys: { action: [code, code] }, null = defaults
+    thrInvert: true, keyPreset: 1, keysBy: {}, // keysBy: { preset: { action: [code, code] } }, missing = that layout's defaults
   };
 
   const RadialShader = {
@@ -143,10 +143,12 @@
         const F = G.LANES_FWD; // wide roads: scatter them across the lanes
         track.addRamp(best, F[(i * (F.length > 3 ? 3 : 1)) % F.length], 15, 7, i % 3 === 2 ? 3.4 : 2.7);
       });
+      track.crossings = G.placeCrossings(track); // cross streets with traffic lights (the city keeps them clear)
       track.buildMeshes(this.scene, Q);
       $('load-text').textContent = 'Lighting the streets…';
       await new Promise((r) => setTimeout(r, 10));
       this.city = G.buildCity(this);
+      this.xings = new G.Crossings(this);
 
       // player
       this.playerModel = G.buildRoadster(0xd9dcdf, { shadows: Q.shadows });
@@ -183,7 +185,9 @@
       this.hud = new G.HUD(this);
       this.input = new G.Input();
       this.input.autoAccel = S.autoAccel; this.input.sens = S.sens; this.input.thrInvert = S.thrInvert;
-      if (S.keys) this.input.setBinds(Object.assign(G.defaultKeys(), S.keys));
+      // settings from before the layouts existed kept their custom keys in S.keys: those were made on layout 2
+      if (S.keys) { S.keysBy = Object.assign({}, S.keysBy, { 2: S.keys }); delete S.keys; G.store.set('settings', S); }
+      this.input.setBinds(Object.assign(G.defaultKeys(S.keyPreset), (S.keysBy || {})[S.keyPreset]));
       if (S.tilt && G.isTouch) this.input.enableTilt(true);
       const useTouch = S.touchUI === 'on' || (S.touchUI === 'auto' && G.isTouch);
       if (useTouch) { document.body.classList.add('touch'); this.input.buildTouch($('touch')); }
@@ -354,7 +358,19 @@
       // keyboard rebinding: two slots per action; a key belongs to one action at a time
       const box = $('keybinds');
       let pending = null;
-      const save = () => { S.keys = inp.binds; G.store.set('settings', S); thrHint(); };
+      const save = () => { S.keysBy = Object.assign({}, S.keysBy, { [S.keyPreset]: inp.binds }); G.store.set('settings', S); thrHint(); };
+      // layout picker: each layout remembers its own rebinds
+      const presetEl = $('s-keyset');
+      presetEl.innerHTML = Object.entries(G.KEY_PRESETS).map(([n, p]) => `<button data-v="${n}">${n} · ${p.name}</button>`).join('');
+      const showPreset = () => presetEl.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', +b.dataset.v === S.keyPreset));
+      presetEl.addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-v]');
+        if (!b) return;
+        S.keyPreset = +b.dataset.v;
+        inp.setBinds(Object.assign(G.defaultKeys(S.keyPreset), (S.keysBy || {})[S.keyPreset]));
+        G.store.set('settings', S); stop(); showPreset(); thrHint();
+      });
+      showPreset();
       const render = () => {
         box.innerHTML = G.KEY_ACTIONS.map(([id, label]) => `<div class="bind"><span>${label}</span>` +
           [0, 1].map((slot) => `<button data-a="${id}" data-s="${slot}" class="${pending && pending.id === id && pending.slot === slot ? 'wait' : ''}">` +
@@ -379,7 +395,7 @@
           inp.setBinds(binds); save(); stop();
         };
       });
-      $('btn-keys-reset').addEventListener('click', () => { inp.setBinds(G.defaultKeys()); S.keys = null; G.store.set('settings', S); stop(); thrHint(); });
+      $('btn-keys-reset').addEventListener('click', () => { inp.setBinds(G.defaultKeys(S.keyPreset)); S.keysBy = Object.assign({}, S.keysBy, { [S.keyPreset]: null }); G.store.set('settings', S); stop(); thrHint(); });
       // leaving the panel mid-rebind cancels it
       document.querySelectorAll('#controls [data-back]').forEach((b) => b.addEventListener('click', () => { if (pending) stop(); }));
       render();
@@ -665,6 +681,17 @@
     }
     onHurdle(q) { this.addScore(q.name ? 600 : 300, 6, q.name || 'HURDLE CLEARED', ''); }
     onRooftop() { this.addScore(500, 10, 'ROOFTOP!', 'container landing', 'big'); }
+    // rings pay more the longer the unbroken chain; taking a whole set in order pays a bonus on top
+    onRing(q, chain, all) {
+      if (all) this.addScore(250 * chain + 1500, 12, 'ALL RINGS!', `${q.n} for ${q.n}`, 'big');
+      else this.addScore(250 * chain, 4, 'RING', chain > 1 ? `CHAIN ×${chain}` : '');
+      G.audio.tone(700 + chain * 120, 0.12, 0.12, 'triangle');
+    }
+    onFieldGoal(q, over) {
+      this.addScore(over > 6 ? 2000 : 1200, 15, 'FIELD GOAL!', over > 6 ? 'HIGH AND THROUGH' : "IT'S GOOD", 'big');
+      G.audio.whoosh();
+    }
+    onFieldGoalMiss(side) { this.hud.popup('NO GOOD', `WIDE ${side}`, 'warn'); }
 
     finishCourse(destroyed) {
       this.state = 'finished';
@@ -901,6 +928,7 @@
       this.lastS = p.near.s;
       if (Math.abs(ds) < 40) this.progress += ds;
 
+      this.xings.update(dt); // the lights keep cycling wherever you are
       if (this.traffic && st !== 'countdown') {
         this.traffic.update(dt, p, p.near.s);
         if (st === 'race' || st === 'finished') this.traffic.detectStunts(p);
