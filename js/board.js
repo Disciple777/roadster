@@ -47,5 +47,12 @@
     top: (track, mode) => call({ a: 'top', track, mode, id }),
     submit: (run) => call({}, Object.assign({ a: 'submit', id }, run)),
     ghosts: (track, course = 'street') => call({ a: 'ghosts', track, course, id }),
+    // obstacle courses: the official layout per circuit (null = the built-in one), shared player courses by code
+    official: (track) => call({ a: 'official', track }),
+    share: (c) => call({}, Object.assign({ a: 'share', id }, c)),
+    shared: (code) => call({ a: 'shared', code }),
+    sharedList: () => call({ a: 'shared_list' }),
+    // race control (the passkey travels in the POST body, never in the URL)
+    admin: (a, key, body) => call({}, Object.assign({ a, key }, body)),
   };
 })();

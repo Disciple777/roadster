@@ -89,6 +89,37 @@ function rd_install(PDO $pdo): void {
         UNIQUE KEY uq_driver (pid, track, course),
         KEY idx_best (track, course, score)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // obstacle courses: kind 'official' (code = track, edited from race control) and 'shared' (player courses by code)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$p}levels (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        kind VARCHAR(10) NOT NULL,
+        code VARCHAR(16) NOT NULL,
+        track VARCHAR(16) NOT NULL,
+        name VARCHAR(32) NOT NULL DEFAULT '',
+        author VARCHAR(16) NOT NULL DEFAULT '',
+        pid CHAR(64) NOT NULL DEFAULT '',
+        cid VARCHAR(16) NOT NULL DEFAULT '',
+        n SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        items MEDIUMTEXT NOT NULL,
+        plays INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at INT UNSIGNED NOT NULL,
+        updated_at INT UNSIGNED NOT NULL,
+        UNIQUE KEY uq_code (kind, code),
+        KEY idx_pid (pid, created_at),
+        KEY idx_new (kind, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+/** Race control: the passkey must hash (with the server's salt) to admin_sha from config.php. */
+function rd_admin(): void {
+    $c = rd_config();
+    $sha = (string) ($c['admin_sha'] ?? '');
+    if ($sha === '') rd_fail(503, 'no_admin', 'Race control is not set up on this server.');
+    $key = (string) rd_in('key', '');
+    if ($key === '' || !hash_equals($sha, hash('sha256', ((string) ($c['admin_salt'] ?? '')) . $key))) {
+        usleep(800000); // slows down guessing
+        rd_fail(403, 'forbidden', 'Wrong passkey.');
+    }
 }
 
 function rd_body(): array {
@@ -127,4 +158,8 @@ function rd_pick(string $key, array $allowed): string {
     $v = (string) rd_in($key, '');
     if (!in_array($v, $allowed, true)) rd_fail(400, 'bad_' . $key);
     return $v;
+}
+
+if (!function_exists('array_is_list')) { // PHP < 8.1
+    function array_is_list(array $a): bool { $i = 0; foreach ($a as $k => $_) { if ($k !== $i++) return false; } return true; }
 }

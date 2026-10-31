@@ -74,6 +74,7 @@
       <button id="btn-race" class="big primary">STREET RACE</button>
       <button id="btn-free" class="big">FREE RIDE</button>
       <button id="btn-course" class="big">OBSTACLE COURSE</button>
+      <button id="btn-editor" class="big">COURSE EDITOR</button>
       <button id="btn-mp" class="big">MULTIPLAYER</button>
       <button id="btn-board" class="big">LEADERBOARD</button>
       <div class="row2">
@@ -131,6 +132,46 @@
     <div id="b-rows" class="res-rows board-rows"></div>
     <div id="b-mine" class="hint"></div>
     <div class="actions"><button data-back class="primary">BACK</button></div>
+  </div>
+
+  <!-- COURSE EDITOR: your courses, new ones, shared ones -->
+  <div id="courses" class="panel card">
+    <h2>COURSE EDITOR</h2>
+    <div class="scroll">
+      <label>MY COURSES</label>
+      <div id="c-mine" class="res-rows clist"></div>
+      <label>NEW COURSE</label>
+      <input id="c-name" class="txt" maxlength="24" autocomplete="off" spellcheck="false" placeholder="COURSE NAME" />
+      <div class="seg" id="c-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button></div>
+      <div class="seg" id="c-base"><button data-v="blank">EMPTY STREET</button><button data-v="official">START FROM THE OFFICIAL COURSE</button></div>
+      <button id="c-new" class="primary wide">CREATE &amp; EDIT</button>
+      <label>PLAY A SHARED COURSE</label>
+      <div class="code-row"><input id="c-code" class="txt" maxlength="5" autocomplete="off" spellcheck="false" placeholder="CODE" /><button id="c-play">PLAY</button></div>
+      <label>COMMUNITY COURSES</label>
+      <div id="c-comm" class="res-rows clist"><div class="hint">Loading…</div></div>
+      <p id="c-status" class="hint mp-status"></p>
+    </div>
+    <div class="actions"><button data-back class="primary">BACK</button></div>
+  </div>
+
+  <!-- RACE CONTROL (hidden: Ctrl+Alt+Shift+O) -->
+  <div id="adminkey" class="panel card small">
+    <h2>RACE CONTROL</h2>
+    <input id="a-key" class="txt" type="password" autocomplete="off" spellcheck="false" placeholder="PASSKEY" />
+    <p id="a-status" class="hint mp-status"></p>
+    <div class="actions"><button data-back>CANCEL</button><button id="a-enter" class="primary">ENTER</button></div>
+  </div>
+  <div id="admin" class="panel card">
+    <h2>RACE CONTROL</h2>
+    <div class="scroll">
+      <label>OFFICIAL OBSTACLE COURSES</label>
+      <p class="hint">Saving an official course changes it for every driver. Reset its leaderboard when the layout changes a lot.</p>
+      <div id="a-tracks" class="res-rows clist"></div>
+      <label>COMMUNITY COURSES</label>
+      <div id="a-comm" class="res-rows clist"></div>
+      <p id="a-msg" class="hint mp-status"></p>
+    </div>
+    <div class="actions"><button id="a-lock">LOCK</button><button data-back class="primary">BACK</button></div>
   </div>
 
   <!-- MULTIPLAYER: host or join a room -->
@@ -234,6 +275,7 @@
       <button id="btn-restart" class="sp-only">RESTART</button>
       <button id="btn-psettings">SETTINGS</button>
       <button id="btn-pcontrols">CONTROLS</button>
+      <button id="btn-pedit" class="ed-only">BACK TO EDITOR</button>
       <button id="btn-quit">QUIT TO MENU</button>
     </div>
   </div>
@@ -244,7 +286,27 @@
     <div id="res-rows" class="res-rows"></div>
     <div id="res-stats" class="res-stats"></div>
     <div id="res-board" class="hint res-board"></div>
-    <div class="actions"><button id="btn-rmenu">MENU</button><button id="btn-again" class="primary">RACE AGAIN</button></div>
+    <div class="actions"><button id="btn-rmenu">MENU</button><button id="btn-redit" class="ed-only">EDITOR</button><button id="btn-again" class="primary">RACE AGAIN</button></div>
+  </div>
+
+  <!-- the editor's screen (the 3D view underneath is the course itself) -->
+  <div id="editor" class="hidden">
+    <div class="ed-top">
+      <input id="ed-name" class="txt" maxlength="24" autocomplete="off" spellcheck="false" />
+      <span id="ed-info" class="ed-info"></span>
+      <span class="ed-sp"></span>
+      <button id="ed-undo" title="Ctrl+Z">UNDO</button>
+      <button id="ed-save">SAVE</button>
+      <label id="ed-resetlbl" class="ed-chk hidden"><input type="checkbox" id="ed-reset" /> RESET BOARD</label>
+      <button id="ed-official" class="warn hidden">SAVE OFFICIAL</button>
+      <button id="ed-testhere" title="Start the test run at the camera">TEST HERE</button>
+      <button id="ed-test" class="primary">TEST</button>
+      <button id="ed-exit">EXIT</button>
+    </div>
+    <div id="ed-pal" class="ed-pal"></div>
+    <div id="ed-insp" class="ed-insp"></div>
+    <div class="ed-bot"><canvas id="ed-over"></canvas><canvas id="ed-strip"></canvas></div>
+    <div id="ed-msg" class="ed-msg"></div>
   </div>
 
   <div id="rotate"><div><div class="phone"></div><p>Rotate to landscape for the best experience</p><button id="rot-ok">PLAY ANYWAY</button></div></div>
@@ -267,7 +329,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry };
     const BUILD = Date.now();
-    const files = ['util', 'tuning', 'track', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'ghost', 'course', 'game'];
+    const files = ['util', 'tuning', 'track', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'ghost', 'course', 'editor', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }

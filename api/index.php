@@ -7,6 +7,12 @@
  *                                                 records an official run; returns the driver's rank
  *   GET  ?a=ghosts&track=city&course=street&id=…  your best course replay and the best one by someone else
  *
+ *   GET  ?a=official&track=city                   the official obstacle course layout ({items} or null = built-in)
+ *   POST {a:"share", id, name, cname, track, items[, cid]}   shares a player course; returns its 5-letter code
+ *   GET  ?a=shared&code=ABCDE                     one shared course
+ *   GET  ?a=shared_list                           the newest shared courses (no items)
+ *   POST {a:"admin_check" | "official_save" | "shared_delete", key, ...}   race control (passkey)
+ *
  * Only official runs count: a 2-lap street race in heavy traffic against 7 pro rivals, or 1 lap of the
  * obstacle course.
  */
@@ -23,6 +29,10 @@ const COURSES = ['street'];
 const OFFICIAL_LAPS = ['race' => 2, 'course' => 1];
 const OFFICIAL_RACE = ['traffic' => 'heavy', 'rivals' => 7, 'difficulty' => 'pro'];
 const TOP_N = 20;
+const LEVEL_MAX_ITEMS = 600;
+const LEVEL_MAX_JSON = 200000;
+const SHARES_PER_DAY = 20;
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
 const GHOST_STRIDE = 8;          // t, x, y, z, qx, qy, qz, qw
 const GHOST_MAX_FRAMES = 9000;   // 15 minutes at 10 Hz
 
@@ -30,6 +40,13 @@ $a = (string) rd_in('a', '');
 if ($a === 'top') top();
 if ($a === 'submit') submit();
 if ($a === 'ghosts') ghosts();
+if ($a === 'official') official();
+if ($a === 'share') share();
+if ($a === 'shared') shared();
+if ($a === 'shared_list') shared_list();
+if ($a === 'admin_check') { rd_admin(); rd_json(['ok' => true]); }
+if ($a === 'official_save') official_save();
+if ($a === 'shared_delete') shared_delete();
 rd_fail(400, 'bad_action');
 
 /** ORDER BY for "better first" in each mode. */
@@ -155,4 +172,139 @@ function ghosts(): void {
     $st->execute([$track, $course, $me ?? '']);
     $other = $st->fetch() ?: null;
     rd_json(['ok' => true, 'mine' => $pack($mine), 'other' => $pack($other)]);
+}
+
+// ---------------- obstacle courses ----------------
+
+/** A course is a list of {t, s, p}: piece type, metres along the lap, numeric parameters (numbers or small nested lists). */
+function level_items($raw): string {
+    if (!is_array($raw) || !array_is_list($raw)) rd_fail(400, 'bad_items');
+    if (count($raw) > LEVEL_MAX_ITEMS) rd_fail(400, 'too_many_items', 'A course holds at most ' . LEVEL_MAX_ITEMS . ' pieces.');
+    $num = function ($v, int $depth) use (&$num): bool {
+        if (is_int($v) || is_float($v)) return is_finite((float) $v) && abs((float) $v) < 1e6;
+        if (is_array($v) && array_is_list($v) && $depth < 3 && count($v) <= 64) { foreach ($v as $x) if (!$num($x, $depth + 1)) return false; return true; }
+        return false;
+    };
+    $out = [];
+    foreach ($raw as $it) {
+        if (!is_array($it)) rd_fail(400, 'bad_items');
+        $t = $it['t'] ?? null; $s = $it['s'] ?? null; $p = $it['p'] ?? [];
+        if (!is_string($t) || !preg_match('/^[a-z0-9]{2,12}$/', $t)) rd_fail(400, 'bad_items');
+        if ((!is_int($s) && !is_float($s)) || !is_finite((float) $s) || abs((float) $s) > 1e5) rd_fail(400, 'bad_items');
+        if (!is_array($p) || count($p) > 16) rd_fail(400, 'bad_items');
+        $pp = [];
+        foreach ($p as $k => $v) {
+            if (!is_string($k) || !preg_match('/^[a-z0-9]{1,8}$/i', $k) || !$num($v, 1)) rd_fail(400, 'bad_items');
+            $pp[$k] = $v;
+        }
+        $out[] = ['t' => $t, 's' => round((float) $s, 2), 'p' => (object) $pp];
+    }
+    $json = json_encode($out);
+    if ($json === false || strlen($json) > LEVEL_MAX_JSON) rd_fail(400, 'too_big', 'This course is too big to save.');
+    return $json;
+}
+
+function course_name($raw): string {
+    $n = strtoupper(trim(preg_replace('/\s+/', ' ', (string) $raw)));
+    $n = substr((string) preg_replace('/[^A-Z0-9 _\-.!?\'#&]/', '', $n), 0, 24);
+    return $n === '' ? 'CUSTOM COURSE' : $n;
+}
+
+function official(): void {
+    $track = rd_pick('track', TRACKS);
+    $db = rd_db(); $p = rd_prefix();
+    $st = $db->prepare("SELECT items, updated_at FROM {$p}levels WHERE kind = 'official' AND code = ?");
+    $st->execute([$track]);
+    $r = $st->fetch();
+    rd_json(['ok' => true, 'items' => $r ? json_decode($r['items'], true) : null, 'at' => $r ? (int) $r['updated_at'] : 0]);
+}
+
+function share(): void {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') rd_fail(405, 'post_only');
+    $pid = rd_pid();
+    $track = rd_pick('track', TRACKS);
+    $raw = rd_in('items');
+    $items = level_items($raw);
+    $n = count($raw);
+    if ($n < 1) rd_fail(400, 'empty', 'Add some pieces before sharing.');
+    $author = rd_name(rd_in('name', ''));
+    $name = course_name(rd_in('cname', ''));
+    $cid = substr((string) preg_replace('/[^a-z0-9]/', '', strtolower((string) rd_in('cid', ''))), 0, 16);
+    $db = rd_db(); $p = rd_prefix(); $now = time();
+    // sharing the same course again updates it and keeps its code
+    if ($cid !== '') {
+        $st = $db->prepare("SELECT id, code FROM {$p}levels WHERE kind = 'shared' AND pid = ? AND cid = ?");
+        $st->execute([$pid, $cid]);
+        if ($r = $st->fetch()) {
+            $db->prepare("UPDATE {$p}levels SET track = ?, name = ?, author = ?, n = ?, items = ?, updated_at = ? WHERE id = ?")
+               ->execute([$track, $name, $author, $n, $items, $now, $r['id']]);
+            rd_json(['ok' => true, 'code' => $r['code'], 'updated' => true]);
+        }
+    }
+    $st = $db->prepare("SELECT COUNT(*) FROM {$p}levels WHERE kind = 'shared' AND pid = ? AND created_at > ?");
+    $st->execute([$pid, $now - 86400]);
+    if ((int) $st->fetchColumn() >= SHARES_PER_DAY) rd_fail(429, 'limit', 'Sharing limit reached for today.');
+    for ($k = 0; $k < 8; $k++) {
+        $code = '';
+        for ($j = 0; $j < 5; $j++) $code .= CODE_ALPHABET[random_int(0, strlen(CODE_ALPHABET) - 1)];
+        try {
+            $db->prepare("INSERT INTO {$p}levels (kind, code, track, name, author, pid, cid, n, items, plays, created_at, updated_at) VALUES ('shared', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)")
+               ->execute([$code, $track, $name, $author, $pid, $cid, $n, $items, $now, $now]);
+            rd_json(['ok' => true, 'code' => $code]);
+        } catch (PDOException $e) {
+            if ((string) $e->getCode() !== '23000') throw $e; // duplicate code: roll again
+        }
+    }
+    rd_fail(500, 'no_code');
+}
+
+function shared(): void {
+    $code = strtoupper((string) rd_in('code', ''));
+    if (!preg_match('/^[A-Z0-9]{5}$/', $code)) rd_fail(400, 'bad_code');
+    $db = rd_db(); $p = rd_prefix();
+    $st = $db->prepare("SELECT code, track, name, author, items, plays FROM {$p}levels WHERE kind = 'shared' AND code = ?");
+    $st->execute([$code]);
+    $r = $st->fetch();
+    if (!$r) rd_fail(404, 'not_found', 'No course with that code.');
+    $db->prepare("UPDATE {$p}levels SET plays = plays + 1 WHERE kind = 'shared' AND code = ?")->execute([$code]);
+    rd_json(['ok' => true, 'course' => ['code' => $r['code'], 'track' => $r['track'], 'name' => $r['name'], 'author' => $r['author'], 'plays' => (int) $r['plays'] + 1, 'items' => json_decode($r['items'], true)]]);
+}
+
+function shared_list(): void {
+    $db = rd_db(); $p = rd_prefix();
+    $st = $db->query("SELECT code, track, name, author, n, plays, created_at FROM {$p}levels WHERE kind = 'shared' ORDER BY created_at DESC LIMIT 30");
+    $rows = array_map(fn($r) => ['code' => $r['code'], 'track' => $r['track'], 'name' => $r['name'], 'author' => $r['author'], 'n' => (int) $r['n'], 'plays' => (int) $r['plays'], 'at' => (int) $r['created_at']], $st->fetchAll());
+    rd_json(['ok' => true, 'rows' => $rows]);
+}
+
+function official_save(): void {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') rd_fail(405, 'post_only');
+    rd_admin();
+    $track = rd_pick('track', TRACKS);
+    $raw = rd_in('items');
+    $db = rd_db(); $p = rd_prefix(); $now = time();
+    if ($raw === null) {
+        $db->prepare("DELETE FROM {$p}levels WHERE kind = 'official' AND code = ?")->execute([$track]);
+    } else {
+        $items = level_items($raw);
+        $db->prepare("INSERT INTO {$p}levels (kind, code, track, name, n, items, created_at, updated_at) VALUES ('official', ?, ?, 'OFFICIAL', ?, ?, ?, ?)
+                      ON DUPLICATE KEY UPDATE n = VALUES(n), items = VALUES(items), updated_at = VALUES(updated_at)")
+           ->execute([$track, $track, count($raw), $items, $now, $now]);
+    }
+    $reset = !empty(rd_in('reset'));
+    if ($reset) {
+        $db->prepare("DELETE FROM {$p}scores WHERE track = ? AND mode = 'course'")->execute([$track]);
+        $db->prepare("DELETE FROM {$p}ghosts WHERE track = ? AND course = 'street'")->execute([$track]);
+    }
+    rd_json(['ok' => true, 'reset' => $reset]);
+}
+
+function shared_delete(): void {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') rd_fail(405, 'post_only');
+    rd_admin();
+    $code = strtoupper((string) rd_in('code', ''));
+    if (!preg_match('/^[A-Z0-9]{5}$/', $code)) rd_fail(400, 'bad_code');
+    $db = rd_db(); $p = rd_prefix();
+    $db->prepare("DELETE FROM {$p}levels WHERE kind = 'shared' AND code = ?")->execute([$code]);
+    rd_json(['ok' => true]);
 }

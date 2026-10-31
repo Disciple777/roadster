@@ -412,7 +412,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
         vP.x -= g.vx; vP.y -= g.vy; vP.z -= g.vz;
         const vl = vP.dot(wf), vs = vP.dot(wr);
         const load = Fs + (this.grounded ? DOWNF * spd * spd * 0.25 : 0);
-        let grip = MU * load;
+        let grip = MU * load * (this.gripMul || 1); // gripMul: an oil slick on the obstacle course
         let fLat = -vs * (wh.front ? CLAT_F : CLAT_R);
         if (!wh.front && hand) { grip *= 0.42; fLat *= 0.35; }
         let fLong = driveTotal / 4;
@@ -524,7 +524,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
         // stability: catch over-rotation and settle leftover spin once the arrows are released (~0.06 s, so the car stops turning when you let go)
         else if (!hand && contacts >= 3) Tq.addScaledVector(up, yawErr * this.I.y * (Math.abs(inp.steer) > 0.05 ? 4 : 16));
         // grip assist: bend sideways velocity into forward motion so the car goes where it points instead of sliding
-        if (!hand && contacts >= 3 && spd > 2) {
+        if (!hand && contacts >= 3 && spd > 2 && !(this.gripMul < 0.9)) {
           // energy-safe: forward speed only gains part of what the slide loses, so total speed can never rise
           const vs = vel.dot(right), vsNew = vs * Math.exp(-6 * dt);
           const vfNew = Math.sign(vF || 1) * Math.sqrt(vF * vF + (vs * vs - vsNew * vsNew) * 0.7);

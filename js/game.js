@@ -196,6 +196,7 @@
       $('fps').classList.toggle('hidden', !S.showFps);
 
       this.wireUI();
+      this.editor = new G.Editor(this);
       window.addEventListener('resize', () => this.resize());
       document.addEventListener('visibilitychange', () => { if (document.hidden && (this.state === 'race' || this.state === 'countdown')) this.pause(true); });
 
@@ -207,6 +208,11 @@
       let auto = null;
       try { auto = sessionStorage.getItem('rt-autostart'); sessionStorage.removeItem('rt-autostart'); } catch (e) { /* ignore */ }
       if (auto === 'race' || auto === 'free' || auto === 'course') this.startRace(auto);
+      // a course opened on the other circuit reloads the page and lands here (editor.js)
+      let cAuto = null;
+      try { cAuto = JSON.parse(sessionStorage.getItem('rt-course') || 'null'); sessionStorage.removeItem('rt-course'); } catch (e) { /* ignore */ }
+      if (cAuto) this.editor.resume(cAuto);
+      this.syncOfficial();
       let mpAuto = null;
       try { mpAuto = JSON.parse(sessionStorage.getItem('rt-mp') || 'null'); sessionStorage.removeItem('rt-mp'); } catch (e) { /* ignore */ }
       if (mpAuto) { this.showPanel('mp'); if (mpAuto.act === 'host') this.mpHost(); else this.mpJoin(mpAuto.code, true); }
@@ -284,6 +290,9 @@
       click('btn-pcontrols', () => this.showPanel('controls'));
       click('btn-again', () => (this.net ? this.mpEnter() : this.mpGrid ? this.mpLeave() : this.startRace(this.mode)));
       click('btn-rmenu', () => (this.mpGrid ? this.mpLeave() : this.toMenu()));
+      click('btn-pedit', () => { this.pause(false, true); this.editor.back(); });
+      click('btn-redit', () => this.editor.back());
+      click('btn-editor', () => this.editor.home());
       click('btn-cam', () => this.cycleCam());
       click('btn-full', () => this.fullscreen());
       click('rot-ok', () => $('rotate').classList.add('dismissed'));
@@ -499,8 +508,22 @@
       }).catch(() => { el.textContent = 'Leaderboard offline: this run was not saved.'; });
     }
 
+    // the official course can be edited from race control: fetch this circuit's layout, keep a copy for offline
+    syncOfficial() {
+      if (!G.api.official) return;
+      G.api.official(G.TRACK_ID).then((r) => {
+        const items = Array.isArray(r.items) ? r.items : null, key = 'official_' + G.TRACK_ID;
+        const had = G.store.get(key, null), was = had && Array.isArray(had.items) ? had.items : null;
+        if (JSON.stringify(was) === JSON.stringify(items)) return;
+        G.store.set(key, { items });
+        this.officialDef = null;
+      }).catch(() => { /* offline: keep the copy we have */ });
+    }
+
     toMenu() {
       this.state = 'menu';
+      this.customCourse = null;
+      document.body.classList.remove('testing');
       this.closePanels();
       $('menu').classList.add('open');
       $('results').classList.remove('open');
@@ -517,8 +540,11 @@
       this.updateBestUI();
     }
 
-    startRace(mode) {
+    // opt.s0: start the run at this point of the lap (the editor's TEST HERE)
+    startRace(mode, opt = {}) {
       const S = this.settings, tr = this.track, L = tr.length;
+      const custom = mode === 'course' ? this.customCourse : null;
+      document.body.classList.toggle('testing', !!(custom && custom.editing));
       this.mode = mode;
       this.closePanels();
       $('results').classList.remove('open');
@@ -531,14 +557,19 @@
       this.traffic = mp ? (mpo.traffic === 'off' ? null : G.mpSeeded(mpo.seed, () => new G.Traffic(this, mpo.traffic)))
         : S.traffic === 'off' || mode === 'course' ? null : new G.Traffic(this, S.traffic);
       // obstacle course: the set pieces stay built between runs; smashed crates and used repair kits come back
-      if (mode === 'course') { if (!this.course) this.course = new G.Course(this, 'street'); this.course.reset(); }
+      if (mode === 'course') {
+        const def = custom || this.officialDef || (this.officialDef = G.officialCourse(tr));
+        if (this.course && this.course.def !== def) { this.course.dispose(); this.course = null; }
+        if (!this.course) this.course = new G.Course(this, def);
+        this.course.reset();
+      }
       else if (this.course) { this.course.dispose(); this.course = null; }
       // ghosts: your best course run and the best by someone else, replayed alongside this one
       this.ghostRec = this.ghostRec || new G.GhostRecorder(); this.ghostRec.reset();
-      if (mode === 'course' && S.ghosts !== 'off') { this.ghosts = this.ghosts || new G.Ghosts(this); this.ghosts.load(G.TRACK_ID); }
+      if (mode === 'course' && !custom && S.ghosts !== 'off') { this.ghosts = this.ghosts || new G.Ghosts(this); this.ghosts.load(G.TRACK_ID); }
       else if (this.ghosts) { this.ghosts.dispose(); this.ghosts = null; }
       $('res-board').textContent = '';
-      this.courseKey = 'courseBest_' + G.TRACK_ID; this.courseBest = G.store.get(this.courseKey, 0);
+      this.courseKey = custom ? 'courseBest_c_' + (custom.id || 'x') : 'courseBest_' + G.TRACK_ID; this.courseBest = G.store.get(this.courseKey, 0);
       this.player.health = 100; this.destroyed = false;
       if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
       const nR = mode === 'race' && !mp ? S.rivals : mp && this.net.isHost ? mpo.ai.length : 0;
@@ -548,6 +579,7 @@
       for (let k = 0; k < this.racers; k++) slots.push({ ds: -12 - Math.floor(k / 2) * 10 - (k % 2) * 4, lat: G.TRACK.grid[k % 2] });
       const pSlot = mp ? Math.max(0, mp.findIndex((q) => q.id === this.net.myId)) : mode === 'race' ? Math.min(this.racers - 1, Math.floor(this.racers / 2)) : 0;
       const ps = slots.splice(pSlot, 1)[0];
+      if (opt.s0 != null && this.course) { ps.ds = this.course.freeSpot(opt.s0, ps.lat); }
       this.player.place(ps.ds, ps.lat, 0);
       this.player.fuel = 100; this.player.fuelLock = false; this._fuelFull = true; this._fuelLock = false;
       this.player.frozen = true;
@@ -722,7 +754,7 @@
       this.fx.burst(o.x, 0.8, o.z, 18, body.vel.x * 0.5, 3, body.vel.z * 0.5, 7);
       G.audio.impact(Math.min(20, v * 0.4));
       this.addShake(0.15);
-      if (this.state === 'race' && this.t - (this._crateT || 0) > 0.25) { this._crateT = this.t; this.addScore(100, 2, 'CRATE SMASH', ''); }
+      if (this.state === 'race' && this.t - (this._crateT || 0) > 0.25) { this._crateT = this.t; this.addScore(o.k.pts || 100, 2, o.k.label || 'CRATE SMASH', ''); }
     }
     onGate(q, tight) {
       const perfect = tight > 0.75;
@@ -740,7 +772,26 @@
       this.damage(25);
     }
     onHurdle(q) { this.addScore(q.name ? 600 : 300, 6, q.name || 'HURDLE CLEARED', ''); }
-    onRooftop() { this.addScore(500, 10, 'ROOFTOP!', 'container landing', 'big'); }
+    onRooftop(name) { this.addScore(500, 10, name ? name + '!' : 'ROOFTOP!', name ? 'clean landing' : 'container landing', 'big'); }
+    onPad(body, q) {
+      if (body !== this.player || this.state !== 'race') return;
+      if (q.kind === 'boost') { this.hud.popup('BOOST PAD', '', 'blue'); G.audio.whoosh(); this.addShake(0.2); }
+      else if (q.kind === 'bounce') { this.hud.popup('BOING!', '', 'blue'); G.audio.tone(260, 0.18, 0.16, 'sine'); }
+      else this.hud.popup('OIL SLICK', 'no grip', 'warn');
+    }
+    // a laser gate: through while it's off (or over it) scores, through the beams hurts
+    onLaser(q, hit) {
+      if (hit) {
+        const p = this.player;
+        this.fx.burst(p.pos.x, p.pos.y + 0.8, p.pos.z, 30, 0, 3, 0, 8);
+        G.audio.impact(30); this.addShake(0.4);
+        this.combo = 1; this.comboT = 0;
+        this.hud.popup('ZAPPED!', 'laser gate', 'warn');
+        this.damage(18);
+      } else { this.addScore(250, 4, 'LASER DODGED', ''); G.audio.whoosh(); }
+    }
+    onCanister() { const p = this.player; p.fuel = Math.min(100, p.fuel + 35); this.hud.popup('N₂ CANISTER', '+35 THRUST', 'blue'); G.audio.pickup(); }
+    onStar() { this.addScore(300, 5, 'STAR', ''); G.audio.pickup(); }
     // rings pay more the longer the unbroken chain; taking a whole set in order pays a bonus on top
     onRing(q, chain, all) {
       if (all) this.addScore(250 * chain + 1500, 12, 'ALL RINGS!', `${q.n} for ${q.n}`, 'big');
@@ -766,7 +817,9 @@
       if (destroyed) rows.push(`<div class="row gone"><span class="p">${done + 1}</span><span class="n">LAP ${done + 1} · WRECKED</span><span class="t">DNF</span></div>`);
       $('res-rows').innerHTML = rows.join('');
       $('res-stats').innerHTML = `<div><b>${this.score.toLocaleString()}</b><small>SCORE</small></div><div><b>${Math.round(p.health)}%</b><small>HULL LEFT</small></div><div><b>${this.courseBest.toLocaleString()}</b><small>BEST SCORE</small></div>`;
-      if (destroyed) $('res-board').textContent = 'Wrecked runs are not ranked.'; else this.submitRun('course');
+      if (destroyed) $('res-board').textContent = 'Wrecked runs are not ranked.';
+      else if (this.customCourse) $('res-board').textContent = this.customCourse.editing ? 'Test run: back to the editor when you are ready.' : `${this.customCourse.name || 'Custom course'}: player courses are not ranked.`;
+      else this.submitRun('course');
       setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
     }
     // N₂ meter cues: one sound as it runs dry, one when it is back to 100%
@@ -951,6 +1004,7 @@
       let dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
       this.last = now;
       if (this.state === 'paused') { this.consumeEvents(); this.mpFrame(dt, true); this.render(0); return; }
+      if (this.state === 'editor') { this.input.consume(); this.t += dt; this.editor.frame(dt); this.render(0); return; }
       dt *= this.timeScale;
       this.t += dt;
       const p = this.player;
