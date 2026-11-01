@@ -389,8 +389,8 @@
       // rotate heading towards +right by a (right of travel for dir=+1 is +r)
       c.hx = hx * ca + p.rx * sa; c.hz = hz * ca + p.rz * sa;
       c.yaw = Math.atan2(-c.hx, -c.hz);
-      this.track.groundAt(c.x, c.z, this._gq);
-      c.y = this._gq.h;
+      this.track.groundAt(c.x, c.z, this._gq, this.track.heightAt(c.s) + 1);
+      c.y = c.gy = this._gq.h;
     }
 
     update(dt, player, playerS) {
@@ -400,7 +400,7 @@
       for (const c of this.cars) {
         if (!c.loose) { lanes[c.lane].push(c); continue; }
         // a slow wreck sitting in a lane is an obstacle the cars behind brake for and steer around
-        if (c.y > 1 || Math.hypot(c.lvx, c.lvz) > 4) continue;
+        if (c.y - (c.gy || 0) > 1 || Math.hypot(c.lvx, c.lvz) > 4) continue;
         for (let ln = 0; ln < NL; ln++) if (Math.abs(this.laneLat(ln) - c.lat) < 1.9) lanes[ln].push(c);
       }
       for (let ln = 0; ln < NL; ln++) {
@@ -458,8 +458,8 @@
       c.timer += dt;
       c.lvy -= G.GRAV * dt;
       c.x += c.lvx * dt; c.y += c.lvy * dt; c.z += c.lvz * dt;
-      this.track.groundAt(c.x, c.z, this._gq);
-      const gh = this._gq.h;
+      this.track.groundAt(c.x, c.z, this._gq, c.y + 0.5);
+      const gh = c.gy = this._gq.h;
       const onGround = c.y <= gh + 0.01;
       if (onGround) {
         c.y = gh;
@@ -569,8 +569,8 @@
         m4.compose(p, q, s1);
         const mesh = this.meshes[c.ti];
         mesh.bm.setMatrixAt(c.idx, m4); mesh.lm.setMatrixAt(c.idx, m4);
-        const air = Math.max(0, c.y);
-        p.set(c.x, 0.04, c.z);
+        const gy = c.gy || 0, air = Math.max(0, c.y - gy);
+        p.set(c.x, gy + 0.04, c.z);
         sb.set(c.t.wid * 1.5, 1, c.t.len * 1.25).multiplyScalar(Math.max(0.3, 1 - air * 0.1));
         q.setFromAxisAngle(_up, c.yaw);
         m4.compose(p, q, sb);

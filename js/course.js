@@ -35,20 +35,20 @@
   const PL = 4.6, PW = 2.05; // roadster footprint, same as traffic collisions
   const PIV = 15, CHAIN = 13.2, BALL = 1.8; // wrecking ball: pivot height, chain length, ball radius
 
-  // the editor's catalogue. len: rough length along the road · params: [key, label, min, max, step] ('lat' = across
+  // the editor's catalogue. len: rough length along the road · params: [key, label, min, max, step, default] ('lat' = across
   // the road) · rnd: parameters rolled at random when the piece is placed (REROLL draws them again)
   const LAT = 'lat';
   G.PIECE_CATS = [['set', 'SET PIECES'], ['obs', 'OBSTACLES'], ['jump', 'JUMPS & PADS'], ['haz', 'HAZARDS'], ['pick', 'PICKUPS']];
   G.PIECES = {
-    chicane: { name: 'Chicane', cat: 'set', len: 36, desc: 'Two staggered barrier walls, mines overhead', params: [['m', 'Opening', -1, 1, 2]], rnd: ['m', 'b'] },
-    needle: { name: 'Needle gates', cat: 'set', len: 50, desc: 'Full-width walls with one narrow slot each', params: [], rnd: ['c', 'b'] },
+    chicane: { name: 'Chicane', cat: 'set', len: 36, desc: 'Two staggered barrier walls, mines overhead', params: [['m', 'Opening', -1, 1, 2], ['dy', 'Mine height', -6, 20, 0.5, 0]], rnd: ['m', 'b'] },
+    needle: { name: 'Needle gates', cat: 'set', len: 50, desc: 'Full-width walls with one narrow slot each', params: [['dy', 'Mine height', -6, 20, 0.5, 0]], rnd: ['c', 'b'] },
     containers: { name: 'Container stack', cat: 'set', len: 46, desc: 'Kickers onto a block of containers, alley through the middle', params: [['a', 'Alley', LAT]], rnd: ['a', 'cols'] },
-    slalom: { name: 'Bollard slalom', cat: 'set', len: 98, desc: 'Six rows of bollards, the gap swaps sides', params: [['f', 'First gap', -1, 1, 2]], rnd: ['b1', 'b2'] },
+    slalom: { name: 'Bollard slalom', cat: 'set', len: 98, desc: 'Six rows of bollards, the gap swaps sides', params: [['f', 'First gap', -1, 1, 2], ['dy', 'Mine height', -6, 20, 0.5, 0]], rnd: ['b1', 'b2'] },
     crates: { name: 'Crate wall', cat: 'set', len: 16, desc: 'Smash through or fly the kicker', params: [['c', 'Kicker', LAT]], rnd: ['c', 'sp'] },
     loop: { name: '360° loop', cat: 'set', len: 34, desc: 'Enter on the yellow lane above 85 km/h', params: [['side', 'Side', -1, 1, 2]], rnd: ['side'] },
     hoops: { name: 'Ring chain', cat: 'set', len: 96, desc: 'A kicker into five floating rings', params: [['c', 'Kicker', LAT], ['w', 'Weave', -1, 1, 2]], rnd: ['c', 'w'] },
     goal: { name: 'Field goal', cat: 'set', len: 50, desc: 'Kick off the ramp between the uprights', params: [['c', 'Line', LAT]], rnd: ['c'] },
-    minerow: { name: 'Mine row', cat: 'set', len: 6, desc: 'Five floating mines across the street', params: [], rnd: ['b'] },
+    minerow: { name: 'Mine row', cat: 'set', len: 6, desc: 'Five floating mines across the street', params: [['dy', 'Mine height', -6, 20, 0.5, 0]], rnd: ['b'] },
     barrier: { name: 'Barrier', cat: 'obs', len: 1, desc: 'Low striped barrier, jump it for a bonus', params: [['lat', 'Lane', LAT], ['w', 'Width', 2, 32, 1]] },
     wall: { name: 'Concrete wall', cat: 'obs', len: 1, desc: 'Tall wall: go round or fly over', params: [['lat', 'Lane', LAT], ['w', 'Width', 2, 32, 1]] },
     pillar: { name: 'Pillar', cat: 'obs', len: 1, desc: 'Glowing pillar', params: [['lat', 'Lane', LAT]] },
@@ -369,7 +369,8 @@
           row.push([lat, ds, y0, ph]);
         }
       }
-      for (const m of row) if (Array.isArray(m)) this.mine(s, +m[0] || 0, +m[1] || 0, +m[2] || 8, +m[3] || 0);
+      const dy = +p.dy || 0; // the editor's height shift for the whole row
+      for (const m of row) if (Array.isArray(m)) this.mine(s, +m[0] || 0, +m[1] || 0, Math.max(1, (+m[2] || 8) + dy), +m[3] || 0);
     }
 
     // ---------- meshes ----------

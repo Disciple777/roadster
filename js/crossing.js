@@ -34,6 +34,7 @@
         const s = G.wrap(f * L + d, L);
         if (s < 170 || s > L - 100) continue;
         if (track.ramps.some((r) => Math.abs(swrap(r.s - s, L)) < 80)) continue;
+        if (track.elev && !track.flatAt(s, 60)) continue; // only at street level, clear of the flyovers
         if (out.some((x) => Math.abs(swrap(x.s - s, L)) < 320)) continue;
         let kk = 0;
         for (let e = -40; e <= 40; e += 10) kk = Math.max(kk, track.curvatureAt(s + e));

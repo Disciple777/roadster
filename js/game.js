@@ -105,7 +105,7 @@
       this.mode = 'race';
       this.timeScale = 1;
       this.score = 0; this.combo = 1; this.comboT = 0;
-      this.raceTime = 0; this.bestKey = this.settings.track === 'highway' ? 'bestLap_highway' : 'bestLap'; // lap records are per circuit
+      this.raceTime = 0; this.bestKey = this.settings.track === 'city' ? 'bestLap' : 'bestLap_' + this.settings.track; // lap records are per circuit
       this.bestLap = G.store.get(this.bestKey, 1e9);
       this.pickups = [];
       this.camMode = this.settings.camera | 0;
@@ -141,10 +141,21 @@
       rampAt.forEach((f, i) => {
         // find a low-curvature spot near f
         let best = f * L, bk = 1e9;
-        for (let d = -150; d <= 150; d += 10) { const k = track.curvatureAt(f * L + d); if (k < bk) { bk = k; best = f * L + d; } }
+        for (let d = -150; d <= 150; d += 10) {
+          const s = f * L + d, k = track.curvatureAt(s);
+          // on the decks: only where the road is level and nothing passes overhead or underneath
+          if (track.elev && (Math.abs(track.gradeAt(s)) > 0.008 || Math.abs(track.gradeAt(s + 40)) > 0.008 || !track.clearAt(s, 40))) continue;
+          if (k < bk) { bk = k; best = s; }
+        }
         const F = G.LANES_FWD; // wide roads: scatter them across the lanes
         track.addRamp(best, F[(i * (F.length > 3 ? 3 : 1)) % F.length], 15, 7, i % 3 === 2 ? 3.4 : 2.7);
       });
+      if (G.TRACK.bridges) {
+        // footbridges: fine at road speed, a wall to anyone who jumps or thrusts into them
+        const spots = track.ramps.filter((r, i) => i % 2 === 0).map((r) => r.s + 52);
+        for (const f of [0.19, 0.44, 0.7, 0.96]) spots.push(f * L);
+        for (const s of spots) if (track.clearAt(s, 24)) track.addBridge(s);
+      }
       track.crossings = G.placeCrossings(track); // cross streets with traffic lights (the city keeps them clear)
       track.buildMeshes(this.scene, Q);
       $('load-text').textContent = 'Lighting the streets…';
@@ -261,9 +272,10 @@
         const cap = new T.Mesh(new T.CylinderGeometry(0.2, 0.42, 0.25, 16), mat); cap.position.y = 0.77; g.add(cap);
         const ring = new T.Mesh(ringGeo, ringMat); ring.rotation.x = Math.PI / 2; g.add(ring);
         const p = tr.pointAt(sp.s, sp.lat, {});
-        g.position.set(p.x, sp.y, p.z);
+        const y = sp.y + tr.heightAt(sp.s);
+        g.position.set(p.x, y, p.z);
         this.scene.add(g);
-        this.pickups.push({ g, ring, x: p.x, y: sp.y, z: p.z, active: true, t: 0 });
+        this.pickups.push({ g, ring, x: p.x, y, z: p.z, active: true, t: 0 });
       }
     }
 
@@ -432,6 +444,11 @@
 
     showPanel(name, mode) {
       if (mode) { this.pendingMode = mode; $('setup-title').textContent = mode === 'race' ? 'STREET RACE' : mode === 'course' ? G.COURSES.street.name : 'FREE RIDE'; $('setup').classList.toggle('free', mode === 'free'); $('setup').classList.toggle('course', mode === 'course'); this.updateOfficial(); }
+      // the obstacle course has no layout on circuits like the Skyway: switch to Downtown
+      if (mode === 'course' && G.TRACKS[this.settings.track].noCourse) {
+        this.settings.track = 'city'; this.saveSettings('track');
+        $('s-track').querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === 'city'));
+      }
       this.panelStack = this.panelStack || [];
       const cur = document.querySelector('.panel.open');
       if (cur) { this.panelStack.push(cur.id); cur.classList.remove('open'); }
@@ -497,7 +514,7 @@
       const miss = G.unofficial(mode, this.laps, this.settings);
       if (miss.length) { el.textContent = `Practice run: ranked runs need ${miss.join(', ')}.`; return; }
       el.textContent = 'Sending to the leaderboard…';
-      const where = (G.TRACK_ID === 'highway' ? 'EXPRESSWAY' : 'DOWNTOWN') + (mode === 'race' ? ' street race' : ' obstacle course');
+      const where = G.TRACK.name + (mode === 'race' ? ' street race' : ' obstacle course');
       G.api.submit({
         name: this.settings.mpName, track: G.TRACK_ID, mode, laps: this.laps,
         traffic: this.settings.traffic, rivals: this.settings.rivals, difficulty: this.settings.difficulty,

@@ -316,7 +316,7 @@
 
     // ---------- street lights ----------
     const lamps = [];
-    for (const sg of [1, -1]) for (let s = sg > 0 ? 0 : 20; s < track.length; s += 40) if (!G.nearCrossingS(track, s, 3)) lamps.push({ s, sg });
+    for (const sg of [1, -1]) for (let s = sg > 0 ? 0 : 20; s < track.length; s += 40) if (!G.nearCrossingS(track, s, 3) && track.clearAt(s, 8)) lamps.push({ s, sg });
     const poleGeo = new T.CylinderGeometry(0.12, 0.18, 9, 6); poleGeo.translate(0, 4.5, 0);
     const armGeo = new T.BoxGeometry(0.15, 0.15, 3.2);
     const headGeo = new T.BoxGeometry(0.5, 0.14, 1.1);
@@ -345,16 +345,16 @@
       const p = track.sample(l.s, {});
       const yaw = Math.atan2(-p.tx, -p.tz);
       const lat = l.sg * (G.WALK_OUT - 0.8);
-      const x = p.x + p.rx * lat, z = p.z + p.rz * lat;
+      const x = p.x + p.rx * lat, z = p.z + p.rz * lat, y = track.heightAt(l.s); // decks lift the lamps with them
       qq.setFromAxisAngle(up, yaw);
-      m4.compose(ps.set(x, 0, z), qq, sc.set(1, 1, 1)); pole.setMatrixAt(i, m4);
+      m4.compose(ps.set(x, y, z), qq, sc.set(1, 1, 1)); pole.setMatrixAt(i, m4);
       const ax = p.x + p.rx * (lat - l.sg * 1.6), az = p.z + p.rz * (lat - l.sg * 1.6);
       const qa = new T.Quaternion().setFromAxisAngle(up, yaw + Math.PI / 2);
-      m4.compose(ps.set(ax, 9, az), qa, sc.set(1, 1, 1)); arm.setMatrixAt(i, m4);
+      m4.compose(ps.set(ax, y + 9, az), qa, sc.set(1, 1, 1)); arm.setMatrixAt(i, m4);
       const hx = p.x + p.rx * (lat - l.sg * 3.0), hz = p.z + p.rz * (lat - l.sg * 3.0);
-      m4.compose(ps.set(hx, 8.9, hz), qa, sc.set(1, 1, 1)); head.setMatrixAt(i, m4);
-      if (cones) { m4.compose(ps.set(hx, 8.8, hz), qq, sc.set(1, 1, 1)); cones.setMatrixAt(i, m4); }
-      m4.compose(ps.set(hx, 0.025, hz), qq, sc.set(17, 1, 17)); pools.setMatrixAt(i, m4);
+      m4.compose(ps.set(hx, y + 8.9, hz), qa, sc.set(1, 1, 1)); head.setMatrixAt(i, m4);
+      if (cones) { m4.compose(ps.set(hx, y + 8.8, hz), qq, sc.set(1, 1, 1)); cones.setMatrixAt(i, m4); }
+      m4.compose(ps.set(hx, y + 0.025, hz), qq, sc.set(17, 1, 17)); pools.setMatrixAt(i, m4);
     });
     for (const m of [pole, arm, head, pools]) { m.frustumCulled = false; scene.add(m); }
     pole.castShadow = Q.shadows;
@@ -362,7 +362,7 @@
 
     // ---------- street trees: leaf-card crowns, branching trunks, iron grates, between the lamps ----------
     let treeTime = null;
-    if (Q.level >= 2) {
+    if (Q.level >= 2 && G.TRACK.trees !== false) {
       const trees = [];
       for (let s = 0; s < track.length - 40; s += 40) trees.push({ s: s + 13, sg: 1 }, { s: s + 27, sg: 1 }, { s: s + 7, sg: -1 }, { s: s + 33, sg: -1 });
       for (let k = trees.length - 1; k >= 0; k--) if (G.nearCrossingS(track, trees[k].s, 3)) trees.splice(k, 1); // cross streets

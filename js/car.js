@@ -335,19 +335,20 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     place(s, lat, speed = 0) {
       const tr = this.game.track;
       const p = tr.sample(s, {});
-      this.pos.set(p.x + p.rx * lat, 0.02, p.z + p.rz * lat);
+      const y = tr.heightAt(s);
+      this.pos.set(p.x + p.rx * lat, y + 0.02, p.z + p.rz * lat);
       this.q.setFromAxisAngle(_v[0].set(0, 1, 0), Math.atan2(-p.tx, -p.tz));
       this.vel.set(p.tx * speed, 0, p.tz * speed);
       this.w.set(0, 0, 0);
       this.ride = null;
       for (const w of this.wheels) { w.comp = 0.1; w.len = REST - 0.1; w.spinV = 0; }
       this.near.i = -1;
-      tr.nearest(this.pos.x, this.pos.z, -1, this.near);
+      tr.nearest(this.pos.x, this.pos.z, -1, this.near, y);
       this.flipT = 0; this.airTime = 0;
     }
 
     ground(x, z, yRef) {
-      this.game.track.groundAt(x, z, gq);
+      this.game.track.groundAt(x, z, gq, yRef);
       if (this.game.traffic) this.game.traffic.roofAt(x, z, yRef, gq, this.tnear);
       if (this.game.course) this.game.course.groundAt(x, z, yRef, gq);
       return gq;
@@ -435,10 +436,10 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       this.contacts = contacts;
 
       // --- body contact points (roof, nose, corners) ---
-      let bodyContact = false;
+      let bodyContact = false; const elev = this.game.track.elev;
       for (const bp of BODY_PTS) {
         const P = _v[8].set(bp[0], bp[1], bp[2]).applyQuaternion(q).add(pos);
-        const g = this.ground(P.x, P.z, P.y + 0.4);
+        const g = this.ground(P.x, P.z, elev ? Math.min(P.y + 0.4, pos.y + 0.6) : P.y + 0.4); // capped: a roof point under a deck must not take it for ground
         const depth = g.h - P.y;
         if (depth <= 0) continue;
         bodyContact = true;
@@ -554,7 +555,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
 
       // --- walls (building line) ---
       const tr = this.game.track;
-      tr.nearest(pos.x, pos.z, this.near.i, this.near);
+      tr.nearest(pos.x, pos.z, this.near.i, this.near, grounded ? pos.y - 0.5 : undefined);
       const lim = G.WALL - 1.1;
       const lat = this.near.lat;
       if (Math.abs(lat) > lim) {
@@ -574,6 +575,30 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
         } else if (Math.abs(vel.x * this.near.tx + vel.z * this.near.tz) > 8) {
           this.onScrape(pos, 10);
         }
+      }
+
+      // --- decks overhead and footbridges (elevated circuits) ---
+      if (tr.elev) {
+        const c = tr.groundAt(pos.x, pos.z, gq, pos.y).ceil;
+        if (pos.y + 1.25 > c) {
+          pos.y = c - 1.25;
+          if (vel.y > 0) { const vn = vel.y; vel.y = -vn * 0.3; vel.x *= 0.9; vel.z *= 0.9; this.onWallHit(pos, vn, this.speed); }
+        }
+        for (const b of tr.bridges) {
+          if (pos.y + 1.2 < b.y0 || pos.y > b.y1 - 0.3) continue; // body spans pos.y+0.2 .. +1.2: on top is fine
+          const dx = pos.x - b.x, dz = pos.z - b.z, along = dx * b.tx + dz * b.tz;
+          const reach = b.hl + 2.2;
+          if (Math.abs(along) > reach || Math.abs(dx * b.rx + dz * b.rz) > b.hw) continue;
+          const vt = vel.x * b.tx + vel.z * b.tz, sg = vt !== 0 ? -Math.sign(vt) : Math.sign(along) || 1;
+          pos.x += b.tx * (sg * reach - along); pos.z += b.tz * (sg * reach - along);
+          if (vt * sg < 0) {
+            vel.x -= b.tx * vt * 1.3; vel.z -= b.tz * vt * 1.3;
+            w.x += (Math.random() - 0.5) * 2; w.z += (Math.random() - 0.5) * 2;
+            this.onWallHit(pos, Math.abs(vt), 0);
+          }
+        }
+        // dropped off a deck somehow: put the car back on its road
+        if (pos.y < tr.heightAt(this.near.s) - 4) this.onFlipped();
       }
 
       // --- street trees: solid until hit, then they snap and the car loses a good chunk of its speed ---

@@ -7,7 +7,7 @@
   const $ = (id) => document.getElementById(id);
   const MAX_ITEMS = 600;
   const CAT_COL = { set: '#ffc21a', obs: '#ff7a3a', jump: '#5fd4ff', haz: '#ff3a4c', pick: '#6dffa8' };
-  const TRACK_NAME = { city: 'DOWNTOWN', highway: 'EXPRESSWAY' };
+  const TRACK_NAME = { city: 'DOWNTOWN', highway: 'EXPRESSWAY', skyway: 'SKYWAY' };
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const cleanName = (t, f) => String(t || '').replace(/[^\w \-.!?'#&]/g, '').trim().slice(0, 24).toUpperCase() || f;
@@ -38,7 +38,7 @@
     // ---------------- the courses panel ----------------
     wireHome() {
       const g = this.game;
-      this.newTrack = G.TRACK_ID; this.newBase = 'blank';
+      this.newTrack = G.TRACK.noCourse ? 'city' : G.TRACK_ID; this.newBase = 'blank';
       const seg = (id, key) => {
         const el = $(id), set = () => el.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === this[key]));
         el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { this[key] = b.dataset.v; set(); }));
@@ -271,6 +271,28 @@
       this.select(this.def.items.length - 1);
       this.camS = c.s - 20;
     }
+    // the clipboard holds one piece; it's kept in the browser so it survives switching courses or tracks
+    copy(cut) {
+      if (this.sel < 0) return;
+      const it = this.def.items[this.sel];
+      G.store.set('edClip', clone(it));
+      this.msg(`${cut ? 'Cut' : 'Copied'}: ${(G.PIECES[it.t] || { name: it.t }).name} (Ctrl+V pastes under the pointer)`);
+      if (cut) this.remove();
+    }
+    paste() {
+      const c = G.store.get('edClip', null);
+      if (!c || !G.PIECES[c.t]) { this.msg('Nothing copied yet: select a piece and press Ctrl+C', true); return; }
+      if (this.def.items.length >= MAX_ITEMS) { this.msg(`A course holds at most ${MAX_ITEMS} pieces`, true); return; }
+      this.snapshot();
+      const it = clone(c), h = this.hover, lk = firstLat(it.t);
+      if (!it.p || typeof it.p !== 'object') it.p = {};
+      // under the pointer if it's on the road, else in the middle of the view
+      it.s = Math.round(G.wrap(h ? h.s : this.camS + 25, this.game.track.length) * 10) / 10;
+      if (h && lk) it.p[lk] = Math.round(h.lat * 10) / 10;
+      this.def.items.push(it);
+      this.rebuild();
+      this.select(this.def.items.length - 1);
+    }
     reroll() {
       if (this.sel < 0) return;
       const it = this.def.items[this.sel], d = G.PIECES[it.t];
@@ -315,12 +337,12 @@
       const row = (key, label, min, max, step, v) => `<div class="prm"><div><span>${esc(label)}</span><b data-v="${key}">${fmt(v, step)}</b></div><input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${v}"></div>`;
       const fmt = (v, step) => (step >= 1 ? String(Math.round(v)) : Number(v).toFixed(1));
       h += row('_s', 'Position (m)', 0, Math.floor(L), 1, it.s);
-      for (const [k, label, a, b, st] of d.params) {
+      for (const [k, label, a, b, st, def] of d.params) {
         const lat = a === 'lat', min = lat ? -(R - 0.5) : a, max = lat ? R - 0.5 : b, step = lat ? 0.1 : st;
-        const v = it.p[k] != null && Number.isFinite(+it.p[k]) ? +it.p[k] : lat ? 0 : min;
+        const v = it.p[k] != null && Number.isFinite(+it.p[k]) ? +it.p[k] : lat ? 0 : def ?? min;
         h += row(k, label, min, max, step, v);
       }
-      h += `<div class="btns"><button data-b="dup" title="Ctrl+D">DUPLICATE</button>${d.rnd ? '<button data-b="reroll" title="New random details">REROLL</button>' : ''}<button data-b="del" class="warn" title="Delete">DELETE</button></div>`;
+      h += `<div class="btns"><button data-b="dup" title="Ctrl+D (or Ctrl+drag)">DUPLICATE</button><button data-b="copy" title="Ctrl+C, then Ctrl+V to paste">COPY</button>${d.rnd ? '<button data-b="reroll" title="New random details">REROLL</button>' : ''}<button data-b="del" class="warn" title="Delete">DELETE</button></div>`;
       el.innerHTML = h;
     }
 
@@ -339,7 +361,7 @@
       insp.addEventListener('click', (e) => {
         const b = e.target.closest('button[data-b]');
         if (!b) return;
-        if (b.dataset.b === 'dup') this.duplicate(); else if (b.dataset.b === 'del') this.remove(); else this.reroll();
+        if (b.dataset.b === 'dup') this.duplicate(); else if (b.dataset.b === 'copy') this.copy(); else if (b.dataset.b === 'del') this.remove(); else this.reroll();
       });
       insp.addEventListener('pointerdown', (e) => { if (e.target.type === 'range') this._slid = false; });
       insp.addEventListener('input', (e) => {
@@ -418,7 +440,8 @@
       if (i >= 0) {
         if (i !== this.sel) this.select(i);
         const it = this.def.items[i], lk = firstLat(it.t);
-        this.drag = { item: i, ds: it.s - q.s, dl: lk ? (+it.p[lk] || 0) - q.lat : 0, lk, moved: false, strip: q.strip };
+        // Ctrl+drag drags off a copy and leaves the original where it was
+        this.drag = { item: i, ds: it.s - q.s, dl: lk ? (+it.p[lk] || 0) - q.lat : 0, lk, moved: false, strip: q.strip, copy: e.ctrlKey || e.metaKey };
       } else {
         this.select(-1);
         this.drag = { pan: true, x: e.clientX, y: e.clientY, s0: this.camS, strip: q.strip };
@@ -435,8 +458,16 @@
         return;
       }
       if (!q) return;
+      if (!d.moved) {
+        this.snapshot(); d.moved = true;
+        if (d.copy && this.def.items.length < MAX_ITEMS) {
+          this.def.items.push(clone(this.def.items[d.item]));
+          d.item = this.def.items.length - 1;
+          this.select(d.item);
+          this.msg('Copy');
+        }
+      }
       const it = this.def.items[d.item];
-      if (!d.moved) { this.snapshot(); d.moved = true; }
       it.s = Math.round(G.wrap(q.s + d.ds, this.game.track.length) * 10) / 10;
       if (d.lk) it.p[d.lk] = Math.round(G.clamp(q.lat + d.dl, -G.ROAD_HALF + 0.5, G.ROAD_HALF - 0.5) * 10) / 10;
       this.touch();
@@ -457,6 +488,8 @@
       const k = e.code, ctrl = e.ctrlKey || e.metaKey, big = e.shiftKey ? 5 : 1;
       if (ctrl && k === 'KeyZ') { e.preventDefault(); this.undo(); return; }
       if (ctrl && k === 'KeyD') { e.preventDefault(); this.duplicate(); return; }
+      if (ctrl && (k === 'KeyC' || k === 'KeyX')) { e.preventDefault(); this.copy(k === 'KeyX'); return; }
+      if (ctrl && k === 'KeyV') { e.preventDefault(); this.paste(); return; }
       if (ctrl && k === 'KeyS') { e.preventDefault(); if (this.official) this.saveOfficial(); else this.save(); return; }
       if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); this.remove(); return; }
       if (k === 'Escape') { if (this.tool) this.setTool(this.tool); else this.select(-1); return; }
@@ -576,7 +609,7 @@
       c.strokeStyle = 'rgba(95,212,255,0.8)'; c.lineWidth = 1;
       c.strokeRect(X(this.camS - 5), 1, ((60 * this.zoom) / v.span) * W, H - 2);
       c.fillStyle = 'rgba(255,255,255,0.5)';
-      c.fillText('scroll / drag: move along the lap · ctrl+scroll: zoom · Del: delete · ctrl+Z: undo', 6, 11);
+      c.fillText('scroll / drag: move along the lap · ctrl+scroll: zoom · Del: delete · ctrl+Z: undo · ctrl+C / ctrl+V: copy, paste · ctrl+drag: drag a copy', 6, 11);
 
       // whole-lap overview
       const ov = $('ed-over'), o = fit(ov), OW = ov.clientWidth, OH = ov.clientHeight;
