@@ -18,12 +18,12 @@
     [-0.55, 0.91, 0.20, 0.34, 0.98, 0.86, 0.90, 0.905, 0.86, 0.890, 0.64, 1.110, 1.150],
     [-0.10, 0.91, 0.20, 0.34, 0.98, 0.87, 0.90, 0.915, 0.87, 0.900, 0.68, 1.210, 1.255],
     [0.35, 0.91, 0.20, 0.34, 0.99, 0.88, 0.91, 0.930, 0.88, 0.915, 0.68, 1.220, 1.265],
-    [0.90, 0.92, 0.20, 0.35, 1.02, 0.89, 0.93, 0.960, 0.86, 0.935, 0.63, 1.150, 1.195],
-    [1.35, 0.94, 0.20, 0.36, 1.03, 0.90, 0.94, 1.000, 0.74, 0.955, 0.48, 1.040, 1.065],
-    [1.75, 0.95, 0.20, 0.37, 1.03, 0.91, 0.95, 1.080, 0.64, 0.900, 0.34, 0.910, 0.920],
-    [2.05, 0.95, 0.21, 0.38, 1.02, 0.91, 0.95, 1.120, 0.62, 0.880, 0.30, 0.885, 0.885],
-    [2.30, 0.94, 0.25, 0.40, 1.00, 0.89, 0.93, 1.100, 0.62, 0.860, 0.30, 0.860, 0.860],
-    [2.36, 0.90, 0.29, 0.42, 0.96, 0.87, 0.89, 1.040, 0.60, 0.840, 0.30, 0.840, 0.840],
+    [0.90, 0.92, 0.20, 0.35, 1.02, 0.89, 0.93, 0.950, 0.86, 0.930, 0.62, 1.120, 1.160],
+    [1.35, 0.94, 0.20, 0.36, 1.03, 0.90, 0.94, 0.970, 0.74, 0.945, 0.46, 1.000, 1.020],
+    [1.75, 0.95, 0.20, 0.37, 1.03, 0.91, 0.95, 1.000, 0.64, 0.905, 0.34, 0.905, 0.915],
+    [2.05, 0.95, 0.21, 0.38, 1.02, 0.91, 0.95, 1.020, 0.62, 0.900, 0.30, 0.905, 0.905],
+    [2.30, 0.94, 0.25, 0.40, 1.00, 0.89, 0.93, 1.015, 0.62, 0.925, 0.30, 0.930, 0.930],
+    [2.36, 0.90, 0.29, 0.42, 0.96, 0.87, 0.89, 0.975, 0.60, 0.900, 0.30, 0.900, 0.900],
   ];
   const WHEEL_Z = [-1.42, 1.45], ARCH_R = 0.45, WHEEL_Y = 0.36;
   const GLASS_Z = [-1.0, 1.75];
@@ -141,11 +141,13 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
       const m = new T.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); group.add(m); return m;
     };
-    // nose: full-width light bar on the leading edge, dark intake band and splitter below
+    // nose: two slim light blades angled in towards a body-colour gap, dark intake band and splitter below
     const front = new T.MeshBasicMaterial({ color: new T.Color(1.6, 1.6, 1.75), toneMapped: false });
-    add(new T.BoxGeometry(1.72, 0.02, 0.03), front, 0, 0.505, -2.372);
+    for (const sx of [-1, 1]) add(new T.BoxGeometry(0.66, 0.022, 0.03), front, sx * 0.53, 0.505, -2.372, 0, 0, sx * 0.05);
     add(new T.BoxGeometry(1.62, 0.1, 0.03), new T.MeshStandardMaterial({ color: 0x050506, metalness: 0.6, roughness: 0.25 }), 0, 0.44, -2.37);
     add(new T.BoxGeometry(1.2, 0.05, 0.03), satin, 0, 0.335, -2.37);
+    // hood: a pair of dark heat vents ahead of the windscreen, laid along the hood's slope
+    for (const sx of [-1, 1]) add(new T.BoxGeometry(0.3, 0.012, 0.2), trim, sx * 0.3, 0.822, -1.55, -0.28, 0, 0);
     // gull-wing door shut lines: thin dark strips laid on the side between sill top and shoulder crease
     const seamMat = new T.MeshBasicMaterial({ color: 0x050506 });
     for (const zc of [-0.92, 0.98]) {
@@ -156,9 +158,10 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     // amber side markers behind the front arches
     const amber = new T.MeshBasicMaterial({ color: new T.Color(1.2, 0.45, 0.04), toneMapped: false });
     for (const sx of [-1, 1]) add(new T.BoxGeometry(0.01, 0.025, 0.12), amber, sx * 0.995, 0.8, -0.8);
-    // tail: full-width red bar under the deck lip, body-colour panel, dark diffuser with four nozzles
+    // tail: a red blade at each corner joined by a thin line under the ducktail lip, body-colour panel, dark diffuser with four nozzles
     const tail = new T.MeshBasicMaterial({ color: new T.Color(1.5, 0.04, 0.05), toneMapped: false });
-    add(new T.BoxGeometry(1.86, 0.035, 0.03), tail, 0, 0.83, 2.372);
+    for (const sx of [-1, 1]) add(new T.BoxGeometry(0.5, 0.05, 0.03), tail, sx * 0.68, 0.83, 2.372);
+    add(new T.BoxGeometry(0.88, 0.012, 0.03), tail, 0, 0.83, 2.372);
     add(new T.BoxGeometry(1.7, 0.2, 0.02), paint, 0, 0.7, 2.37);
     add(new T.BoxGeometry(1.7, 0.3, 0.42), trim, 0, 0.42, 2.17);
     for (let i = -2; i <= 2; i++) add(new T.BoxGeometry(0.025, 0.16, 0.4), satin, i * 0.34, 0.38, 2.2);
@@ -186,19 +189,16 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       ctx.fillStyle = '#222'; ctx.font = 'bold 26px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('RDSTR', W / 2, H / 2 + 1);
     });
     add(new T.PlaneGeometry(0.42, 0.13), new T.MeshStandardMaterial({ map: plateTex, roughness: 0.5 }), 0, 0.68, 2.382);
-    // wing: thin airfoil wider than the body, swan-neck posts, endplates with red light strips
+    // wing: a low, narrower blade inside the body width, short posts rising out of the ducktail, red light tips
     const foil = new T.Shape();
     foil.moveTo(0, 0); foil.quadraticCurveTo(0.12, 0.05, 0.46, 0.012); foil.lineTo(0.46, -0.005); foil.quadraticCurveTo(0.2, 0.0, 0, -0.015);
-    const wingGeo = new T.ExtrudeGeometry(foil, { depth: 2.12, bevelEnabled: false, curveSegments: 8 });
-    wingGeo.translate(-0.23, 0, -1.06); wingGeo.rotateY(-Math.PI / 2);
-    add(wingGeo, trim, 0, 1.26, 2.08, 0.1, 0, 0);
-    const postGeo = new T.BoxGeometry(0.04, 0.34, 0.16);
+    const wingGeo = new T.ExtrudeGeometry(foil, { depth: 1.72, bevelEnabled: false, curveSegments: 8 });
+    wingGeo.translate(-0.23, 0, -0.86); wingGeo.rotateY(-Math.PI / 2);
+    add(wingGeo, trim, 0, 1.13, 2.1, 0.1, 0, 0);
+    const postGeo = new T.BoxGeometry(0.04, 0.24, 0.14);
     for (const sx of [-1, 1]) {
-      add(postGeo, trim, sx * 0.5, 1.1, 2.14, -0.25, 0, 0);
-      const ep = new T.Shape(); ep.moveTo(0, 0); ep.lineTo(0.5, 0.04); ep.lineTo(0.5, -0.12); ep.lineTo(0.1, -0.2); ep.lineTo(0, -0.08);
-      const epGeo = new T.ExtrudeGeometry(ep, { depth: 0.02, bevelEnabled: false }); epGeo.rotateY(-Math.PI / 2);
-      add(epGeo, trim, sx * 1.07 + (sx < 0 ? 0.02 : 0), 1.3, 1.84);
-      add(new T.BoxGeometry(0.025, 0.025, 0.42), tail, sx * 1.075, 1.26, 2.08, 0.15, 0, 0);
+      add(postGeo, trim, sx * 0.42, 1.02, 2.12, -0.2, 0, 0);
+      add(new T.BoxGeometry(0.03, 0.025, 0.38), tail, sx * 0.865, 1.13, 2.1, 0.1, 0, 0);
     }
     // under thrusters (4): FL, FR, RL, RR
     const underGlow = new T.MeshBasicMaterial({ color: new T.Color(0.05, 0.08, 0.12), toneMapped: false, side: T.DoubleSide });

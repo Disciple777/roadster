@@ -50,6 +50,7 @@ button.primary:hover { background: linear-gradient(135deg, #ff4152, #d81a33); }
 .logo-tag { margin-top: 10px; font-size: clamp(13px, 1.8vw, 18px); letter-spacing: 0.4em; color: var(--cyan); text-transform: uppercase; }
 .menu-btns { display: flex; flex-direction: column; gap: 10px; width: min(320px, 80vw); }
 .menu-btns .big { padding: 16px; font-size: 16px; text-align: left; }
+.menu-btns .big small { font-family: 'Rajdhani', sans-serif; font-size: 0.8em; font-weight: 600; letter-spacing: 0.06em; color: var(--dim); margin-left: 6px; }
 .menu-btns .row2 { display: flex; gap: 10px; }
 .menu-btns .row2 button { flex: 1; }
 /* donate link: PayPal in a new tab */
@@ -186,6 +187,23 @@ body.touch.playing #touch { display: block; }
 .tb-drift { right: 196px; bottom: 16px; width: 66px; height: 66px; border-radius: 14px; }
 .tb-r, .tb-l { border-color: rgba(95, 212, 255, 0.5); }
 .tb-boost { bottom: 76px; }
+/* tilt steering: no stick zone. Left edge: L thruster over BRAKE. Right corner: GAS, BOOST to its left, JUMP above it, R on top; DRIFT stays put */
+#touch { --k: 1; }
+#touch.tilt .t-zone { display: none; }
+.tb-accel { display: none; }
+#touch.tilt .t-cluster { inset: 0; width: auto; height: auto; pointer-events: none; transform: none; }
+#touch.tilt .tb { pointer-events: auto; }
+#touch.tilt .tb-accel { display: flex; right: calc(10px + var(--sa-r)); bottom: calc(10px + var(--sa-b)); width: calc(98px * var(--k)); height: calc(98px * var(--k)); border-color: rgba(60, 255, 150, 0.7); background: rgba(60, 255, 150, 0.16); }
+#touch.tilt .tb-accel b { font-size: 13px; }
+#touch.tilt .tb-accel.on { background: rgba(60, 255, 150, 0.55); box-shadow: 0 0 26px rgba(60, 255, 150, 0.8); }
+#touch.tilt .tb-boost { right: calc(10px + var(--sa-r) + 104px * var(--k)); bottom: calc(10px + var(--sa-b) + 6px * var(--k)); width: calc(86px * var(--k)); height: calc(86px * var(--k)); }
+#touch.tilt .tb-drift { right: calc(10px + var(--sa-r) + 196px * var(--k)); bottom: calc(10px + var(--sa-b) + 16px * var(--k)); width: calc(66px * var(--k)); height: calc(66px * var(--k)); }
+#touch.tilt .tb-jump { right: calc(10px + var(--sa-r) + 6px * var(--k)); bottom: calc(10px + var(--sa-b) + 104px * var(--k)); width: calc(86px * var(--k)); height: calc(86px * var(--k)); }
+#touch.tilt .tb-r { right: calc(10px + var(--sa-r) + 18px * var(--k)); bottom: calc(10px + var(--sa-b) + 196px * var(--k)); width: calc(62px * var(--k)); height: calc(62px * var(--k)); }
+#touch.tilt .tb-l { right: auto; left: calc(14px + var(--sa-l)); bottom: calc(14px + var(--sa-b) + 76px * var(--k)); width: calc(62px * var(--k)); height: calc(62px * var(--k)); }
+#touch.tilt .tb-brake { right: auto; left: calc(14px + var(--sa-l)); bottom: calc(14px + var(--sa-b)); width: calc(64px * var(--k)); height: calc(64px * var(--k)); }
+@media (max-height: 430px) { #touch.tilt { --k: 0.84; } }
+@media (max-height: 340px) { #touch.tilt { --k: 0.72; } }
 body.touch .hud-br { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(6px + var(--sa-b)); width: 170px; }
 body.touch .speedo { width: 104px; height: 104px; margin: 0 auto; }
 body.touch .speed { top: 26px; left: 50%; transform: translateX(-50%); width: 104px; }
@@ -248,6 +266,8 @@ button.wide { width: 100%; margin-top: 8px; }
 .res-rows .row.gone { opacity: 0.45; }
 .res-rows .ping { font-size: 12px; color: var(--dim); font-family: 'Orbitron'; }
 body.mp .sp-only { display: none; }
+#lb-host-opts.course .mp-race, #lb-host-opts:not(.course) .mp-course { display: none; }
+.res-rows .n small { display: block; font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--dim); }
 button:disabled { opacity: 0.4; pointer-events: none; box-shadow: none; }
 
 /* leaderboard */

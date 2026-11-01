@@ -6,3 +6,7 @@ if nothing else in game.js changed since). Old chase values:
   far cam  (mode 1): distance 10.5 + speed*1.6, height 3.6 - speed*0.25
   look target: 4 m ahead of the car, 1.0 m above it
 camera-before.png shows the old view.
+
+Car model snapshot taken 2026-11-01, before the model update (lower rear, ducktail, smaller wing, split lights, hood vents).
+To restore the old car: copy car.before-model-update-2026-11-01.js over js/car.js
+(or just its KEYS table and the nose, tail and wing parts of G.buildRoadster, if car.js changed since).

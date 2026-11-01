@@ -92,6 +92,7 @@
           <div class="tb tb-l" data-btn="thrL"><b>L</b><i>THR</i></div>
           <div class="tb tb-r" data-btn="thrR"><b>R</b><i>THR</i></div>
           <div class="tb tb-brake" data-btn="brake"><b>BRAKE</b></div>
+          <div class="tb tb-accel" data-btn="accel"><b>GAS</b></div>
           <div class="tb tb-drift" data-btn="handbrake"><b>DRIFT</b></div>
         </div>
         <div class="t-hint" id="t-hint">drag to steer</div>`;
@@ -157,6 +158,7 @@
         e.preventDefault();
         G.audio.init();
         this.lastDevice = 'touch';
+        if (this.tilt.on) root.querySelector('#t-hint').classList.add('gone'); // no stick zone to clear it
         for (const t of e.changedTouches) {
           if (e.type === 'touchend' || e.type === 'touchcancel') btnTouches.delete(t.identifier);
           else btnTouches.set(t.identifier, hit(t));
@@ -170,6 +172,7 @@
     updateHint() {
       const h = this.touchRoot && this.touchRoot.querySelector('#t-hint');
       if (h) h.textContent = this.tilt.on ? 'tilt to steer' : 'drag to steer';
+      if (this.touchRoot) this.touchRoot.classList.toggle('tilt', this.tilt.on); // tilt has its own button layout (style.css)
     }
 
     enableTilt(on) {
@@ -188,7 +191,7 @@
         });
       };
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        return DeviceOrientationEvent.requestPermission().then((r) => { if (r === 'granted') { add(); return true; } this.tilt.on = false; return false; }).catch(() => { this.tilt.on = false; return false; });
+        return DeviceOrientationEvent.requestPermission().then((r) => { if (r === 'granted') { add(); return true; } this.tilt.on = false; this.updateHint(); return false; }).catch(() => { this.tilt.on = false; this.updateHint(); return false; });
       }
       add();
       return Promise.resolve(true);
@@ -248,7 +251,8 @@
         }
         if (Math.abs(ts) > Math.abs(steer)) steer = G.clamp(ts, -1, 1);
         const ty = this.touch.y;
-        if (this.autoAccel) { if (!tb.has('brake')) throttle = Math.max(throttle, ty > 0.5 ? 0 : 1); }
+        if (this.tilt.on) { if (tb.has('accel')) throttle = 1; } // tilt: the GAS button, never automatic
+        else if (this.autoAccel) { if (!tb.has('brake')) throttle = Math.max(throttle, ty > 0.5 ? 0 : 1); }
         else if (ty < -0.25) throttle = Math.max(throttle, Math.min(1, -ty * 1.3));
         if (ty > 0.5 && !airborne) brake = Math.max(brake, (ty - 0.5) * 2);
         if (tb.has('brake')) { brake = 1; throttle = 0; }

@@ -7,11 +7,11 @@
   const PEERJS = ['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js'];
   const ID_PREFIX = 'roadster-thruster-v1-';
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
-  const MAX_PLAYERS = 6;
+  const MAX_PLAYERS = 8;
   const SEND_HZ = 20;
   const DELAY = 110; // ms of interpolation buffer
   const STALE = 4000; // ms without a packet before a car fades out
-  G.MP_COLORS = [0x1d8cff, 0xf2b705, 0x16c47f, 0xff4fd8, 0xff7a1a, 0x00d4e0]; // by join order: host, then clients
+  G.MP_COLORS = [0x1d8cff, 0xf2b705, 0x16c47f, 0xff4fd8, 0xff7a1a, 0x00d4e0, 0x9b5cff, 0xe8edf2]; // by join order: host, then clients
   const AI_ID = 100; // host-run AI rivals travel as remote cars with ids 100, 101, ...
 
   let peerLib = null;
@@ -162,7 +162,12 @@
     _onClientMsg(m) {
       if (m.t === 'roster') { this.players = m.players; this.emit('roster', this.players); }
       else if (m.t === 'pong') { const rtt = performance.now() - m.c; this.rtt = this.rtt ? this.rtt * 0.7 + rtt * 0.3 : rtt; }
-      else if (m.t === 'start') { this.race = m.race; this.emit('start', m); }
+      else if (m.t === 'cdef') this._cdef = (this._cdef || '') + m.d;
+      else if (m.t === 'start') {
+        this.race = m.race;
+        if (this._cdef) { try { m.course = JSON.parse(this._cdef); } catch (e) { /* falls back to our own copy */ } this._cdef = ''; }
+        this.emit('start', m);
+      }
       else if (m.t === 'st') this.emit('state', m.id, m);
       else if (m.t === 'ai') for (const e of m.a) { e.r = m.r; e.ts = m.ts; this.emit('state', e.id, e); }
       else if (m.t === 'tf' || m.t === 'tl') this.emit('world', m);
@@ -184,26 +189,32 @@
 
     // host only: everyone onto the grid. The countdown is sent as "GO in n seconds"; clients take off half a ping.
     // opts.traffic: density level or 'off' (every phone builds the same traffic from one seed); opts.ai: rivals the
-    // host drives, gridded behind the players
+    // host drives, gridded behind the players; opts.mode: 'race' or 'course'; opts.course: the host's course items, so
+    // every phone drives the same layout (sent ahead in pieces: one data-channel message tops out around 16 KB)
     startRace(laps, opts = {}) {
       this.race++;
       const names = G.RIVAL_NAMES, cols = G.RIVAL_COLORS;
       const ai = [...Array(opts.ai || 0)].map((_, i) => ({ id: AI_ID + i, name: names[i % names.length], color: cols[i % cols.length], ai: true }));
       const m = {
         t: 'start', race: this.race, laps, track: this.track, grid: this.players.map((p) => p.id), cd: 3.999,
-        traffic: opts.traffic || 'off', seed: (Math.random() * 2 ** 31) | 0, ai,
+        traffic: opts.traffic || 'off', seed: (Math.random() * 2 ** 31) | 0, ai, mode: opts.mode || 'race',
       };
+      if (opts.course) {
+        const json = JSON.stringify(opts.course);
+        for (let i = 0; i < json.length; i += 5000) this.broadcast({ t: 'cdef', d: json.slice(i, i + 5000) });
+      }
       this.broadcast(m);
+      if (opts.course) m.course = opts.course;
       return m;
     }
 
     // ~20 Hz state upload, called every frame while racing. lag = how far the physics trails the clock (the
     // unspent part of the fixed-step accumulator): the snapshot is stamped with the moment it really describes
-    tick(dt, body, progress, finishTime, lag = 0) {
+    tick(dt, body, progress, finishTime, lag = 0, extra = null) {
       this._sendAcc += dt;
       if (this._sendAcc < 1 / SEND_HZ) return;
       this._sendAcc %= 1 / SEND_HZ;
-      this.send(Object.assign(pack(body, progress, finishTime), { t: 'st', id: this.myId, r: this.race, ts: performance.now() - lag * 1000 }));
+      this.send(Object.assign(pack(body, progress, finishTime), extra, { t: 'st', id: this.myId, r: this.race, ts: performance.now() - lag * 1000 }));
     }
 
     leave() {
@@ -242,7 +253,7 @@
       this.model.group.visible = false;
       game.scene.add(this.model.group);
       this.buf = []; this.off = null; this.lastRx = 0;
-      this.s = -1e9; this.v = 0; this.fin = 0;
+      this.s = -1e9; this.v = 0; this.fin = 0; this.score = 0; this.wrecked = false;
       this.alpha = 0; this.gone = false; this.seen = false;
       this.vel = new T.Vector3();
     }
@@ -256,6 +267,8 @@
       if (this.buf.length > 40) this.buf.shift();
       this.s = m.s; this.v = Math.max(0, m.sp); this.lastRx = now;
       if (m.f && !this.fin) this.fin = m.f;
+      if (m.sc != null) this.score = m.sc;
+      if (m.w) this.wrecked = true;
       this.seen = true;
     }
 

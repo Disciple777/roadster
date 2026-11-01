@@ -326,6 +326,9 @@
       if (!S.mpTraffic) S.mpTraffic = 'medium';
       if (S.mpAI === undefined) S.mpAI = 0;
       seg('s-mptraffic', 'mpTraffic'); seg('s-mpai', 'mpAI', Number);
+      if (!S.mpMode) S.mpMode = 'race';
+      seg('s-mpmode', 'mpMode'); seg('s-mpclaps', 'courseLaps', Number);
+      if ($('s-mpmode')) $('s-mpmode').addEventListener('click', () => this.mpGameUI());
       const tog = (id, key, after) => {
         const el = $(id); el.checked = !!S[key];
         el.addEventListener('change', () => { S[key] = el.checked; this.saveSettings(key); if (after) after(el.checked, el); });
@@ -363,8 +366,9 @@
       const showSteer = () => {
         steerEl.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === (S.tilt ? 'tilt' : 'stick')));
         $('calib-row').classList.toggle('hidden', !S.tilt);
+        if ($('auto-row')) $('auto-row').classList.toggle('hidden', S.tilt); // tilt always drives on the GAS button
         $('steer-hint').textContent = S.tilt
-          ? 'Turn the phone like a steering wheel. The stick zone still brakes (drag down) and accelerates if auto-accelerate is off.'
+          ? 'Turn the phone like a steering wheel. Hold GAS to accelerate; the buttons move around for two-thumb play.'
           : 'Drag anywhere on the left half of the screen to steer.';
       };
       steerEl.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
@@ -560,7 +564,7 @@
     // opt.s0: start the run at this point of the lap (the editor's TEST HERE)
     startRace(mode, opt = {}) {
       const S = this.settings, tr = this.track, L = tr.length;
-      const custom = mode === 'course' ? this.customCourse : null;
+      const custom = mode === 'course' && !this.net ? this.customCourse : null;
       document.body.classList.toggle('testing', !!(custom && custom.editing));
       this.mode = mode;
       this.closePanels();
@@ -569,21 +573,22 @@
       if (G.isMobile && !document.fullscreenElement) this.fullscreen();
       // rebuild traffic & rivals
       // multiplayer: every phone builds the same traffic from the host's seed; the AI rivals live on the host only
-      const mp = this.net && mode === 'race' ? this.mpGrid : null, mpo = mp ? this.mpOpts : null;
+      const mp = this.net && mode !== 'free' ? this.mpGrid : null, mpo = mp ? this.mpOpts : null;
       if (this.traffic) this.traffic.dispose();
       this.traffic = mp ? (mpo.traffic === 'off' ? null : G.mpSeeded(mpo.seed, () => new G.Traffic(this, mpo.traffic)))
         : S.traffic === 'off' || mode === 'course' ? null : new G.Traffic(this, S.traffic);
       // obstacle course: the set pieces stay built between runs; smashed crates and used repair kits come back
       if (mode === 'course') {
-        const def = custom || this.officialDef || (this.officialDef = G.officialCourse(tr));
-        if (this.course && this.course.def !== def) { this.course.dispose(); this.course = null; }
-        if (!this.course) this.course = new G.Course(this, def);
+        // multiplayer: the host's layout, and one random stream for anything it leaves open
+        const def = mp && mpo.course ? mpo.course : custom || this.officialDef || (this.officialDef = G.officialCourse(tr));
+        if (this.course && (mp || this.course.def !== def)) { this.course.dispose(); this.course = null; }
+        if (!this.course) this.course = mp ? G.mpSeeded(mpo.seed, () => new G.Course(this, def)) : new G.Course(this, def);
         this.course.reset();
       }
       else if (this.course) { this.course.dispose(); this.course = null; }
       // ghosts: your best course run and the best by someone else, replayed alongside this one
       this.ghostRec = this.ghostRec || new G.GhostRecorder(); this.ghostRec.reset();
-      if (mode === 'course' && !custom && S.ghosts !== 'off') { this.ghosts = this.ghosts || new G.Ghosts(this); this.ghosts.load(G.TRACK_ID); }
+      if (mode === 'course' && !custom && !mp && S.ghosts !== 'off') { this.ghosts = this.ghosts || new G.Ghosts(this); this.ghosts.load(G.TRACK_ID); }
       else if (this.ghosts) { this.ghosts.dispose(); this.ghosts = null; }
       $('res-board').textContent = '';
       this.courseKey = custom ? 'courseBest_c_' + (custom.id || 'x') : 'courseBest_' + G.TRACK_ID; this.courseBest = G.store.get(this.courseKey, 0);
@@ -591,7 +596,7 @@
       if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
       const nR = mode === 'race' && !mp ? S.rivals : mp && this.net.isHost ? mpo.ai.length : 0;
       this.racers = mp ? mp.length + mpo.ai.length : nR + 1;
-      this.laps = mode === 'race' ? (mp ? this.mpLaps : S.laps) : mode === 'course' ? S.courseLaps : 0;
+      this.laps = mp ? this.mpLaps : mode === 'race' ? S.laps : mode === 'course' ? S.courseLaps : 0;
       const slots = [];
       for (let k = 0; k < this.racers; k++) slots.push({ ds: -12 - Math.floor(k / 2) * 10 - (k % 2) * 4, lat: G.TRACK.grid[k % 2] });
       const pSlot = mp ? Math.max(0, mp.findIndex((q) => q.id === this.net.myId)) : mode === 'race' ? Math.min(this.racers - 1, Math.floor(this.racers / 2)) : 0;
@@ -604,7 +609,7 @@
       this.lastS = G.wrap(ps.ds, L);
       if (nR > 0) { this.rivals = new G.Rivals(this, nR); this.rivals.grid(0, mp ? slots.slice(mp.length - 1) : slots); }
       this.lap = 1; this.lapStart = 0; this.lastLapIdx = 0; this.lapTimes = [];
-      this.raceTime = 0; this.score = 0; this.combo = 1; this.comboT = 0; this.finished = false; this.mpFinishTime = 0;
+      this.raceTime = 0; this.score = 0; this.combo = 1; this.comboT = 0; this.finished = false; this.mpFinishTime = 0; this.mpWrecked = false; this.mpScore = 0;
       this.airT = 0; this.driftT = 0; this.driftScore = 0;
       for (const p of this.pickups) { p.active = true; p.g.visible = true; }
       this.city.resetTrees();
@@ -825,6 +830,15 @@
       this.state = 'finished';
       this.finished = true;
       const p = this.player;
+      if (this.mpGrid) {
+        // the score is locked here: driving around after the flag doesn't change it
+        this.mpFinishTime = this.raceTime; this.mpWrecked = destroyed; this.mpScore = this.score;
+        if (this.net) this.net.tick(1, p, this.progress, this.mpFinishTime, 0, this.mpExtra()); // tell the room right away
+        this.mpResults();
+        this.hud.message(destroyed ? 'DESTROYED' : 'COURSE COMPLETE', 2500);
+        setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
+        return;
+      }
       const done = this.lapTimes.length;
       const best = this.score > this.courseBest;
       if (best) { this.courseBest = this.score; G.store.set(this.courseKey, this.score); }
@@ -872,9 +886,14 @@
         start: (m) => this.mpOnStart(m),
         state: (id, m) => {
           if (!this.remotes || !this.mpGrid || m.r !== this.mpRace) return;
-          const r = this.remotes.get(id), had = r && r.fin;
+          const r0 = this.remotes.get(id), had = r0 && r0.fin, sc = r0 && r0.score;
           this.remotes.onState(id, m, this.mpGrid.find((q) => q.id === id) || this.mpOpts.ai.find((q) => q.id === id));
-          if (m.f && !had && this.finished) this.mpResults();
+          const r = this.remotes.get(id), ended = m.f && !had;
+          if (ended && this.mode === 'course' && r && this.state !== 'menu') {
+            this.hud.popup(r.name + (r.wrecked ? ' WRECKED' : ' FINISHED'), r.score.toLocaleString() + ' pts', r.wrecked ? 'warn' : 'blue');
+            if (r.wrecked) this.fx.burst(r.pos.x, r.pos.y + 0.8, r.pos.z, 60, 0, 6, 0, 14);
+          }
+          if (this.finished && (ended || (this.mode === 'course' && m.sc !== sc))) this.mpResults();
         },
         left: (id, name) => {
           const r = this.remotes && this.remotes.get(id);
@@ -941,26 +960,42 @@
       $('lb-players').innerHTML = players.map((p, i) => `<div class="row ${p.id === net.myId ? 'me' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${hex(p.color)}"></span>` +
         `<span class="n">${p.name}${p.id === net.myId ? ' (YOU)' : ''}</span><span class="t">${p.id === 0 ? 'HOST' : ''}</span></div>`).join('');
       $('lb-host-opts').classList.toggle('hidden', !net.isHost);
+      this.mpGameUI();
       $('btn-mpstart').classList.toggle('hidden', !net.isHost);
       $('btn-mpstart').disabled = players.length < 2;
       if (net.isHost) this.mpStatus(players.length < 2 ? `Waiting for drivers: tell them the code ${net.code}` : 'Ready when you are.', false, 'lb-status');
-      else this.mpStatus('Waiting for the host to start the race…', false, 'lb-status');
+      else this.mpStatus('Waiting for the host to start…', false, 'lb-status');
+    }
+    // what the host's lobby is set to play (circuits like the Skyway have no course)
+    mpGame() { return this.settings.mpMode === 'course' && !G.TRACK.noCourse ? 'course' : 'race'; }
+    mpGameUI() {
+      const course = this.mpGame() === 'course', el = $('s-mpmode');
+      if (!el) return; // an older cached index.html
+      el.querySelector('[data-v="course"]').classList.toggle('hidden', !!G.TRACK.noCourse);
+      if (G.TRACK.noCourse) el.querySelector('[data-v="race"]').classList.add('sel');
+      $('lb-host-opts').classList.toggle('course', course);
+      $('btn-mpstart').textContent = course ? 'START RUN' : 'START RACE';
     }
     mpStart() {
       if (!this.net || !this.net.isHost || this.net.players.length < 2) return;
-      this.mpOnStart(this.net.startRace(this.settings.laps, { traffic: this.settings.mpTraffic, ai: this.settings.mpAI }));
+      const S = this.settings;
+      if (this.mpGame() === 'course') {
+        const def = this.officialDef || (this.officialDef = G.officialCourse(this.track));
+        this.mpOnStart(this.net.startRace(S.courseLaps, { mode: 'course', course: def.items }));
+      } else this.mpOnStart(this.net.startRace(S.laps, { traffic: S.mpTraffic, ai: S.mpAI }));
     }
     mpOnStart(m) {
       const net = this.net;
       if (!net) return;
       this.mpRace = m.race; this.mpLaps = m.laps;
-      this.mpOpts = { traffic: m.traffic || 'off', seed: m.seed || 1, ai: m.ai || [] };
+      this.mpOpts = { traffic: m.traffic || 'off', seed: m.seed || 1, ai: m.ai || [],
+        course: m.course ? { id: 'street', name: G.COURSES.street.name, official: true, track: G.TRACK_ID, items: m.course } : null };
       const grid = m.grid.map((id) => net.players.find((q) => q.id === id)).filter(Boolean);
       const mine = grid.find((q) => q.id === net.myId);
       this.mpColor = mine ? mine.color : 0xff2a3c; this.mpName = mine ? mine.name : this.settings.mpName;
       if (this.state === 'paused') this.pause(false, true);
       this.mpGrid = grid;
-      this.startRace('race');
+      this.startRace(m.mode || 'race');
       if (this.remotes) this.remotes.dispose();
       this.remotes = new G.Remotes(this);
       for (const q of this.mpOpts.ai) if (!net.isHost) this.remotes.ensure(q);
@@ -996,10 +1031,28 @@
     mpFrame(dt, driving) {
       if (this.remotes) this.remotes.update(dt, this.t);
       if (this.mpWorld && this.net && driving) this.mpWorld.update(dt, (this.acc || 0) / Math.max(this.timeScale, 0.05));
-      if (this.net && this.mpGrid && driving) this.net.tick(dt, this.player, this.progress, this.mpFinishTime, (this.acc || 0) / Math.max(this.timeScale, 0.05));
+      if (this.net && this.mpGrid && driving) this.net.tick(dt, this.player, this.progress, this.mpFinishTime, (this.acc || 0) / Math.max(this.timeScale, 0.05), this.mpExtra());
+    }
+    // course runs also carry the score and how the run ended
+    mpExtra() { return this.mode === 'course' ? { sc: this.finished ? this.mpScore : this.score, w: this.mpWrecked ? 1 : 0 } : null; }
+    // course results: everyone by score, updated live while the others are still driving
+    mpCourseResults() {
+      const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+      const rows = [{ name: this.mpName, score: this.mpScore, time: this.mpFinishTime, wrecked: this.mpWrecked, me: true, color: this.mpColor }];
+      if (this.remotes) for (const r of this.remotes.list) rows.push({ name: r.name, score: r.score, time: r.fin, wrecked: r.wrecked, gone: r.gone && !r.fin, color: r.color });
+      rows.sort((a, b) => b.score - a.score);
+      const myPlace = rows.findIndex((r) => r.me) + 1, left = rows.filter((r) => !r.time && !r.gone).length;
+      $('res-title').textContent = left ? (this.mpWrecked ? 'DESTROYED' : 'COURSE COMPLETE') : myPlace === 1 ? 'VICTORY' : `P${myPlace} OF ${rows.length}`;
+      $('res-rows').innerHTML = rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''} ${r.gone ? 'gone' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${hex(r.color)}"></span>` +
+        `<span class="n">${r.name}${r.me ? ' (YOU)' : ''}<small>${r.gone ? 'LEFT THE ROOM' : !r.time ? 'STILL DRIVING…' : (r.wrecked ? 'WRECKED AT ' : 'FINISHED IN ') + G.fmtTime(r.time)}</small></span><span class="t">${r.score.toLocaleString()}</span></div>`).join('');
+      $('res-stats').innerHTML = `<div><b>${this.mpScore.toLocaleString()}</b><small>SCORE</small></div><div><b>${Math.round(this.player.health)}%</b><small>HULL LEFT</small></div><div><b>${G.fmtTime(this.mpFinishTime)}</b><small>TIME</small></div>`;
+      $('res-board').textContent = left ? `Still driving: ${left}` : 'Highest score wins. Multiplayer runs stay off the leaderboard.';
+      this.place = myPlace;
+      return myPlace;
     }
     // results board: finished drivers by time, then those still racing by distance, then drop-outs
     mpResults() {
+      if (this.mode === 'course') return this.mpCourseResults();
       const hex = (c) => '#' + c.toString(16).padStart(6, '0');
       const rows = [{ name: this.mpName, time: this.mpFinishTime, me: true, color: this.mpColor }];
       if (this.rivals) for (const r of this.rivals.list) rows.push({ name: r.name, time: r.finished ? r.finishTime : 0, s: r.s, color: r.color });
