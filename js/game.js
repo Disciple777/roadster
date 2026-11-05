@@ -137,7 +137,7 @@
       G.setTrack(S.track);
       const track = (this.track = new G.Track());
       const L = track.length;
-      const rampAt = [0.12, 0.25, 0.37, 0.5, 0.63, 0.77, 0.9];
+      const rampAt = G.TRACK.ramps || [0.12, 0.25, 0.37, 0.5, 0.63, 0.77, 0.9];
       rampAt.forEach((f, i) => {
         // find a low-curvature spot near f
         let best = f * L, bk = 1e9;
@@ -147,9 +147,11 @@
           if (track.elev && (Math.abs(track.gradeAt(s)) > 0.008 || Math.abs(track.gradeAt(s + 40)) > 0.008 || !track.clearAt(s, 40))) continue;
           if (k < bk) { bk = k; best = s; }
         }
+        if (track.wild && !track.clearAt(best, 40)) return; // no straight clear of the gaps and tunnels here
         const F = G.LANES_FWD; // wide roads: scatter them across the lanes
         track.addRamp(best, F[(i * (F.length > 3 ? 3 : 1)) % F.length], 15, 7, i % 3 === 2 ? 3.4 : 2.7);
       });
+      for (const sp of G.TRACK.spans || []) track.addSpan(sp); // arches, trestles, cable cars over the road
       if (G.TRACK.bridges) {
         // footbridges: fine at road speed, a wall to anyone who jumps or thrusts into them
         const spots = track.ramps.filter((r, i) => i % 2 === 0).map((r) => r.s + 52);
@@ -161,6 +163,7 @@
       $('load-text').textContent = 'Lighting the streets…';
       await new Promise((r) => setTimeout(r, 10));
       this.city = G.buildCity(this);
+      this.wild = this.city.wild || null; // wild circuits: terrain, tunnels, trains and cable cars (js/wild.js)
       this.xings = new G.Crossings(this);
 
       // player
@@ -264,15 +267,20 @@
       const ringMat = new T.MeshBasicMaterial({ color: new T.Color(0.5, 2.5, 5), toneMapped: false });
       const ringGeo = new T.TorusGeometry(0.9, 0.06, 8, 32);
       const spots = [];
-      for (let s = 200; s < tr.length - 100; s += 280) spots.push({ s, lat: G.pick(G.LANES_FWD), y: 1.3 });
-      for (const r of tr.ramps) spots.push({ s: r.s + 30, lat: r.lat, y: 7 }); // reward the air
+      for (let s = 200; s < tr.length - 100; s += 280) if (!tr.gapAt(s)) spots.push({ s, lat: G.pick(G.LANES_FWD), y: 1.3 });
+      for (const r of tr.ramps) if (!r.full) spots.push({ s: r.s + 30, lat: r.lat, y: 7 }); // reward the air
+      // over a gap: a refill on the line that makes it, so the fliers can keep the thrusters lit
+      for (const g of tr.gaps || []) for (const [u, lat] of [[0.45, -3.6], [0.55, 3.6]]) {
+        const s = g.s0 + g.len * u;
+        spots.push({ s, lat, abs: tr.gapLift(s) + (g.kick ? 1.4 : 2.2) });
+      }
       for (const sp of spots) {
         const g = new T.Group();
         const can = new T.Mesh(geo, mat); g.add(can);
         const cap = new T.Mesh(new T.CylinderGeometry(0.2, 0.42, 0.25, 16), mat); cap.position.y = 0.77; g.add(cap);
         const ring = new T.Mesh(ringGeo, ringMat); ring.rotation.x = Math.PI / 2; g.add(ring);
         const p = tr.pointAt(sp.s, sp.lat, {});
-        const y = sp.y + tr.heightAt(sp.s);
+        const y = sp.abs != null ? sp.abs : sp.y + tr.heightAt(sp.s);
         g.position.set(p.x, y, p.z);
         this.scene.add(g);
         this.pickups.push({ g, ring, x: p.x, y, z: p.z, active: true, t: 0 });
@@ -322,7 +330,11 @@
       const segSets = {};
       seg('s-traffic', 'traffic'); seg('s-laps', 'laps', Number); seg('s-claps', 'courseLaps', Number); seg('s-rivals', 'rivals', Number); seg('s-diff', 'difficulty'); seg('s-tod', 'tod'); seg('s-track', 'track');
       seg('s-quality', 'quality'); seg('s-camera', 'camera', Number); seg('s-touch', 'touchUI');
-      seg('s-mptrack', 'track'); seg('s-mplaps', 'laps', Number); seg('s-ghosts', 'ghosts');
+      seg('s-mptrack', 'track');
+      // the wild circuits say what's waiting on them
+      const desc = () => { const el = $('s-trackdesc'), d = (G.TRACKS[S.track] || {}).desc; if (el) { el.textContent = d || ''; el.classList.toggle('hidden', !d); } };
+      if ($('s-track')) $('s-track').addEventListener('click', desc);
+      desc(); seg('s-mplaps', 'laps', Number); seg('s-ghosts', 'ghosts');
       if (!S.mpTraffic) S.mpTraffic = 'medium';
       if (S.mpAI === undefined) S.mpAI = 0;
       seg('s-mptraffic', 'mpTraffic'); seg('s-mpai', 'mpAI', Number);
@@ -639,18 +651,24 @@
 
     resetPlayer() {
       if (this.state !== 'race' && this.state !== 'countdown') return;
-      const n = this.player.near;
+      const n = this.player.near, tr = this.track;
       const lat = G.LANES_FWD.reduce((a, b) => (Math.abs(b - n.lat) < Math.abs(a - n.lat) ? b : a));
+      // came off over a gap: back before the run-up, at a speed that can make it
+      const rs = tr.respawn(n.s), fell = rs.v != null;
       // find a free spot in that lane
-      let s = n.s;
+      let s = rs.s;
       if (this.traffic) for (let k = 0; k < 10; k++) {
         const blocked = this.traffic.cars.some((c) => Math.abs(c.lat - lat) < 2.5 && this.traffic.zoneDist(c.s, s) < c.t.len / 2 + 6);
         if (!blocked) break; s += 12;
       }
       if (this.course) s = this.course.freeSpot(s, lat);
-      this.player.place(s, lat, Math.min(this.player.speed * 0.6, 30));
-      this.player.fuel = Math.max(this.player.fuel, 30);
-      this.hud.popup('RESET', '', 'warn');
+      this.player.place(s, lat, fell ? rs.v : Math.min(this.player.speed * 0.6, 30));
+      this.player.fuel = Math.max(this.player.fuel, fell ? 70 : 30);
+      // a respawn behind the gap takes those metres back off the lap
+      this.progress += tr.sd(this.player.near.s, this.lastS); this.lastS = this.player.near.s;
+      this.gapFly = null;
+      if (fell) { this.hud.popup('FELL SHORT', 'more speed · hold thrust', 'warn'); this.combo = 1; this.comboT = 0; this._warned = null; }
+      else this.hud.popup('RESET', '', 'warn');
     }
 
     wreck() {
@@ -1115,6 +1133,7 @@
       if (Math.abs(ds) < 40) this.progress += ds;
 
       this.xings.update(dt); // the lights keep cycling wherever you are
+      this.track.updateSpans(this.t); this.wild && this.wild.update(dt, this.t); // cable cars, trains
       if (this.traffic && st !== 'countdown') {
         this.traffic.update(dt, p, p.near.s);
         if (st === 'race' || st === 'finished') this.traffic.detectStunts(p);
@@ -1192,6 +1211,10 @@
           this.hud.popup('LAP ' + G.fmtTime(lt), isBest ? 'NEW BEST' : '', isBest ? 'big' : '');
         }
         this.lap = Math.max(1, lapIdx + 1);
+        // a heads-up a few seconds before each gap (and in a tunnel, before the floor goes)
+        const ga = this.track.gaps.length ? this.track.gapAhead(this.player.near.s, 420) : null;
+        if (ga && ga.warn && ga._d > 120 && ga !== this._warned) { this._warned = ga; this.hud.message('⚠ ' + ga.warn, 2200); G.audio.tone(520, 0.12, 0.1, 'square'); }
+        if (!ga) this._warned = null;
         let place = 1;
         if (this.remotes) for (const r of this.remotes.list) if (!r.gone && (r.fin || r.s > this.progress)) place++;
         if (this.rivals) for (const r of this.rivals.list) {
@@ -1250,12 +1273,33 @@
         this.airT = 0;
       }
       if (p.grounded) { p.rollAcc = 0; p.pitchAcc = 0; }
+      if (this.track.gaps.length) this.gapStunts(p);
       // drift
       const drifting = p.grounded && Math.abs(p.sideSlip) > 0.28 && p.speed > 14;
       if (drifting) { this.driftT += dt; this.driftScore += dt * p.speed * 2.5; }
       else if (this.driftT > 0) {
         if (this.driftT > 1.0) this.addScore(Math.round(this.driftScore), Math.round(this.driftT * 3), 'DRIFT ' + this.driftT.toFixed(1) + 's', '');
         this.driftT = 0; this.driftScore = 0;
+      }
+    }
+
+    // wild circuits: a gap flown over pays out on landing; flying under an arch, a trestle or the cable cars too
+    gapStunts(p) {
+      const tr = this.track, s = p.near.s, scoring = this.state === 'race' || this.state === 'finished';
+      const g = tr.gapAt(s);
+      if (g && !p.grounded) this.gapFly = g;
+      else if (this.gapFly && !g) {
+        const past = tr.sd(s, this.gapFly.s1);
+        if (past > 0 && p.grounded) {
+          const gp = this.gapFly; this.gapFly = null;
+          if (scoring) this.addScore(400 + gp.len * 12, 10 + Math.round(gp.len / 8), gp.name + '!', `${Math.round(gp.len)} m CLEARED`, 'big');
+        } else if (past < -5 || past > 80) this.gapFly = null;
+      }
+      const last = this._spanS == null ? s : this._spanS;
+      this._spanS = s;
+      for (const sp of tr.spans || []) {
+        if (!sp.bonus || !(tr.sd(sp.s, last) > 0 && tr.sd(s, sp.s) >= 0 && tr.sd(s, last) < 30)) continue;
+        if (!p.grounded && p.altitude > 2.5 && p.pos.y + 1.2 < sp.y0 && scoring) this.addScore(700, 8, sp.bonus, '', 'big');
       }
     }
 
@@ -1330,8 +1374,10 @@
         let cx = p.pos.x + sy * dist, cz = p.pos.z + cy * dist;
         // keep camera inside the street canyon
         const n = this.track.nearest(cx, cz, p.near.i, this._cn || (this._cn = {}));
-        if (Math.abs(n.lat) > 15) { const k = Math.abs(n.lat) - 15; cx -= n.rx * Math.sign(n.lat) * k; cz -= n.rz * Math.sign(n.lat) * k; }
+        const roof = this.track.roof ? this.track.roofAt(n.s) : 0, lim = roof ? G.WALK_OUT - 1.4 : 15; // inside a tunnel: stay inside it
+        if (Math.abs(n.lat) > lim) { const k = Math.abs(n.lat) - lim; cx -= n.rx * Math.sign(n.lat) * k; cz -= n.rz * Math.sign(n.lat) * k; }
         let cyPos = this.camFocusY + hgt;
+        if (roof) cyPos = Math.min(cyPos, this.track.heightAt(n.s) + roof - 0.9);
         if (this.state === 'countdown' && this.mode !== 'free') {
           // intro swoop from the side
           const k = 1 - Math.pow(1 - this.camIntro, 3);

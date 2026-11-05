@@ -82,15 +82,17 @@
 
     // back on the road in the nearest race lane, clear of traffic — same as the player's reset
     reset(r) {
-      const b = r.b, n = b.near, traffic = this.game.traffic;
+      const b = r.b, n = b.near, traffic = this.game.traffic, tr = this.game.track;
       const lat = G.LANES_FWD.reduce((a, c) => (Math.abs(c - n.lat) < Math.abs(a - n.lat) ? c : a));
-      let s = n.s;
+      const rs = tr.respawn(n.s);
+      let s = rs.s;
       if (traffic) for (let k = 0; k < 10; k++) {
         const blocked = traffic.cars.some((c) => Math.abs(c.lat - lat) < 2.5 && traffic.zoneDist(c.s, s) < c.t.len / 2 + 6);
         if (!blocked) break; s += 12;
       }
-      b.place(s, lat, Math.min(b.speed * 0.6, 25));
-      b.fuel = Math.max(b.fuel, 30);
+      b.place(s, lat, rs.v != null ? rs.v : Math.min(b.speed * 0.6, 25));
+      b.fuel = Math.max(b.fuel, rs.v != null ? 70 : 30);
+      r.s += tr.sd(b.near.s, r.lastS); r.lastS = b.near.s; // a respawn behind a gap gives those metres back
       r.latT = lat; r.stuckT = 0; r.jumpT = 0; r.jumpC = null; r.boostT = 0;
     }
 
@@ -120,7 +122,12 @@
         if (traffic) traffic.gatherNear(b.pos.x, b.pos.z, 30, b.tnear); else b.tnear.length = 0;
         b.frozen = !racing && !r.finished;
         if (racing && !r.finished) this.think(r, dt, tr, L, traffic, playerProg);
-        else if (r.finished) this.drive(r, tr, 18, r.latT);
+        else if (r.finished) {
+          // cool-down lap: easy, but fast enough for any gap on the way
+          const ga = tr.gaps.length ? tr.gapAhead(b.near.s, 400) : null;
+          this.drive(r, tr, ga ? ga.v + 6 : 18, r.latT);
+          if (ga && !b.grounded) this.flyGap(r, ga, tr);
+        }
         // stuck against something for a while -> reset, like a player would
         if (racing && !r.finished && b.speed < 3) { r.stuckT += dt; if (r.stuckT > 2.5) this.reset(r); } else r.stuckT = 0;
         b.syncModel();
@@ -146,6 +153,16 @@
         target = Math.min(target, Math.sqrt(vC * vC + 2 * K.aBrk * Math.max(0, d - reach)));
       }
 
+      // a gap ahead: arrive at the speed that clears it (the landings are straight, so no corner to save it for),
+      // and keep enough N₂ to fly the rest if the jump comes up short
+      const gapA = tr.gaps.length ? tr.gapAhead(sNow, 900) : null;
+      let reserve = K.n2;
+      if (gapA) {
+        reserve = Math.max(reserve, gapA.kick ? 45 : 65);
+        if (gapA._d < 340 && gapA._d > 0) target = Math.max(target, gapA.v + 6);
+        if (gapA.big && gapA._d < 260 && gapA._d > 0) target = Math.min(target, gapA.v + 9); // a big jump: hit it right, don't overfly the landing
+      }
+
       // traffic scan per lane, in seconds-to-contact turned back into metres: a car going your way at 60 is no
       // obstacle, a parked one or one coming the other way is. Wrecks report their real position.
       const clear = CAND.map(() => 220);
@@ -161,6 +178,7 @@
       };
       if (traffic) {
         for (const c of traffic.cars) {
+          if (c.loose && c.y < tr.heightAt(c.s) - 3) continue; // down in a gap: not in anyone's way
           let d = G.wrap(c.s - sNow, L);
           if (d > L - 8) d -= L;
           if (d > (c.dir < 0 ? 300 : 180) || d < -6) continue; // oncoming cars close fast: look further
@@ -182,6 +200,7 @@
       if (this.game.player) this.considerCar(this.game.player, sNow, L, consider);
       // jump ramps launch you into the next corner blind: line up beside them, like a racer would
       for (const rp of tr.ramps) {
+        if (rp.full) continue; // a kicker across the whole road in front of a gap: that one we take
         let d = G.wrap(rp.s - sNow, L);
         if (d > L - 10) d -= L;
         if (d > 160 || d < -rp.len) continue;
@@ -229,12 +248,12 @@
       if (K.smart) {
         // pull hard wherever there's speed to gain, keep a reserve for hops, and let the tank refill between bursts
         const want = target > v + 3 && !b.fuelLock && (curClear > v * 1.2 || r.jumpC);
-        if (r.boostT > 0) { if (!want || b.fuel < K.n2) r.boostT = 0; }
-        else if (want && b.fuel > K.n2 + 18) r.boostT = 99;
+        if (r.boostT > 0) { if (!want || b.fuel < reserve) r.boostT = 0; }
+        else if (want && b.fuel > reserve + 18) r.boostT = 99;
       } else {
         const boostRate = K.boost * (behind ? 2 : 1);
-        if (r.boostT <= 0 && b.fuel > K.n2 && kAhead < 0.004 && v > 35 && target > v - 2 && Math.random() < dt * boostRate) r.boostT = 1 + Math.random() * 1.5;
-        if (r.boostT > 0) { r.boostT -= dt; if (b.fuelLock || b.fuel < K.n2 * 0.4 || target < v - 3 || curClear < 60) r.boostT = 0; }
+        if (r.boostT <= 0 && b.fuel > reserve && kAhead < 0.004 && v > 35 && target > v - 2 && Math.random() < dt * boostRate) r.boostT = 1 + Math.random() * 1.5;
+        if (r.boostT > 0) { r.boostT -= dt; if (b.fuelLock || b.fuel < reserve * 0.4 || target < v - 3 || curClear < 60) r.boostT = 0; }
       }
       this.drive(r, tr, target, r.latT);
       r.inp.boost = r.boostT > 0;
@@ -245,6 +264,22 @@
         r.inp.jump = b.pos.y < r.jumpC.y + r.jumpC.t.hgt + 1.3 && !b.fuelLock;
         if (r.inp.jump) r.inp.thrL = r.inp.thrR = false;
       }
+      if (gapA && !b.grounded) this.flyGap(r, gapA, tr);
+    }
+
+    // over a gap: where will the car be when it reaches the far edge? short of it -> light the under-thrusters
+    // (never into a tunnel roof); the flank thrusters stay free to keep it between the walls
+    flyGap(r, g, tr) {
+      const b = r.b, d = tr.sd(g.s1 + 4, b.near.s);
+      if (d < 0 || d > g.len + 60) return;
+      const vF = Math.max(b.fwdSpeed, 8), t = d / vF;
+      const y = b.pos.y + b.vel.y * t - 0.5 * G.GRAV * t * t;
+      const roof = tr.roofAt(b.near.s);
+      const ceil = roof ? tr.heightAt(b.near.s) + roof - 2.2 : 1e9;
+      const short = y < g.hFar + 2.5;
+      if (short && b.pos.y < ceil && !b.fuelLock) { r.inp.jump = true; r.inp.thrL = r.inp.thrR = false; }
+      // the rear thruster helps a short one reach; a long one already makes it, so save the N₂
+      r.inp.boost = short ? !b.fuelLock && b.fuel > 15 && (r.inp.boost || b.fwdSpeed < g.v + 10) : false;
     }
 
     considerCar(ob, sNow, L, consider) {

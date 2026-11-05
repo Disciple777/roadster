@@ -96,6 +96,10 @@
       c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 34;
       c.beginPath(); this.mmPts.forEach(([x, z], i) => (i ? c.lineTo(x, z) : c.moveTo(x, z))); c.closePath(); c.stroke();
       c.strokeStyle = 'rgba(255,60,80,0.75)'; c.lineWidth = 6; c.stroke();
+      // wild circuits: tunnels in grey, gaps as yellow breaks in the line
+      const tr = g.track, seg = (a, b, col, w) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); for (let s = a; s <= b; s += 4) { const q = tr.sample(s, this._mp || (this._mp = {})); if (s === a) c.moveTo(q.x, q.z); else c.lineTo(q.x, q.z); } c.stroke(); };
+      for (const t of tr.tunnels || []) seg(t.s0, t.s1, 'rgba(150,150,160,0.9)', 14);
+      for (const gp of tr.gaps || []) { seg(gp.s0, gp.s1, 'rgba(8,10,16,1)', 30); seg(gp.s0 - 2, gp.s0 + 2, '#ffd23a', 30); seg(gp.s1 - 2, gp.s1 + 2, '#ffd23a', 30); }
       // start line
       const s0 = g.track.sample(0, {});
       c.strokeStyle = '#fff'; c.lineWidth = 6; c.beginPath(); c.moveTo(s0.x - s0.rx * 16, s0.z - s0.rz * 16); c.lineTo(s0.x + s0.rx * 16, s0.z + s0.rz * 16); c.stroke();

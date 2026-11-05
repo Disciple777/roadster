@@ -23,7 +23,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 
-const TRACKS = ['city', 'highway', 'skyway'];
+const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps'];
 const MODES = ['race', 'course'];
 const COURSES = ['street'];
 const OFFICIAL_LAPS = ['race' => 2, 'course' => 1];

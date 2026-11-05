@@ -36,6 +36,63 @@
         [-960, 90, 0], [-950, -170, 0], [-860, -370, 0],
       ],
     },
+    // ---- wild circuits (js/wild.js builds the land around them) ----
+    // Everything below is placed in metres along the lap (the lap length is fixed by ctrl). prof: road height keys
+    // [s, height, grade]; gaps: no road between s0 and s1 (kick: a full-width ramp ending at s0, floor: how deep the
+    // drop is, v: speed that clears it, back: respawn distance before the lip, water: a river at the bottom);
+    // tunnels: a roof h metres over the road (side: an open avalanche gallery on that side); spans: things across
+    // the road overhead (y0 = clearance over the road, kind picks the look, bonus = score for flying under it).
+    canyon: {
+      name: 'RED ROCK', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.25,
+      elev: true, wild: true, theme: 'canyon', trees: false, noCourse: true, xings: false, lampEvery: 60, fogK: 0.5,
+      desc: 'Arizona canyon country. Jump the river canyon under the rock arch, blast through the mesa tunnel, hold your thrust over the washed-out bridge, then launch off the mesa under the freight train.',
+      ctrl: [
+        [-500, -700], [-100, -700], [300, -700], [550, -650], [690, -520], [650, -350], [750, -190], [900, -80], [970, 140],
+        [940, 380], [800, 540], [600, 600], [300, 610], [0, 600], [-250, 580], [-470, 520], [-660, 410], [-800, 240],
+        [-860, 0], [-830, -260], [-720, -560],
+      ],
+      prof: [[0, 0], [1700, 0], [2300, 34], [3200, 34], [3350, 14, -0.12], [3700, 0]],
+      gaps: [
+        { s0: 520, s1: 585, kick: { len: 30, h: 4.5 }, floor: -36, water: true, v: 52, back: 300, name: 'RIVER CANYON', warn: 'CANYON AHEAD · FULL SPEED' },
+        { s0: 2840, s1: 2915, floor: 4, v: 50, back: 200, name: 'BRIDGE OUT', warn: 'BRIDGE OUT · HOLD THRUST', broken: true },
+        { s0: 3200, s1: 3350, kick: { len: 32, h: 5.5 }, floor: -2, v: 56, back: 240, name: 'MESA DROP', warn: 'MESA DROP · FLAT OUT', big: true },
+        { s0: 4556, s1: 4592, kick: { len: 16, h: 2.6 }, floor: -28, v: 40, back: 280, name: 'SLOT CANYON', warn: 'DOUBLE SLOT CANYON' },
+        { s0: 4692, s1: 4732, kick: { len: 16, h: 2.6 }, floor: -28, v: 40, back: 90, name: 'SLOT CANYON 2' },
+      ],
+      tunnels: [{ s0: 2380, s1: 2690, h: 7.5, name: 'MESA TUNNEL' }],
+      spans: [
+        { s: 574, y0: 8.5, kind: 'arch', bonus: 'THREADED THE ARCH' },
+        { s: 3280, y0: 10, kind: 'trestle', bonus: 'UNDER THE TRAIN' },
+      ],
+      ramps: [0.2, 0.31, 0.8, 0.93],
+    },
+    alps: {
+      name: 'ALPINE', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.2,
+      elev: true, wild: true, theme: 'alps', trees: false, noCourse: true, xings: false, lampEvery: 70, fogK: 0.55,
+      desc: 'A Swiss mountain pass in the snow. Creek jump under the rail viaduct, the avalanche gallery, a tunnel whose floor caved in, the ski jump under the cable cars and a collapsed gorge bridge.',
+      ctrl: [
+        [-300, -700], [100, -700], [450, -660], [700, -520], [820, -280], [860, 20], [810, 320], [660, 500], [420, 580],
+        [160, 540], [-80, 600], [-350, 610], [-650, 600], [-860, 500], [-950, 280], [-940, 0], [-900, -280], [-780, -520],
+        [-580, -680],
+      ],
+      prof: [[0, 0], [560, 0], [1900, 45], [2200, 48], [2470, 55], [2520, 55], [2544, 53.5], [2700, 60], [2960, 60], [3120, 46],
+        [3180, 46], [3320, 22, -0.25], [3520, 8], [4050, 20], [4420, 20], [5100, 0]],
+      gaps: [
+        { s0: 356, s1: 394, kick: { len: 26, h: 3.5 }, floor: -16, water: true, v: 42, back: 300, name: 'CREEK JUMP', warn: 'CREEK JUMP · KEEP IT PINNED' },
+        { s0: 2520, s1: 2544, floor: 38, v: 46, back: 160, name: 'CAVE-IN', warn: 'TUNNEL FLOOR GONE · HOP IT', inTunnel: true },
+        { s0: 3180, s1: 3320, kick: { len: 30, h: 6 }, floor: -4, v: 55, back: 300, name: 'SKI JUMP', warn: 'SKI JUMP · FLAT OUT', big: true },
+        { s0: 4230, s1: 4290, floor: -22, water: true, v: 48, back: 260, name: 'GORGE BRIDGE', warn: 'BRIDGE COLLAPSED · HOLD THRUST', broken: true },
+      ],
+      tunnels: [
+        { s0: 1060, s1: 1290, h: 7.5, side: -1, name: 'AVALANCHE GALLERY' },
+        { s0: 2190, s1: 2710, h: 7.5, name: 'GOTTHARD TUNNEL' },
+      ],
+      spans: [
+        { s: 430, y0: 12.5, kind: 'viaduct', bonus: 'UNDER THE VIADUCT' },
+        { s: 3250, y0: 9, kind: 'gondola', bonus: 'UNDER THE CABLE CARS' },
+      ],
+      ramps: [0.22, 0.73, 0.88],
+    },
   };
   G.setTrack = function (id) {
     const t = G.TRACKS[id] || G.TRACKS.city;
@@ -83,7 +140,11 @@
       }
       // heights: a second spline through the same points with their heights, kept off the ground and eased
       this.py = new Float32Array(N); this.gr = new Float32Array(N);
-      if (this.elev) {
+      this.hole = new Uint8Array(N); this.roof = new Float32Array(N); // no road here / tunnel roof over the road (m)
+      if (G.TRACK.prof) {
+        for (let i = 0; i < N; i++) this.py[i] = Math.max(0, profileAt(G.TRACK.prof, i * this.ds, this.length));
+        for (let i = 0; i < N; i++) this.gr[i] = (this.py[(i + 1) % N] - this.py[(i - 1 + N) % N]) / (2 * this.ds);
+      } else if (this.elev) {
         const c3 = new T.CatmullRomCurve3(G.TRACK.ctrl.map(([x, z, y]) => new T.Vector3(x, y || 0, z)), true, 'centripetal');
         c3.arcLengthDivisions = 6000;
         const raw = new Float32Array(N);
@@ -109,6 +170,59 @@
       this.ramps = [];
       this.bridges = [];
       this._s = { x: 0, z: 0, tx: 0, tz: 1, rx: 1, rz: 0 };
+      this.wild = !!G.TRACK.wild;
+      this.floorY = this.wild ? -60 : 0; // the bottom of the world (nothing under the road on a wild circuit)
+      this.setupFeatures();
+    }
+
+    // gaps, tunnels and the full-width kicker ramps in front of the gaps; zones keep lamps and side ramps away
+    setupFeatures() {
+      const D = G.TRACK, N = this.N, ds = this.ds;
+      this.gaps = []; this.tunnels = []; this.zones = [];
+      for (const t of D.tunnels || []) {
+        const tn = Object.assign({}, t);
+        for (let i = Math.ceil(t.s0 / ds); i * ds <= t.s1; i++) this.roof[i % N] = t.h;
+        this.tunnels.push(tn);
+        this.zones.push({ s0: t.s0 - 12, s1: t.s1 + 12 });
+      }
+      for (const g of D.gaps || []) {
+        const gp = Object.assign({ len: g.s1 - g.s0, back: 250, v: 50 }, g);
+        for (let i = Math.ceil(g.s0 / ds); i * ds < g.s1; i++) this.hole[i % N] = 1;
+        gp.hNear = this.heightAt(g.s0 - 1); gp.hFar = this.heightAt(g.s1 + 1);
+        gp.hLip = gp.hNear + (g.kick ? g.kick.h : 0);
+        gp.z0 = g.s0 - (g.kick ? g.kick.len : 0) - 15; // respawn zone: from the run-up to the kicker to just past the far edge
+        if (g.kick) this.addRamp(g.s0 - g.kick.len / 2, 0, g.kick.len, 2 * G.ROAD_HALF + 0.4, g.kick.h, true);
+        this.gaps.push(gp);
+        this.zones.push({ s0: gp.z0 - 25, s1: g.s1 + 25 });
+      }
+    }
+    // signed distance a - b along the lap, in -L/2 .. L/2
+    sd(a, b) { const L = this.length; return G.wrap(a - b + L / 2, L) - L / 2; }
+    // the gap whose open span contains s (null if s is over road)
+    gapAt(s) { for (const g of this.gaps) { const d = this.sd(s, g.s0); if (d > 0 && d < g.len) return g; } return null; }
+    // the next gap ahead of s within `range` metres, and how far its lip is
+    gapAhead(s, range) {
+      let best = null, bd = range;
+      for (const g of this.gaps) { const d = this.sd(g.s0, s); if (d > -g.len && d < bd) { bd = d; best = g; } }
+      if (best) best._d = bd;
+      return best;
+    }
+    roofAt(s) { return this.roof[Math.floor(G.wrap(s, this.length) / this.ds) % this.N]; }
+    // where a car that came off at s goes back on: before the run-up of a gap it fell into, else where it is
+    respawn(s) {
+      for (let k = 0; k < 4; k++) {
+        const g = this.gaps.find((q) => { const d = this.sd(s, q.z0); return d >= 0 && d < q.s1 + 3 - q.z0; });
+        if (!g) return { s, v: k ? this._rv : null };
+        s = G.wrap(g.s0 - g.back, this.length); this._rv = g.v * 0.95;
+      }
+      return { s, v: this._rv };
+    }
+    // the arc a traffic car follows over a gap (it has no thrusters, but the show must go on); null if not in a gap
+    gapLift(s) {
+      const g = this.gapAt(s);
+      if (!g) return null;
+      const u = this.sd(s, g.s0) / g.len, a = g.inTunnel ? 1.2 : g.len * (g.kick ? 0.13 : 0.07);
+      return g.hLip + (g.hFar - g.hLip) * u + 4 * a * u * (1 - u);
     }
 
     buildGrid() {
@@ -147,6 +261,7 @@
     // nothing passes over or under the road within ±r metres of s (and no footbridge there)
     clearAt(s, r) {
       if (!this.elev) return true;
+      if (this.zones && this.zones.some((z) => this.sd(s + r, z.s0) > 0 && this.sd(z.s1, s - r) > 0)) return false;
       for (let d = -r; d <= r; d += this.ds) if (this.cross[Math.floor(G.wrap(s + d, this.length) / this.ds) % this.N]) return false;
       return !this.bridges.some((b) => Math.abs(G.wrap(b.s - s + this.length / 2, this.length) - this.length / 2) < r + 20);
     }
@@ -218,10 +333,11 @@
     }
 
     // ----- ground: flat 0 (or the decks) + ramps -----
-    addRamp(s, lat, len = 15, w = 7, h = 2.7) {
+    // full: a kicker across the whole road in front of a gap (the AI drives over those instead of around them)
+    addRamp(s, lat, len = 15, w = 7, h = 2.7, full = false) {
       const p = this.sample(s, {});
       const x = p.x + p.rx * lat, z = p.z + p.rz * lat;
-      this.ramps.push({ s, lat, len, w, h, x, z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, k: h / len, y0: this.heightAt(s), g: this.gradeAt(s) });
+      this.ramps.push({ s, lat, len, w, h, x, z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, k: h / len, y0: this.heightAt(s), g: this.gradeAt(s), full, r2: (len * len + w * w) / 4 + 4 });
     }
     // a footbridge right across the circuit: clear underneath at road speed, a wall if you jump into it
     addBridge(s) {
@@ -229,15 +345,42 @@
       this.bridges.push({ s: G.wrap(s, this.length), x: p.x, z: p.z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, hl: 2.2, hw: G.WALK_OUT + 4, y0, y1: y0 + 1.3 });
     }
 
+    // something across the road overhead (wild circuits): solid like a footbridge, its clearance measured from the
+    // road, or from the kicker's lip when it spans a gap. Cable cars are footbridges that move along their cable
+    addSpan(sp) {
+      const s = G.wrap(sp.s, this.length), g = this.gapAt(s), p = this.sample(s, {});
+      const base = g ? g.hLip : this.heightAt(s), y0 = base + sp.y0;
+      const th = { arch: 7, trestle: 3, viaduct: 4 }[sp.kind] || 2.8, hl = { arch: 3.5, trestle: 2.4, viaduct: 3.2 }[sp.kind] || 1.3;
+      const span = Object.assign({}, sp, { s, base, x: p.x, z: p.z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, hl, hw: G.WALK_OUT + 4, y0, y1: y0 + th });
+      (this.spans = this.spans || []).push(span);
+      if (sp.kind !== 'gondola') { this.bridges.push(span); return span; }
+      span.E = 230; span.cabins = [];
+      for (let k = 0; k < 6; k++) {
+        const c = { s, x: p.x, z: p.z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, hl: 1.25, hw: 1.6, y0, y1: y0 + 2.7, dir: k < 3 ? 1 : -1, off: k < 3 ? -3.5 : 3.5, u0: (k % 3) * (2 * span.E / 3) + (k < 3 ? 0 : 60), u: 0, cabin: true };
+        span.cabins.push(c); this.bridges.push(c);
+      }
+      this.updateSpans(0);
+      return span;
+    }
+    updateSpans(t) {
+      for (const sp of this.spans || []) {
+        if (!sp.cabins) continue;
+        for (const c of sp.cabins) {
+          c.u = G.wrap(c.u0 + t * 6 * c.dir, 2 * sp.E) - sp.E;
+          c.x = sp.x + sp.rx * c.u + sp.tx * c.off; c.z = sp.z + sp.rz * c.u + sp.tz * c.off;
+        }
+      }
+    }
+
     // yRef: the height of the point asking (a wheel, a body corner). Decks more than a step above it don't count:
     // they're ceilings, and out.ceil is the underside of the lowest of those (Infinity if none)
     groundAt(x, z, out, yRef = 1e9) {
-      out.h = 0; out.nx = 0; out.ny = 1; out.nz = 0; out.vx = 0; out.vy = 0; out.vz = 0; out.roof = null; out.ceil = Infinity;
+      out.h = this.floorY; out.nx = 0; out.ny = 1; out.nz = 0; out.vx = 0; out.vy = 0; out.vz = 0; out.roof = null; out.ceil = Infinity;
       if (this.elev) this.deckAt(x, z, yRef, out);
       for (let i = 0; i < this.ramps.length; i++) {
         const r = this.ramps[i];
         const dx = x - r.x, dz = z - r.z;
-        if (dx * dx + dz * dz > 200 || r.y0 > yRef + 1) continue;
+        if (dx * dx + dz * dz > r.r2 || r.y0 > yRef + 1) continue;
         const along = dx * r.tx + dz * r.tz, side = dx * r.rx + dz * r.rz;
         if (Math.abs(side) > r.w / 2 || Math.abs(along) > r.len / 2) continue;
         const h = r.y0 + r.g * along + r.h * (along + r.len / 2) / r.len, k = r.k + r.g; // tilted with the road's grade
@@ -256,10 +399,12 @@
         if (!arr) continue;
         for (const i of arr) {
           const dx = x - this.px[i], dz = z - this.pz[i];
+          if (this.hole[i]) continue; // a gap: nothing to stand on
           const along = dx * this.tx[i] + dz * this.tz[i];
           if (along > half || along < -half || Math.abs(dz * this.tx[i] - dx * this.tz[i]) > lim) continue;
           const h = this.py[i] + this.gr[i] * along;
           if (h > yRef + 0.6) { if (h - DECK < out.ceil) out.ceil = h - DECK; continue; } // mid-slab or below: a ceiling
+          if (this.roof[i] && h + this.roof[i] < out.ceil) out.ceil = h + this.roof[i]; // in a tunnel
           if (h > out.h) { out.h = h; best = i; }
         }
       }
@@ -278,7 +423,7 @@
     // ----- meshes -----
     ribbon(latA, yA, latB, yB, vLen, uA = 0, uB = 1) {
       const N = this.N, rows = N + 1;
-      const pos = new Float32Array(rows * 2 * 3), uv = new Float32Array(rows * 2 * 2);
+      const pos = new Float32Array(rows * 2 * 3), uv = new Float32Array(rows * 2 * 2), col = new Float32Array(rows * 2 * 3);
       for (let r = 0; r < rows; r++) {
         const i = r % N;
         const rx = -this.tz[i], rz = this.tx[i];
@@ -286,21 +431,34 @@
         const y = this.py[i];
         pos.set([this.px[i] + rx * latA, yA + y, this.pz[i] + rz * latA, this.px[i] + rx * latB, yB + y, this.pz[i] + rz * latB], r * 6);
         uv.set([uA, v, uB, v], r * 4);
+        const k = this.shade ? this.shade[i] : 1;
+        col.set([k, k, k, k, k, k], r * 6);
       }
       const idx = [];
       for (let r = 0; r < N; r++) {
+        if (this.hole[r] || this.hole[(r + 1) % N]) continue; // no road over a gap
         const a = r * 2, b = a + 1, c = a + 2, d = a + 3;
         idx.push(a, b, c, b, d, c);
       }
       const g = new T.BufferGeometry();
       g.setAttribute('position', new T.BufferAttribute(pos, 3));
       g.setAttribute('uv', new T.BufferAttribute(uv, 2));
+      g.setAttribute('color', new T.BufferAttribute(col, 3));
       g.setIndex(idx);
       g.computeVertexNormals();
       return g;
     }
 
     buildMeshes(scene, Q) {
+      // in a tunnel the sky doesn't reach the road: shade it (eased over the portals), the tunnel lamps light it
+      if (this.tunnels.length) {
+        this.shade = new Float32Array(this.N).fill(1);
+        for (let i = 0; i < this.N; i++) {
+          let k = 1;
+          for (const t of this.tunnels) { const a = this.sd(i * this.ds, t.s0), b = this.sd(t.s1, i * this.ds); if (a > -10 && b > -10) k = Math.min(k, G.lerp(1, t.side ? 0.55 : 0.28, G.clamp(Math.min(a, b) / 25 + 0.4, 0, 1))); }
+          this.shade[i] = k;
+        }
+      }
       const group = new T.Group();
       const roadTile = this.length / Math.round(this.length / 12);
       // asphalt + markings
@@ -337,7 +495,7 @@
         }
       }, { repeat: true });
       roadTex.wrapS = T.ClampToEdgeWrapping;
-      const roadMat = new T.MeshStandardMaterial({ map: roadTex, roughness: 0.82, metalness: 0.0 });
+      const roadMat = new T.MeshStandardMaterial({ map: roadTex, roughness: 0.82, metalness: 0.0, vertexColors: true });
       if (Q.level >= 3) {
         // fine aggregate + patched cracks so the asphalt catches light instead of reading as a flat print
         roadMat.bumpMap = G.canvasTexture(512, 512, (ctx, W, H) => {
@@ -386,8 +544,8 @@
         for (let k = 0; k <= 4; k++) { ctx.beginPath(); ctx.moveTo(0, k * H / 4); ctx.lineTo(W, k * H / 4); ctx.stroke(); }
         ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
       }, { repeat: true });
-      const walkMat = new T.MeshStandardMaterial({ map: walkTex, roughness: 0.9 });
-      const curbMat = new T.MeshStandardMaterial({ color: 0x8a8a8e, roughness: 0.8, side: T.DoubleSide });
+      const walkMat = new T.MeshStandardMaterial({ map: walkTex, roughness: 0.9, vertexColors: true });
+      const curbMat = new T.MeshStandardMaterial({ color: 0x8a8a8e, roughness: 0.8, side: T.DoubleSide, vertexColors: true });
       for (const sg of [1, -1]) {
         const RH = G.ROAD_HALF, WO = G.WALK_OUT;
         const top = this.ribbon(sg > 0 ? RH : -WO, 0.16, sg > 0 ? WO : -RH, 0.16, 8);
@@ -438,7 +596,7 @@
     // concrete: parapets, deck slabs and their edges, pillars under the high parts, and the footbridges
     buildDecks(group, Q) {
       const WO = G.WALK_OUT, N = this.N;
-      const conc = new T.MeshStandardMaterial({ color: 0x74767c, roughness: 0.88, side: T.DoubleSide });
+      const conc = new T.MeshStandardMaterial({ color: 0x74767c, roughness: 0.88, side: T.DoubleSide, vertexColors: true });
       const under = new T.MeshStandardMaterial({ color: 0x3a3b40, roughness: 0.95, side: T.DoubleSide });
       const glow = new T.MeshBasicMaterial({ color: new T.Color(0.25, 1.6, 3.2), side: T.DoubleSide, toneMapped: false });
       for (const sg of [1, -1]) {
@@ -448,6 +606,7 @@
         group.add(new T.Mesh(this.ribbon(b, 1.1, b, -DECK, 8), conc));      // outer face down the slab edge
         group.add(new T.Mesh(this.ribbon(b + sg * 0.02, -0.5, b + sg * 0.02, -0.32, 8), glow)); // light line along the edge
       }
+      if (this.wild) return; // the land carries the road: no slab, pillars or footbridges
       const slab = new T.Mesh(this.ribbon(-WO, -DECK, WO, -DECK, 8), under);
       group.add(slab);
       // pillars with a cross-head, wherever the deck is high enough and nothing else runs underneath
@@ -487,6 +646,17 @@
   }
 
   const DECK = 1.4; // deck slab depth under the road surface
+
+  // road height from [s, h, grade] keys: cubic Hermite between keys (grade 0 unless given), wrapping round the lap
+  function profileAt(keys, s, L) {
+    let a = keys[keys.length - 1], b = keys[0], sa = a[0] - L, sb = b[0];
+    for (let k = 0; k < keys.length; k++) {
+      if (keys[k][0] > s) { b = keys[k]; sb = b[0]; a = keys[k - 1] || keys[keys.length - 1]; sa = k ? a[0] : a[0] - L; break; }
+      if (k === keys.length - 1) { a = keys[k]; sa = a[0]; b = keys[0]; sb = b[0] + L; }
+    }
+    const len = sb - sa, t = (s - sa) / len, t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * a[1] + (t3 - 2 * t2 + t) * len * (a[2] || 0) + (-2 * t3 + 3 * t2) * b[1] + (t3 - t2) * len * (b[2] || 0);
+  }
 
   // wedge: forward is -Z, low edge at +len/2, high edge (lip) at -len/2
   function rampGeometry(len, w, h) {

@@ -308,6 +308,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     [1.05, 0.6, 0], [-1.05, 0.6, 0], [0, 0.45, -2.35], [0, 0.6, 2.35], [0, 1.2, 2.0],
   ];
 
+  const WO_LIM = 12; // a car this far off the centre line is past the barriers anyway
   const altEffSide = (alt) => (alt < TU.thrustCeiling ? 1 : Math.max(0.25, 1 - (alt - TU.thrustCeiling) / TU.thrustFadeRange));
   const _v = [...Array(12)].map(() => new T.Vector3());
   const _q = new T.Quaternion(), _qi = new T.Quaternion();
@@ -465,8 +466,10 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       if (grounded) F.addScaledVector(up, -DOWNF * spd * spd * 0.5);
 
       // --- thrusters ---
-      const g0 = this.ground(pos.x, pos.z, pos.y + 0.5);
-      this.altitude = pos.y - g0.h;
+      const g0 = this.ground(pos.x, pos.z, pos.y + 0.5), trk = this.game.track;
+      // over a gap the thrusters work off the road level (else they'd fade over the drop and nothing could fly it)
+      const gref = trk.gaps.length && this.near.i >= 0 && trk.gapAt(this.near.s) ? Math.max(g0.h, trk.heightAt(this.near.s) - 1) : g0.h;
+      this.altitude = pos.y - gref;
       if (this.fuel <= 0.5) this.fuelLock = true;
       if (this.fuelLock && this.fuel > 12) this.fuelLock = false;
       const can = !this.fuelLock && !this.frozen;
@@ -536,6 +539,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       }
 
       // --- integrate ---
+      const yPrev = pos.y;
       _qi.copy(q).invert();
       const tl = _v[9].copy(Tq).applyQuaternion(_qi);
       tl.x /= this.I.x; tl.y /= this.I.y; tl.z /= this.I.z;
@@ -597,8 +601,23 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
             this.onWallHit(pos, Math.abs(vt), 0);
           }
         }
-        // dropped off a deck somehow: put the car back on its road
-        if (pos.y < tr.heightAt(this.near.s) - 4) this.onFlipped();
+        // a heavy landing (a ski jump comes down at 30 m/s) must not punch through the deck in one substep: anything
+        // that crossed the road surface from above this step is put back on it (wild circuits never cross over themselves)
+        if (tr.wild && !tr.gapAt(this.near.s) && Math.abs(this.near.lat) < WO_LIM) {
+          const hr = tr.heightAt(this.near.s);
+          if (yPrev >= hr - 0.25 && pos.y < hr - 0.25) { pos.y = hr - 0.25; if (vel.y < 0) vel.y *= -0.1; }
+        }
+        // the far wall of a gap: a car that comes up short hits the cliff instead of popping up onto the road
+        for (const gp of tr.gaps) {
+          const d = tr.sd(this.near.s, gp.s1);
+          if (d < -2.3 || d > 2.3 || pos.y > gp.hFar - 0.8) continue; // the body reaches the far face
+          const tx = this.near.tx, tz = this.near.tz, back = d + 2.3;
+          pos.x -= tx * back; pos.z -= tz * back;
+          const vt = vel.x * tx + vel.z * tz;
+          if (vt > 0) { vel.x -= tx * vt * 1.25; vel.z -= tz * vt * 1.25; this.onWallHit(pos, vt, 0); w.x += (Math.random() - 0.5) * 2; }
+        }
+        // dropped off a deck somehow: put the car back on its road (a gap lets you watch the fall a little first)
+        if (pos.y < tr.heightAt(this.near.s) - (tr.gaps.length && tr.gapAt(this.near.s) ? 10 : 4)) this.onFlipped();
       }
 
       // --- street trees: solid until hit, then they snap and the car loses a good chunk of its speed ---
@@ -615,7 +634,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       if (this.game.course) this.game.course.collide(this);
 
       // safety: never fall through the world
-      if (pos.y < -2) { pos.y = 0.5; vel.y = 0; }
+      if (pos.y < tr.floorY - 2) { pos.y = tr.floorY + 0.5; vel.y = 0; }
 
       // flipped & stuck -> auto reset
       if (up.y < 0.15 && spd < 5) { this.flipT += dt; if (this.flipT > 1.6) this.onFlipped(); } else this.flipT = 0;

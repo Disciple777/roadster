@@ -61,7 +61,8 @@
     const sky = new T.Mesh(new T.SphereGeometry(3000, 32, 16), skyMat);
     sky.frustumCulled = false; sky.renderOrder = -10;
     scene.add(sky);
-    scene.fog = new T.FogExp2(tod.fog, tod.fogDensity);
+    const wild = !!G.TRACK.wild, fogK = G.TRACK.fogK || 1; // open country: see further
+    scene.fog = new T.FogExp2(tod.fog, tod.fogDensity * fogK);
     scene.background = new T.Color(tod.fog);
 
     // ---------- lights ----------
@@ -114,7 +115,11 @@
     groundTex.repeat.set(400, 400);
     const ground = new T.Mesh(new T.PlaneGeometry(5000, 5000), new T.MeshStandardMaterial({ map: groundTex, roughness: 0.95 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; ground.receiveShadow = true;
-    scene.add(ground);
+    if (!wild) scene.add(ground); // wild circuits stand on their own terrain (with holes in it)
+
+    const m4 = new T.Matrix4(), qq = new T.Quaternion(), sc = new T.Vector3(), ps = new T.Vector3(), up = new T.Vector3(0, 1, 0), col = new T.Color();
+    let beaconMat = null;
+    if (!wild) {
 
     // ---------- buildings ----------
     const blds = []; // {x,z,w,d,h,yaw,row,sg,s}
@@ -199,7 +204,6 @@
     const fGeo = bGeo.clone(); // facade boxes carry a per-instance style attribute
     const aStyle = new Float32Array(parts.length * 4);
     const bMesh = new T.InstancedMesh(fGeo, (city.bMat = makeBuildingMaterial(tod, Q.level >= 3)), parts.length);
-    const m4 = new T.Matrix4(), qq = new T.Quaternion(), sc = new T.Vector3(), ps = new T.Vector3(), up = new T.Vector3(0, 1, 0), col = new T.Color();
     parts.forEach((pt, i) => {
       const b = pt.b, own = pt.style === b.style, D = STYLE_DIMS[pt.style];
       qq.setFromAxisAngle(up, b.yaw); ps.set(b.x, 0, b.z); sc.set(b.w * pt.k, pt.h, b.d * pt.k);
@@ -260,7 +264,7 @@
     scene.add(mMesh);
     // red aviation lights on the tallest roofs (mast tip when there is one)
     const tall = blds.filter((b) => b.h > 60);
-    const beaconMat = new T.MeshBasicMaterial({ color: new T.Color(2.5, 0.1, 0.08), toneMapped: false });
+    beaconMat = new T.MeshBasicMaterial({ color: new T.Color(2.5, 0.1, 0.08), toneMapped: false });
     const beacons = new T.InstancedMesh(new T.SphereGeometry(0.45, 8, 6), beaconMat, tall.length);
     tall.forEach((b, i) => { const mt = masts.find((m) => m[0] === b.x && m[2] === b.z); m4.makeTranslation(b.x, b.h + (mt ? mt[3] : 1), b.z); beacons.setMatrixAt(i, m4); });
     beacons.frustumCulled = false;
@@ -313,10 +317,11 @@
     });
     sMesh.frustumCulled = false;
     scene.add(sMesh);
+    } // !wild
 
     // ---------- street lights ----------
     const lamps = [];
-    for (const sg of [1, -1]) for (let s = sg > 0 ? 0 : 20; s < track.length; s += 40) if (!G.nearCrossingS(track, s, 3) && track.clearAt(s, 8)) lamps.push({ s, sg });
+    for (const sg of [1, -1]) for (let s = sg > 0 ? 0 : 20; s < track.length; s += G.TRACK.lampEvery || 40) if (!G.nearCrossingS(track, s, 3) && track.clearAt(s, 8)) lamps.push({ s, sg });
     const poleGeo = new T.CylinderGeometry(0.12, 0.18, 9, 6); poleGeo.translate(0, 4.5, 0);
     const armGeo = new T.BoxGeometry(0.15, 0.15, 3.2);
     const headGeo = new T.BoxGeometry(0.5, 0.14, 1.1);
@@ -542,14 +547,14 @@
     scene.add(gantry);
 
     // ---------- landmark: the curved sky ramp from the reveal ----------
-    buildSkyRamp(scene, Q);
+    if (!wild) buildSkyRamp(scene, Q);
 
     // ---------- distant mountains silhouette ring (sunset reads better) ----------
     {
       const segs = 96, pos = [], idx = [];
       for (let i = 0; i <= segs; i++) {
         const a = (i / segs) * Math.PI * 2, rr = 2200;
-        const hgt = 60 + 90 * Math.abs(Math.sin(a * 3.0 + 1.0)) + 50 * Math.abs(Math.sin(a * 7.3)) + R() * 20;
+        const hgt = (60 + 90 * Math.abs(Math.sin(a * 3.0 + 1.0)) + 50 * Math.abs(Math.sin(a * 7.3)) + R() * 20) * (G.TRACK.theme === 'alps' ? 2.6 : 1);
         pos.push(Math.cos(a) * rr, -10, Math.sin(a) * rr, Math.cos(a) * rr, hgt, Math.sin(a) * rr);
         if (i < segs) { const k = i * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
       }
@@ -560,12 +565,14 @@
       scene.add(mtn);
     }
 
+    if (wild) city.wild = G.buildWild(game, city);
+
     let tAcc = 0;
     city.update = (dt, camPos, focus) => {
       tAcc += dt;
       sky.position.copy(camPos);
       skyMat.uniforms.uTime.value = tAcc;
-      beaconMat.color.setRGB(Math.sin(tAcc * 3) > 0.2 ? 6 : 0.4, 0.15, 0.12);
+      if (beaconMat) beaconMat.color.setRGB(Math.sin(tAcc * 3) > 0.2 ? 6 : 0.4, 0.15, 0.12);
       if (treeTime) treeTime.value = tAcc;
       city.updateTrees(dt, focus);
       // shadow camera follows the focus (player)
@@ -579,11 +586,12 @@
       const su = skyMat.uniforms;
       su.uZen.value.set(t.zenith); su.uHor.value.set(t.horizon); su.uGlow.value.set(t.glow);
       su.uSun.value.set(...t.sunDir).normalize(); su.uStars.value = t.stars; su.uNight.value = t.stars;
-      scene.fog.color.set(t.fog); scene.fog.density = t.fogDensity; scene.background.set(t.fog);
+      scene.fog.color.set(t.fog); scene.fog.density = t.fogDensity * fogK; scene.background.set(t.fog);
       hemi.color.set(t.hemiSky); hemi.groundColor.set(t.hemiGround); hemi.intensity = t.hemi;
       sun.color.set(t.moon); sun.intensity = t.moonI; sunDir.set(...t.sunDir).normalize();
       makeEnv(t, G.rng(1234));
-      city.bMat.userData.setTod(t);
+      if (city.bMat) city.bMat.userData.setTod(t);
+      if (city.wild) city.wild.setTod(t, name);
       city.poolMat.color.setRGB(1.0, 0.86, 0.68).multiplyScalar(t.lampPool);
       if (city.coneMat) city.coneMat.uniforms.uI.value = t.stars ? 0.06 : 0.02;
       city.mtnMat.color.set(t.horizon).multiplyScalar(0.25);

@@ -391,6 +391,7 @@
       c.yaw = Math.atan2(-c.hx, -c.hz);
       this.track.groundAt(c.x, c.z, this._gq, this.track.heightAt(c.s) + 1);
       c.y = c.gy = this._gq.h;
+      if (this.track.gaps.length) { const y = this.track.gapLift(c.s); if (y != null) c.y = c.gy = y; } // over a gap: it jumps too
     }
 
     update(dt, player, playerS) {
@@ -400,7 +401,7 @@
       for (const c of this.cars) {
         if (!c.loose) { lanes[c.lane].push(c); continue; }
         // a slow wreck sitting in a lane is an obstacle the cars behind brake for and steer around
-        if (c.y - (c.gy || 0) > 1 || Math.hypot(c.lvx, c.lvz) > 4) continue;
+        if (c.y - (c.gy || 0) > 1 || Math.hypot(c.lvx, c.lvz) > 4 || c.y < this.track.heightAt(c.s) - 3) continue;
         for (let ln = 0; ln < NL; ln++) if (Math.abs(this.laneLat(ln) - c.lat) < 1.9) lanes[ln].push(c);
       }
       for (let ln = 0; ln < NL; ln++) {
@@ -512,6 +513,7 @@
       }
       const dx = c.x - this.game.player.pos.x, dz = c.z - this.game.player.pos.z;
       if (c.timer > 9 && dx * dx + dz * dz > 150 * 150) this.respawnFar(c, playerS);
+      else if (c.timer > 2.5 && c.y < this.track.heightAt(c.s) - 8) this.respawnFar(c, playerS); // gone down a gap
     }
 
     // a knocked-loose car hitting other traffic: same OBB + mass impulse rules as a roadster hitting traffic

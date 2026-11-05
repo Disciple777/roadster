@@ -15,6 +15,7 @@
   // another stretch of the circuit
   G.placeCrossings = function (track) {
     const L = track.length, out = [], p = {};
+    if (G.TRACK.xings === false) return out; // out in the wild: no side streets
     const n = Math.max(3, Math.round(L / 950));
     // how far the side street can run on one side before it meets other road
     const reach = (s, sg) => {
