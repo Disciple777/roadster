@@ -203,6 +203,13 @@
       this.input.autoAccel = S.autoAccel; this.input.sens = S.sens; this.input.thrInvert = S.thrInvert;
       // settings from before the layouts existed kept their custom keys in S.keys: those were made on layout 2
       if (S.keys) { S.keysBy = Object.assign({}, S.keysBy, { 2: S.keys }); delete S.keys; G.store.set('settings', S); }
+      // v2 keys: drift moved to Ctrl on the arrows layout. A layout saved with the old drift keys (X / R-Ctrl) gets the new
+      // ones, unless left Ctrl was already given to something else
+      if (S.keysV !== 2) {
+        const b1 = (S.keysBy || {})[1];
+        if (b1 && String(b1.hand) === 'KeyX,ControlRight' && !Object.values(b1).some((c) => (c || []).includes('ControlLeft'))) b1.hand = ['ControlLeft', 'ControlRight'];
+        S.keysV = 2; G.store.set('settings', S);
+      }
       this.input.setBinds(Object.assign(G.defaultKeys(S.keyPreset), (S.keysBy || {})[S.keyPreset]));
       if (S.tilt && G.isTouch) this.input.enableTilt(true);
       const useTouch = S.touchUI === 'on' || (S.touchUI === 'auto' && G.isTouch);
@@ -316,6 +323,12 @@
       click('btn-cam', () => this.cycleCam());
       click('btn-full', () => this.fullscreen());
       click('rot-ok', () => $('rotate').classList.add('dismissed'));
+      click('kh-go', () => this.closeKeyHelp());
+      window.addEventListener('keydown', (e) => { if (this.introHold && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.state === 'countdown') { e.preventDefault(); this.closeKeyHelp(); } });
+
+      // track pickers: built from G.TRACKS, so a new circuit shows up everywhere on its own (a grid that wraps)
+      const trackCards = Object.entries(G.TRACKS).map(([id, t]) => `<button data-v="${id}"><b>${t.name}</b>${t.tag ? `<small>${t.tag}</small>` : ''}</button>`).join('');
+      for (const id of ['s-track', 'b-track', 's-mptrack']) { const el = $(id); if (el) { el.innerHTML = trackCards; el.classList.add('tracks'); } }
 
       // segmented controls
       const seg = (id, key, conv = (v) => v) => {
@@ -411,7 +424,15 @@
         G.store.set('settings', S); stop(); showPreset(); thrHint();
       });
       showPreset();
+      // Ctrl held with W / T / N is a browser shortcut no page can block (close tab, new tab, new window)
+      const ctrlWarn = () => {
+        const all = Object.values(inp.binds).flat();
+        const bad = all.some((c) => c === 'ControlLeft' || c === 'ControlRight') && ['KeyW', 'KeyT', 'KeyN'].filter((c) => all.includes(c));
+        const el = $('keys-warn');
+        if (el) { el.classList.toggle('hidden', !(bad && bad.length)); if (bad && bad.length) el.textContent = `Careful: Ctrl is bound and so is ${bad.map(G.keyName).join(' / ')}. Ctrl+${G.keyName(bad[0])} is a browser shortcut (${bad[0] === 'KeyW' ? 'it closes the tab' : bad[0] === 'KeyT' ? 'new tab' : 'new window'}) that the game can't block. Move drift off Ctrl or that key elsewhere.`; }
+      };
       const render = () => {
+        ctrlWarn();
         box.innerHTML = G.KEY_ACTIONS.map(([id, label]) => `<div class="bind"><span>${label}</span>` +
           [0, 1].map((slot) => `<button data-a="${id}" data-s="${slot}" class="${pending && pending.id === id && pending.slot === slot ? 'wait' : ''}">` +
             (pending && pending.id === id && pending.slot === slot ? 'PRESS A KEY' : G.keyName((inp.binds[id] || [])[slot])) + '</button>').join('') + '</div>').join('');
@@ -555,6 +576,7 @@
 
     toMenu() {
       this.state = 'menu';
+      this.introHold = false; $('keyhelp').classList.remove('open');
       this.customCourse = null;
       document.body.classList.remove('testing');
       this.closePanels();
@@ -633,6 +655,42 @@
       this.cdT = mode !== 'free' ? 3.999 : 1.5;
       this.cdLast = -1;
       this.camIntro = 0;
+      // a driver's very first run: show the controls and hold the countdown until they close the card
+      // (not in multiplayer, where the start is shared, and not for editor test runs)
+      this.introHold = false;
+      if (!G.store.get('seenKeys', false) && !this.net && !(custom && custom.editing)) this.showKeyHelp();
+    }
+
+    showKeyHelp() {
+      const inp = this.input, k = (a, cls = '') => {
+        const c = (inp.binds[a] || []).filter(Boolean);
+        return c.length ? c.map((x) => `<span class="kc ${cls}">${G.keyName(x)}</span>`).join('<em>or</em>') : '<span class="kc">—</span>';
+      };
+      const one = (a, cls = '') => { const c = (inp.binds[a] || []).find(Boolean); return `<span class="kc ${cls}">${G.keyName(c)}</span>`; };
+      const touch = document.body.classList.contains('touch');
+      $('kh-body').innerHTML = touch ? `<div class="kh-grid">
+          <div class="kh-tile wide"><h4>STEER</h4><p>${this.settings.tilt ? 'Tilt the phone like a steering wheel. Hold <b>GAS</b> to go.' : 'Drag anywhere on the left half of the screen. Drag down to brake.'}</p></div>
+          <div class="kh-tile"><h4>DRIFT</h4><div class="kh-keys"><span class="kc hot">DRIFT</span></div></div>
+          <div class="kh-tile"><h4>JUMP / HOVER</h4><div class="kh-keys"><span class="kc">JUMP</span></div><p>Hold to fly over traffic and gaps</p></div>
+          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys"><span class="kc">L</span><span class="kc">R</span></div><p>Hold JUMP and slide onto L / R to flip</p></div>
+          <div class="kh-tile"><h4>BOOST</h4><div class="kh-keys"><span class="kc">BOOST</span></div><p>Uses N₂, refill it with tricks</p></div>
+        </div>` : `<div class="kh-grid">
+          <div class="kh-tile"><h4>DRIVE</h4><div class="kh-t">${one('accel')}${one('left')}${one('brake')}${one('right')}</div><p>Brake again when stopped to reverse</p></div>
+          <div class="kh-tile"><h4>DRIFT</h4><div class="kh-keys">${k('hand', 'hot')}</div><p>Hold while turning to slide. Drifts refill N₂</p></div>
+          <div class="kh-tile"><h4>BOOST</h4><div class="kh-keys">${k('boost')}</div><p>Rear thruster</p></div>
+          <div class="kh-tile wide"><h4>JUMP / HOVER</h4><div class="kh-keys">${one('jump', 'sp')}</div><p>Under-thrusters: hold to jump traffic and fly the gaps</p></div>
+          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys">${one('thrL')}${one('thrR')}</div><p>Hold with jump to barrel-roll</p></div>
+        </div>
+        <div class="kh-small"><span>${one('camera')} camera</span><span>${one('reset')} reset car</span><span>${one('pause')} pause</span><span>Gamepad: RT gas · LT brake · A jump · B drift · X boost</span></div>`;
+      this.introHold = true;
+      $('keyhelp').classList.add('open');
+    }
+    closeKeyHelp() {
+      if (!this.introHold) return;
+      this.introHold = false;
+      G.store.set('seenKeys', true);
+      $('keyhelp').classList.remove('open');
+      this.camIntro = 0;
     }
 
     pause(on, silent) {
@@ -640,13 +698,15 @@
         if (this.state !== 'race' && this.state !== 'countdown' && this.state !== 'wreck') return;
         this.prevState = this.state; this.state = 'paused';
         $('pause').classList.add('open');
+        $('keyhelp').classList.remove('open'); // back when the race resumes
         G.audio.update(null, false);
       } else if (this.state === 'paused') {
         this.state = this.prevState;
         this.closePanels();
         this.last = performance.now();
+        if (this.introHold) $('keyhelp').classList.add('open');
       }
-      if (silent) this.closePanels();
+      if (silent) { this.closePanels(); this.introHold = false; $('keyhelp').classList.remove('open'); } // restart / quit
     }
 
     resetPlayer() {
@@ -1162,6 +1222,7 @@
 
     consumeEvents() {
       for (const e of this.input.consume()) {
+        if (this.introHold && (e === 'pause' || e === 'reset' || e === 'camera')) continue; // the controls card is up
         if (e === 'pause') { if (this.state === 'paused') this.pause(false); else this.pause(true); }
         else if (e === 'camera') this.cycleCam();
         else if (e === 'reset') this.resetPlayer();
@@ -1172,6 +1233,7 @@
     }
 
     updateCountdown(dt) {
+      if (this.introHold) return; // the controls card is up: the lights wait for it
       this.cdT -= dt;
       this.camIntro = Math.min(1, this.camIntro + dt / 2.6);
       const n = Math.ceil(this.cdT);

@@ -6,11 +6,11 @@
     ['brake', 'Brake / reverse', ['KeyS', 'ArrowDown']],
     ['left', 'Steer left', ['KeyA', 'ArrowLeft']],
     ['right', 'Steer right', ['KeyD', 'ArrowRight']],
-    ['hand', 'Handbrake drift', ['KeyX', 'ControlRight']],
-    ['jump', 'Under-thrusters (jump / hover)', ['Space']],
-    ['thrL', 'Left side thruster', ['KeyQ']],
-    ['thrR', 'Right side thruster', ['KeyE']],
-    ['boost', 'Rear thruster boost', ['ShiftLeft', 'ShiftRight']],
+    ['hand', 'Drift', ['KeyX', 'ControlRight']],
+    ['jump', 'Jump / hover', ['Space']],
+    ['thrL', 'Left thruster', ['KeyQ']],
+    ['thrR', 'Right thruster', ['KeyE']],
+    ['boost', 'Boost', ['ShiftLeft', 'ShiftRight']],
     ['camera', 'Camera', ['KeyC']],
     ['reset', 'Reset car', ['KeyR']],
     ['pause', 'Pause', ['Escape', 'KeyP']],
@@ -21,7 +21,9 @@
   const EVENT_ACTIONS = new Set(['camera', 'reset', 'pause', 'mute', 'fullscreen', 'hud']);
   // control layouts: 1 drives on the arrows with the side thrusters on A / D, 2 is the original WASD + Q / E
   G.KEY_PRESETS = {
-    1: { name: 'ARROWS + A/D', keys: { accel: ['ArrowUp'], brake: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], thrL: ['KeyA'], thrR: ['KeyD'] } },
+    // drift: Ctrl on the arrows layout (left Ctrl for the left hand, right Ctrl next to the arrows). Not on WASD: Ctrl+W
+    // closes the browser tab and no page can stop that, so WASD keeps X
+    1: { name: 'ARROWS + A/D', keys: { accel: ['ArrowUp'], brake: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], thrL: ['KeyA'], thrR: ['KeyD'], hand: ['ControlLeft', 'ControlRight'] } },
     2: { name: 'WASD + Q/E', keys: {} },
   };
   G.KEY_ACTIONS = ACTIONS;
@@ -70,7 +72,9 @@
         if (this.capture) { e.preventDefault(); e.stopPropagation(); this.capture(e.code); return; }
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
         const acts = this.codeMap.get(e.code);
-        if (!e.ctrlKey && !e.metaKey && (acts || ['Space','ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code))) e.preventDefault();
+        // while driving, Ctrl is the drift key: Ctrl+D / Ctrl+R / Ctrl+F... must steer the car, not bookmark or reload the page
+        const st = G.game && G.game.state, driving = st === 'race' || st === 'countdown' || st === 'wreck' || st === 'finished';
+        if ((driving || (!e.ctrlKey && !e.metaKey)) && (acts || ['Space','ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code))) e.preventDefault();
         if (!e.repeat && acts) for (const a of acts) if (EVENT_ACTIONS.has(a)) this.events.push(a);
         this.keys.add(e.code);
         this.lastDevice = 'keyboard';

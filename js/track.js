@@ -8,7 +8,7 @@
   // circuits: lane centres (lat, + = right of the racing line), road/sidewalk/wall half-widths, spline
   G.TRACKS = {
     city: {
-      name: 'DOWNTOWN', fwd: [1.8, 5.4, 9.0], onc: [-1.8, -5.4, -9.0], road: 12, walk: 16, wall: 15.6, grid: [3.0, 6.8],
+      name: 'DOWNTOWN', tag: 'night streets', fwd: [1.8, 5.4, 9.0], onc: [-1.8, -5.4, -9.0], road: 12, walk: 16, wall: 15.6, grid: [3.0, 6.8],
       ctrl: [
         [-300, -315], [0, -330], [300, -320], [520, -290], [700, -150], [720, 150], [560, 300],
         [300, 250], [100, 380], [-200, 420], [-550, 350], [-700, 100], [-720, -150], [-600, -290],
@@ -16,7 +16,7 @@
     },
     // eight lanes, all running with the race: long sweepers and a hairpin-free flow
     highway: {
-      name: 'EXPRESSWAY', fwd: [-12.6, -9.0, -5.4, -1.8, 1.8, 5.4, 9.0, 12.6], onc: [], road: 15.6, walk: 19.6, wall: 19.2, grid: [-1.9, 1.9], traffic: 1.3, fill: 0.6,
+      name: 'EXPRESSWAY', tag: '8-lane freeway', fwd: [-12.6, -9.0, -5.4, -1.8, 1.8, 5.4, 9.0, 12.6], onc: [], road: 15.6, walk: 19.6, wall: 19.2, grid: [-1.9, 1.9], traffic: 1.3, fill: 0.6,
       ctrl: [
         [-720, -340], [-240, -420], [240, -380], [680, -450], [1000, -240], [1040, 120], [800, 380],
         [400, 340], [120, 520], [-320, 560], [-760, 450], [-1000, 160], [-960, -160],
@@ -25,7 +25,7 @@
     // four lanes on concrete decks: a flyover that peels off to the right, climbs and loops back over the road it
     // just left, a long viaduct, footbridges low enough to clip if you jump, and signalled cross streets at ground level
     skyway: {
-      name: 'SKYWAY', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.2, fill: 0.85,
+      name: 'SKYWAY', tag: 'elevated loop', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.2, fill: 0.85,
       elev: true, trees: false, bridges: true, noCourse: true,
       ctrl: [
         [-640, -430, 0], [-340, -432, 0], [-60, -425, 0], [130, -400, 0], [260, -340, 0], [380, -262, 1.5],
@@ -43,7 +43,7 @@
     // tunnels: a roof h metres over the road (side: an open avalanche gallery on that side); spans: things across
     // the road overhead (y0 = clearance over the road, kind picks the look, bonus = score for flying under it).
     canyon: {
-      name: 'RED ROCK', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.25,
+      name: 'RED ROCK', tag: 'desert canyon', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.25,
       elev: true, wild: true, theme: 'canyon', trees: false, noCourse: true, xings: false, lampEvery: 60, fogK: 0.5,
       desc: 'Arizona canyon country. Jump the river canyon under the rock arch, blast through the mesa tunnel, hold your thrust over the washed-out bridge, then launch off the mesa under the freight train.',
       ctrl: [
@@ -67,7 +67,7 @@
       ramps: [0.2, 0.31, 0.8, 0.93],
     },
     alps: {
-      name: 'ALPINE', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.2,
+      name: 'ALPINE', tag: 'snowy mountain pass', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.2,
       elev: true, wild: true, theme: 'alps', trees: false, noCourse: true, xings: false, lampEvery: 70, fogK: 0.55,
       desc: 'A Swiss mountain pass in the snow. Creek jump under the rail viaduct, the avalanche gallery, a tunnel whose floor caved in, the ski jump under the cable cars and a collapsed gorge bridge.',
       ctrl: [
@@ -404,7 +404,13 @@
           if (along > half || along < -half || Math.abs(dz * this.tx[i] - dx * this.tz[i]) > lim) continue;
           const h = this.py[i] + this.gr[i] * along;
           if (h > yRef + 0.6) { if (h - DECK < out.ceil) out.ceil = h - DECK; continue; } // mid-slab or below: a ceiling
-          if (this.roof[i] && h + this.roof[i] < out.ceil) out.ceil = h + this.roof[i]; // in a tunnel
+          if (this.roof[i]) {
+            const top = h + this.roof[i];
+            // over a tunnel or a gallery (flown in some other way than through the mouth): its roof is the ground, never
+            // a ceiling to be pulled down under. The portal faces stop a car flying in over the mouth (car.js)
+            if (yRef > top + 0.3) { if (top + 1 > out.h) { out.h = top + 1; best = i; } continue; }
+            if (top < out.ceil) out.ceil = top; // in a tunnel
+          }
           if (h > out.h) { out.h = h; best = i; }
         }
       }

@@ -60,6 +60,16 @@
     </div>
   </div>
   <div id="countdown"></div>
+
+  <!-- first race only: the controls, before the lights go out (game.js showKeyHelp) -->
+  <div id="keyhelp" class="keyhelp">
+    <div class="kh-card">
+      <h2>HOW TO DRIVE</h2>
+      <div id="kh-body"></div>
+      <p class="kh-foot">Change any key in <b>CONTROLS</b> from the menu or the pause screen.</p>
+      <div class="actions"><button id="kh-go" class="primary">GOT IT · RACE <kbd>ENTER</kbd></button></div>
+    </div>
+  </div>
   <div id="fps" class="hidden"></div>
   <div id="touch"></div>
 
@@ -93,7 +103,7 @@
     <h2 id="setup-title">STREET RACE</h2>
     <div class="scroll">
     <label>TRACK</label>
-    <div class="seg" id="s-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button><button data-v="skyway">SKYWAY</button><button data-v="canyon">RED ROCK</button><button data-v="alps">ALPINE</button></div>
+    <div class="seg tracks" id="s-track"></div>
     <p class="hint hidden" id="s-trackdesc"></p>
     <div class="traffic-opt">
     <label>TRAFFIC</label>
@@ -128,7 +138,7 @@
   <!-- LEADERBOARD: best official run per driver, per track and mode -->
   <div id="board" class="panel card">
     <h2>LEADERBOARD</h2>
-    <div class="seg" id="b-track"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button><button data-v="skyway">SKYWAY</button><button data-v="canyon">RED ROCK</button><button data-v="alps">ALPINE</button></div>
+    <div class="seg tracks" id="b-track"></div>
     <div class="seg" id="b-mode"><button data-v="race">STREET RACE · 2 LAPS</button><button data-v="course">OBSTACLE COURSE · 1 LAP</button></div>
     <div id="b-rows" class="res-rows board-rows"></div>
     <div id="b-mine" class="hint"></div>
@@ -182,7 +192,7 @@
       <label>YOUR NAME</label>
       <input id="mp-name" class="txt" maxlength="12" autocomplete="off" spellcheck="false" />
       <label>HOST A ROOM</label>
-      <div class="seg" id="s-mptrack"><button data-v="city">DOWNTOWN</button><button data-v="highway">EXPRESSWAY</button><button data-v="skyway">SKYWAY</button><button data-v="canyon">RED ROCK</button><button data-v="alps">ALPINE</button></div>
+      <div class="seg tracks" id="s-mptrack"></div>
       <button id="btn-host" class="primary wide">HOST</button>
       <label>JOIN A ROOM</label>
       <div class="joinrow"><input id="mp-code" class="txt code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" autocapitalize="characters" /><button id="btn-join" class="primary">JOIN</button></div>
@@ -258,6 +268,7 @@
         <div class="seg" id="s-keyset"></div>
         <label>KEYS <i>· click a key to rebind · Del clears · Esc cancels</i></label>
         <div id="keybinds" class="binds"></div>
+        <p id="keys-warn" class="note hidden"></p>
         <div class="binds-foot"><button id="btn-keys-reset">RESET KEYS</button></div>
       </div>
       <div class="cols">

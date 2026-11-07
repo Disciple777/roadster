@@ -616,6 +616,20 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
           const vt = vel.x * tx + vel.z * tz;
           if (vt > 0) { vel.x -= tx * vt * 1.25; vel.z -= tz * vt * 1.25; this.onWallHit(pos, vt, 0); w.x += (Math.random() - 0.5) * 2; }
         }
+        // tunnel portals: the rock face (or the gallery's lintel) over the mouth is a wall. A car that jumps at the portal
+        // above the opening bounces off it instead of being pulled down into the tunnel
+        for (const t of tr.tunnels) {
+          for (const [ps, out] of [[t.s0, -1], [t.s1, 1]]) {
+            const u = -out * tr.sd(this.near.s, ps); // metres past the portal plane, into the tunnel
+            if (u < -2.3 || u > 2.3) continue;
+            const mouth = tr.heightAt(ps) + t.h;
+            if (pos.y + 1.25 < mouth || (t.side && pos.y > mouth + 2.2)) continue; // through the opening / over a gallery's low lintel
+            const tx = this.near.tx, tz = this.near.tz, push = out * (u + 2.3);
+            pos.x += tx * push; pos.z += tz * push;
+            const vt = vel.x * tx + vel.z * tz, vin = -out * vt;
+            if (vin > 0) { vel.x -= tx * vt * 1.3; vel.z -= tz * vt * 1.3; this.onWallHit(pos, vin, 0); w.x += (Math.random() - 0.5) * 2; w.z += (Math.random() - 0.5) * 2; }
+          }
+        }
         // dropped off a deck somehow: put the car back on its road (a gap lets you watch the fall a little first)
         if (pos.y < tr.heightAt(this.near.s) - (tr.gaps.length && tr.gapAt(this.near.s) ? 10 : 4)) this.onFlipped();
       }

@@ -40,6 +40,38 @@ button.primary:hover { background: linear-gradient(135deg, #ff4152, #d81a33); }
 #setup.free .race-opt, #setup.free .rival-opt, #setup.course .rival-opt, #setup.course .traffic-opt { display: none; }
 #setup.course .race-laps, #setup:not(.course) .course-laps, #setup:not(.course) .course-opt { display: none; }
 #setup.course #s-track [data-v="skyway"] { display: none; }
+/* track pickers: a grid of cards that wraps, so names never spill out and new circuits just add a row */
+.seg.tracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 5px; }
+.seg.tracks button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; padding: 10px 8px; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; }
+.seg.tracks button b { font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+.seg.tracks button small { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--dim); text-transform: none; }
+.seg.tracks button.sel small { color: #bfeaff; }
+
+/* first-race controls card */
+.keyhelp.open { display: flex; }
+.keyhelp { display: none; position: fixed; inset: 0; z-index: 25; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(4, 5, 9, 0.35), rgba(4, 5, 9, 0.75)); padding: 16px; }
+.kh-card { width: min(720px, 100%); max-height: 100%; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 22px 24px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); animation: khIn 0.35s ease-out; }
+@keyframes khIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
+.kh-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kh-tile { border: 1px solid var(--line); border-radius: 12px; padding: 12px 10px 10px; background: rgba(255, 255, 255, 0.03); display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.kh-tile.wide { grid-column: span 2; }
+.kh-tile h4 { margin: 0; font-family: 'Orbitron'; font-size: 11px; letter-spacing: 0.18em; color: var(--cyan); }
+.kh-tile p { margin: 0; font-size: 13px; line-height: 1.3; color: var(--dim); }
+.kh-keys { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.kh-keys em { font-style: normal; font-size: 12px; color: var(--dim); }
+.kh-t { display: grid; grid-template-columns: repeat(3, auto); gap: 5px; justify-content: center; }
+.kh-t .kc:nth-child(1) { grid-area: 1 / 2; } .kh-t .kc:nth-child(2) { grid-area: 2 / 1; } .kh-t .kc:nth-child(3) { grid-area: 2 / 2; } .kh-t .kc:nth-child(4) { grid-area: 2 / 3; }
+.kc { min-width: 42px; height: 40px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; font-family: 'Orbitron'; font-weight: 700; font-size: 13px; color: #fff; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.28); border-bottom-width: 4px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+.kc.sp { min-width: 150px; }
+.kc.hot { border-color: var(--cyan); box-shadow: 0 0 14px rgba(95, 212, 255, 0.35); }
+.kh-small { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; margin-top: 12px; font-size: 14px; color: #cfd5e2; }
+.kh-small span { display: inline-flex; align-items: center; gap: 6px; }
+.kh-small .kc { min-width: 30px; height: 28px; font-size: 11px; padding: 0 7px; border-bottom-width: 3px; }
+.kh-foot { margin: 12px 0 0; text-align: center; font-size: 14px; color: var(--dim); }
+.kh-foot b { color: #cfd5e2; }
+#kh-go kbd { margin-left: 8px; font-size: 9px; border-color: rgba(255, 255, 255, 0.5); }
+@media (max-width: 620px) { .kh-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kh-tile.wide { grid-column: span 2; } }
+@media (max-height: 500px) { .kh-card { padding: 12px 16px; } .kh-tile { padding: 8px; gap: 5px; } .kc { height: 32px; min-width: 34px; } .kh-tile p { display: none; } }
 
 /* ---------- menu ---------- */
 .panel.menu { inset: 0; flex-direction: column; justify-content: space-between; gap: 18px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; padding: calc(28px + var(--sa-t)) calc(36px + var(--sa-r)) calc(28px + var(--sa-b)) calc(36px + var(--sa-l)); background: linear-gradient(90deg, rgba(4, 5, 9, 0.85) 0%, rgba(4, 5, 9, 0.35) 45%, transparent 70%); }

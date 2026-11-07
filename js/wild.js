@@ -78,6 +78,12 @@
     }
     const isTunnel = (i) => tr.roof[i] > 0 && !(tunnelOf(i) || {}).side;
     const tunnelOf = (i) => tr.tunnels.find((t) => tr.sd(i * ds, t.s0) >= 0 && tr.sd(t.s1, i * ds) >= 0);
+    // tunnel mouths: a heightfield can't drop from the mountain top to the road in a vertical face, so each portal gets a
+    // notch: the land stays down at road level for the first PLEAD metres of the tunnel and PNOTCH metres either side of
+    // it. A rock headwall with the opening in it closes the notch in front and a rock lid closes it on top (portals
+    // below), and any land triangle that still reaches into the tube is dropped from the mesh
+    const PLEAD = cell * 1.6 + 2, PNOTCH = WO + 2 + cell * 1.5, PHALF = PNOTCH + cell * 1.5 + 1;
+    const portalDepth = (i) => { const t = tunnelOf(i); return t ? Math.min(tr.sd(i * ds, t.s0), tr.sd(t.s1, i * ds)) : 1e9; };
 
     // distant buttes / peaks scattered off the road
     const buttes = [];
@@ -110,10 +116,11 @@
         const m = (inside[k] ? sstep(120, 520, d) * (30 + 120 * ridge(x / 520, z / 520)) : sstep(50, 520, d) * (110 + 420 * ridge(x / 650, z / 650)));
         h = valley + m + 6 * fbm(x / 120, z / 120, 3);
       }
-      // the rock a tunnel goes through
-      if (isTunnel(i) && d < 110) h = Math.max(h, (rh + tr.roof[i] + 28 + 10 * fbm(x / 40, z / 40, 2)) * (1 - sstep(60, 110, d)) + h * sstep(60, 110, d));
+      // the rock a tunnel goes through (all but the notch at each mouth)
+      const notch = isTunnel(i) && d < PNOTCH && portalDepth(i) < PLEAD;
+      if (isTunnel(i) && d < 110 && !notch) h = Math.max(h, (rh + tr.roof[i] + 28 + 10 * fbm(x / 40, z / 40, 2)) * (1 - sstep(60, 110, d)) + h * sstep(60, 110, d));
       // the road corridor: flat under the road, then a cut or a fill out to the natural ground
-      if (!isTunnel(i)) {
+      if (!isTunnel(i) || notch) {
         const w = 1 - sstep(WO + cell * 0.8, WO + cell * 0.8 + (alps ? 30 : 42), d);
         h = h + (rh - 0.35 - h) * w;
       }
@@ -153,13 +160,32 @@
       for (let gz = 0; gz < nz; gz++) for (let gx = 0; gx < nx; gx++) { const k = gz * nx + gx; pos.set([x0 + gx * cell, H[k], z0 + gz * cell], k * 3); }
       const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
       let q = 0;
+      // is this point inside a tunnel tube (between its walls, over the road, under its ceiling)?
+      const inTube = (x, y, z, i) => {
+        for (let it = 0; it < 3; it++) i = ((i + Math.round(((x - tr.px[i]) * tr.tx[i] + (z - tr.pz[i]) * tr.tz[i]) / ds)) % N + N) % N;
+        if (!isTunnel(i)) return false;
+        const lat = (z - tr.pz[i]) * tr.tx[i] - (x - tr.px[i]) * tr.tz[i], y0 = tr.heightAt(i * ds + (x - tr.px[i]) * tr.tx[i] + (z - tr.pz[i]) * tr.tz[i]);
+        return Math.abs(lat) < WO + 0.3 && y > y0 + 0.02 && y < y0 + tr.roof[i] + 0.2;
+      };
+      const pierces = (a, b, c) => {
+        const ka = near[a]; if (ka < 0 || !(isTunnel(ka) || isTunnel(near[b]) || isTunnel(near[c]))) return false;
+        if (Math.min(dist[a], dist[b], dist[c]) > WO + cell * 1.5) return false;
+        const P = [a, b, c].map((k) => [x0 + (k % nx) * cell, H[k], z0 + Math.floor(k / nx) * cell]);
+        const S = 8;
+        for (let u = 0; u <= S; u++) for (let v = 0; u + v <= S; v++) {
+          const wa = 1 - (u + v) / S, wb = u / S, wc = v / S;
+          if (inTube(P[0][0] * wa + P[1][0] * wb + P[2][0] * wc, P[0][1] * wa + P[1][1] * wb + P[2][1] * wc, P[0][2] * wa + P[1][2] * wb + P[2][2] * wc, ka)) return true;
+        }
+        return false;
+      };
       for (let gz = 0; gz < nz - 1; gz++) for (let gx = 0; gx < nx - 1; gx++) {
         const a = gz * nx + gx, b = a + 1, c = a + nx, d = c + 1;
-        idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d;
+        if (!pierces(a, c, b)) { idx[q++] = a; idx[q++] = c; idx[q++] = b; }
+        if (!pierces(b, c, d)) { idx[q++] = b; idx[q++] = c; idx[q++] = d; }
       }
       const g = new T.BufferGeometry();
       g.setAttribute('position', new T.BufferAttribute(pos, 3));
-      g.setIndex(new T.BufferAttribute(idx, 1));
+      g.setIndex(new T.BufferAttribute(idx.subarray(0, q), 1));
       g.computeVertexNormals();
       const ground = new T.Mesh(g, (W.landMat = landMaterial(alps)));
       ground.receiveShadow = Q.shadows; ground.frustumCulled = false;
@@ -234,13 +260,56 @@
       for (const [s, dir] of [[t.s0, 1], [t.s1, -1]]) {
         const p = tr.sample(s, {}), y = tr.heightAt(s), port = new T.Group();
         port.position.set(p.x, y, p.z); port.rotation.y = yawOf(p);
-        const span = WO + (side ? 2 : 16), top = side ? 2.2 : 16;
-        const mat = side ? conc : (alps ? conc : rockMat);
-        const lint = new T.Mesh(new T.BoxGeometry(2 * span, top, 3), mat); lint.position.set(0, h + top / 2, 0); port.add(lint);
-        if (!side) for (const sg of [-1, 1]) { const leg = new T.Mesh(new T.BoxGeometry(span - WO, h + 0.5, 3), mat); leg.position.set(sg * (WO + (span - WO) / 2), (h + 0.5) / 2 - 0.5, 0); port.add(leg); }
+        if (side) {
+          const lint = new T.Mesh(new T.BoxGeometry(2 * (WO + 2), 2.2, 3), conc); lint.position.set(0, h + 1.1, 0); port.add(lint);
+        } else {
+          // the mountain's face with the mouth cut out of it: legs either side and the rock over the opening, up to the
+          // lid over the notch (the land behind is down at road level, see PLEAD)
+          // local +Z * dir looks back down the road at the approaching car; the face's front sits just in front of the portal
+          const top = h + 30, legW = PHALF - WO - 0.05, fz = -dir * 1.2;
+          // its skyline: full height over the mouth, falling away to the shoulders so the ends sink into the hillside
+          const topAt = (lat) => h + 5 + (top - h - 5) * (1 - sstep(WO + 5, PHALF, Math.abs(lat))) + 2.5 * (fbm(lat / 8 + s * 0.01, 3.7, 2) - 0.5);
+          const face = (w, hh, cx, cy) => {
+            const g = new T.BoxGeometry(w, hh, 3.2, Math.max(1, Math.round(w / 4)), Math.max(1, Math.round(hh / 4)), 1), pa = g.attributes.position;
+            for (let v = 0; v < pa.count; v++) { const vx = pa.getX(v) + cx, vy = pa.getY(v) + cy; if (vy > h + 0.5) pa.setY(v, h + 0.5 + (vy - h - 0.5) * (topAt(vx) - h - 0.5) / (top - h - 0.5) - cy); }
+            // a rough rock face: push the front vertices in and out a little (never into the opening)
+            for (let v = 0; v < pa.count; v++) {
+              const vx = pa.getX(v) + cx, vy = pa.getY(v) + cy;
+              if (pa.getZ(v) * dir < 1) continue; // front face only
+              const edge = Math.abs(vx) < WO + 0.1 ? vy - h : Math.abs(vx) - WO; // flat round the opening
+              const k = G.clamp((edge - 1) / 4, 0, 1);
+              pa.setZ(v, pa.getZ(v) + dir * k * (3.2 * fbm(vx / 9 + s * 0.01, vy / 7, 3) - 1.2));
+            }
+            g.computeVertexNormals();
+            const m = new T.Mesh(g, rockMat); m.position.set(cx, cy, fz); port.add(m);
+          };
+          for (const sg of [-1, 1]) face(legW, top + 4, sg * (WO + 0.05 + legW / 2), top / 2 - 2);
+          face(2 * WO + 0.2, top - h, 0, (top + h) / 2);
+          // a concrete frame round the opening
+          const lint = new T.Mesh(new T.BoxGeometry(2 * (WO + 2.2), 2.2, 3.8), conc); lint.position.set(0, h + 1.1, dir * 0.9); port.add(lint);
+          for (const sg of [-1, 1]) { const leg = new T.Mesh(new T.BoxGeometry(2.2, h, 3.8), conc); leg.position.set(sg * (WO + 1.1), h / 2, dir * 0.9); port.add(leg); }
+          // the lid over the notch: the mountain's own surface (same shape as the land around it), starting level with
+          // the top of the face and sinking a little under the land at its far edges so no seam shows from above
+          const iP = idxOf(s), aEnd = PLEAD + cell * 1.5 + 3, nL = Math.ceil(aEnd / ds), nC = Math.ceil((2 * PHALF) / (cell / 2));
+          const lp = [], li = [];
+          for (let r = 0; r <= nL; r++) {
+            const i = (((iP + dir * r) % N) + N) % N, a = r * ds, rx = -tr.tz[i], rz = tr.tx[i];
+            for (let c = 0; c <= nC; c++) {
+              const lat = -PHALF + (2 * PHALF * c) / nC, x = tr.px[i] + rx * lat, z = tr.pz[i] + rz * lat;
+              let yy = tr.py[i] + h + 28 + 10 * fbm(x / 40, z / 40, 2);
+              const f = sstep(0, cell * 1.5, a);
+              yy = (y + topAt(lat)) * (1 - f) + yy * f;
+              yy -= 3 * Math.max(sstep(PHALF - cell, PHALF, Math.abs(lat)), sstep(aEnd - cell, aEnd, a));
+              lp.push(x, Math.max(yy, tr.py[i] + h + 1), z);
+              if (r < nL && c < nC) { const k = r * (nC + 1) + c; li.push(k, k + nC + 1, k + 1, k + 1, k + nC + 1, k + nC + 2); }
+            }
+          }
+          const lg = new T.BufferGeometry(); lg.setAttribute('position', new T.Float32BufferAttribute(lp, 3)); lg.setIndex(li); lg.computeVertexNormals();
+          const lid = new T.Mesh(lg, rockMat); lid.receiveShadow = true; lid.castShadow = Q.shadows; g.add(lid);
+        }
         // name board over the mouth
         const board = new T.Mesh(new T.PlaneGeometry(14, 1.8), signMaterial(t.name, '#ffd23a', '#121315'));
-        board.position.set(0, h + 1.1, dir * 1.56); if (dir < 0) board.rotation.y = Math.PI; port.add(board);
+        board.position.set(0, h + 1.1, side ? dir * 1.56 : dir * 2.86); if (dir < 0) board.rotation.y = Math.PI; port.add(board);
         port.traverse((o) => { if (o.isMesh) { o.castShadow = Q.shadows; o.receiveShadow = true; } });
         g.add(port);
       }
@@ -539,24 +608,137 @@
       instance(ADDONS.mergeGeometries(hg), hm, hoods, (c, m) => { const hgt = 9 + c[3] * 22; m.compose(ps.set(c[0], c[1] - 1, c[2]), qq.setFromAxisAngle(up, c[3] * 7), sc.set(1 + c[3], hgt, 1 + c[3])); });
       instance(new T.DodecahedronGeometry(1, 0), rockMat, hoods, (c, m) => { const hgt = 9 + c[3] * 22, k = 2.6 + c[3] * 1.4; m.compose(ps.set(c[0], c[1] - 1 + hgt + k * 0.4, c[2]), qq.setFromAxisAngle(up, c[3] * 11), sc.set(k * 1.2, k * 0.7, k)); });
     } else {
-      // pines on the slopes
-      const pg = [new T.CylinderGeometry(0.22, 0.32, 2.2, 6).translate(0, 1.1, 0)];
-      for (let k = 0; k < 4; k++) pg.push(new T.ConeGeometry(2.6 - k * 0.55, 3.6 - k * 0.3, 8).translate(0, 2.4 + k * 2.1, 0));
-      const pineGeo = ADDONS.mergeGeometries(pg);
-      // colour the needles: dark green, snow on the upper faces of each layer
-      {
-        const p = pineGeo.attributes.position, nrm = pineGeo.attributes.normal, colA = new Float32Array(p.count * 3);
-        for (let v = 0; v < p.count; v++) {
-          const y = p.getY(v), snow = nrm.getY(v) > 0.45 && y > 2.3 ? 0.55 + 0.4 * ((v * 7) % 3) / 2 : 0;
-          const c = y < 1.6 ? [0.2, 0.13, 0.08] : [0.05 + snow * 0.85, 0.12 + snow * 0.78, 0.07 + snow * 0.86];
-          colA.set(c, v * 3);
+      // conifers on the slopes: spruces and firs built from tiers of drooping branches with feathery needle tips, bark
+      // on the trunk, and snow that settles on whatever faces the sky (shader, world space) rather than painted on
+      const seg = Q.level >= 4 ? 16 : Q.level >= 3 ? 12 : 8;
+      const needleTex = G.canvasTexture(256, 256, (ctx, Wd, Ht) => {
+        // u runs round the tree, v from the trunk (0) out to the branch tips (1); the outer band is cut into needle
+        // fringes by alpha so the silhouette isn't a clean cone edge
+        const r = G.rng(91);
+        const gr = ctx.createLinearGradient(0, 0, 0, Ht);
+        gr.addColorStop(0, '#102418'); gr.addColorStop(0.55, '#23442a'); gr.addColorStop(1, '#335a33');
+        ctx.fillStyle = gr; ctx.fillRect(0, 0, Wd, Ht * 0.8);
+        // needle sprays pointing outwards
+        for (let k = 0; k < 2600; k++) {
+          const x = r() * Wd, y = r() * Ht * 0.95, l = 6 + r() * 16, a = (r() - 0.5) * 0.9, g = 50 + r() * 75;
+          ctx.strokeStyle = `rgba(${(g * 0.45) | 0},${g | 0},${(g * 0.5) | 0},${0.5 + r() * 0.5})`;
+          ctx.lineWidth = 1 + r() * 1.5;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.sin(a) * l, y + Math.cos(a) * l); ctx.stroke();
         }
-        pineGeo.setAttribute('color', new T.BufferAttribute(colA, 3));
+        // darker gaps between branch clumps
+        for (let k = 0; k < 220; k++) { ctx.fillStyle = `rgba(4,10,6,${0.25 + r() * 0.35})`; ctx.beginPath(); ctx.ellipse(r() * Wd, r() * Ht * 0.85, 3 + r() * 6, 8 + r() * 16, 0, 0, 7); ctx.fill(); }
+      }, { repeat: true });
+      // the alpha mask (fringe at the tips)
+      {
+        const img = needleTex.image, ctx = img.getContext('2d'), Wd = img.width, Ht = img.height, d = ctx.getImageData(0, 0, Wd, Ht), r = G.rng(17);
+        const edge = new Float32Array(Wd);
+        for (let x = 0; x < Wd; x++) edge[x] = 0.8 + 0.14 * Math.abs(Math.sin(x / Wd * Math.PI * 23 + 0.7)) + r() * 0.06;
+        for (let y = 0; y < Ht; y++) for (let x = 0; x < Wd; x++) {
+          const k = (y * Wd + x) * 4, v = y / Ht;
+          let a = v < edge[x] - 0.22 ? 1 : v > edge[x] ? 0 : (r() < (edge[x] - v) / 0.22 ? 1 : 0);
+          if (a && v > edge[x] - 0.22) { d.data[k] = 30 + r() * 25; d.data[k + 1] = 60 + r() * 40; d.data[k + 2] = 34 + r() * 20; }
+          d.data[k + 3] = a ? 255 : 0;
+        }
+        ctx.putImageData(d, 0, 0); needleTex.needsUpdate = true;
       }
-      const pines = placeScatter(Math.round(1500 * dens), (x, z, d, y) => offRoad(d, 4) && d < 700 && y < 260 && y > -2 && slopeAt(x, z) < 0.75 && notChasm(x, z));
-      instance(pineGeo, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), pines, (c, m) => {
-        const k = 0.8 + c[3] * 0.9; m.compose(ps.set(c[0], c[1] - 0.3, c[2]), qq.setFromAxisAngle(up, c[3] * 30), sc.set(k, k * (0.9 + c[3] * 0.3), k));
+      const barkTex = G.canvasTexture(64, 256, (ctx, Wd, Ht) => {
+        const r = G.rng(5); ctx.fillStyle = '#3b2a1e'; ctx.fillRect(0, 0, Wd, Ht);
+        for (let k = 0; k < 160; k++) { const g = 20 + r() * 50; ctx.fillStyle = `rgba(${g + 20},${g},${g * 0.7},0.7)`; ctx.fillRect(r() * Wd, r() * Ht, 1 + r() * 3, 10 + r() * 40); }
+        for (let k = 0; k < 60; k++) { ctx.fillStyle = 'rgba(10,6,4,0.6)'; ctx.fillRect(r() * Wd, r() * Ht, 2 + r() * 6, 2); }
+      }, { repeat: true });
+      barkTex.repeat.set(2, 3);
+      const snowy = (mat, amount) => {
+        mat.onBeforeCompile = (sh) => {
+          sh.vertexShader = 'varying vec3 vSP; varying vec3 vSN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+            mat4 sIM = mat4(1.0);
+            #ifdef USE_INSTANCING
+              sIM = instanceMatrix;
+            #endif
+            vSP = (modelMatrix * sIM * vec4(position, 1.0)).xyz; vSN = normalize(mat3(modelMatrix * sIM) * normal);`);
+          sh.fragmentShader = 'varying vec3 vSP; varying vec3 vSN;\nfloat sh1(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }\n' +
+            'float sn3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(mix(sh1(i), sh1(i+vec3(1,0,0)), f.x), mix(sh1(i+vec3(0,1,0)), sh1(i+vec3(1,1,0)), f.x), f.y), mix(mix(sh1(i+vec3(0,0,1)), sh1(i+vec3(1,0,1)), f.x), mix(sh1(i+vec3(0,1,1)), sh1(i+vec3(1,1,1)), f.x), f.y), f.z); }\n' +
+            sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+            {
+              float nz = sn3(vSP * 2.3) * 0.5 + sn3(vSP * 0.9) * 0.3 + sn3(vSP * 0.35) * 0.2;
+              float up = (gl_FrontFacing ? 1.0 : -1.0) * normalize(vSN).y;
+              // snow clumps on the upper side of the boughs only, broken up so the green shows through
+              float s = smoothstep(0.42, 0.66, up + (nz - 0.5) * 0.6) * smoothstep(0.3, 0.55, nz) * ${amount.toFixed(2)};
+              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.97) * (0.9 + 0.1 * nz), s);
+            }`);
+        };
+        return mat;
+      };
+      const needleMat = snowy(new T.MeshStandardMaterial({ map: needleTex, alphaTest: 0.5, side: T.DoubleSide, roughness: 0.95, metalness: 0 }), 0.92);
+      const barkMat = new T.MeshStandardMaterial({ map: barkTex, roughness: 1, metalness: 0 });
+      // one tier: a cone of branches whose rim is a ring of drooping tips (every other vertex pulled in and lifted)
+      const tier = (y0, R, Hh, phase, rr) => {
+        const pos = [], uv = [], idx = [], n = seg * 2;
+        pos.push(0, y0 + Hh, 0); uv.push(0.5, 0);
+        for (let j = 0; j <= n; j++) {
+          const a = (j / n) * Math.PI * 2 + phase, tip = j % 2 === 0, rad = R * (tip ? 1 : 0.82) * (0.86 + 0.28 * rr());
+          const droop = tip ? -R * (0.2 + 0.14 * rr()) : -R * 0.04;
+          pos.push(Math.cos(a) * rad, y0 + droop, Math.sin(a) * rad); uv.push((j / n) * 3, 1);
+        }
+        for (let j = 1; j <= n; j++) idx.push(0, j + 1, j);
+        // a mid ring so the branches sag (a convex cone reads as a party hat)
+        const base = pos.length / 3;
+        for (let j = 0; j <= n; j++) {
+          const p0 = 1 + j, x = pos[p0 * 3], z = pos[p0 * 3 + 2], y = pos[p0 * 3 + 1];
+          pos.push(x * 0.55, y0 + Hh * 0.5 + (y - y0) * 0.2, z * 0.55); uv.push((j / n) * 3, 0.55);
+        }
+        // re-stitch: apex -> mid ring -> rim
+        idx.length = 0;
+        for (let j = 0; j < n; j++) { const m0 = base + j, m1 = base + j + 1, r0 = 1 + j, r1 = 2 + j; idx.push(0, m1, m0, m0, m1, r1, m0, r1, r0); }
+        // underside, a shallow dark cone back to the trunk
+        const uc = pos.length / 3; pos.push(0, y0 + Hh * 0.18, 0); uv.push(0.5, 0.05);
+        for (let j = 0; j < n; j++) idx.push(uc, 1 + j, 2 + j);
+        const g = new T.BufferGeometry();
+        g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+        g.computeVertexNormals(); // smooth across the tier: soft boughs, not facets
+        return g;
+      };
+      const species = [
+        { tiers: 6, R: 3.0, Ht: 13, trunk: 1.6, seed: 3 },   // tall Norway spruce
+        { tiers: 5, R: 3.4, Ht: 9.5, trunk: 1.2, seed: 8 },  // broad fir
+        { tiers: 4, R: 1.8, Ht: 5, trunk: 0.7, seed: 12 },   // young tree
+      ];
+      const sGeo = species.map((sp) => {
+        const rr = G.rng(sp.seed), parts = [];
+        for (let k = 0; k < sp.tiers; k++) {
+          const f = k / (sp.tiers - 1), y0 = sp.trunk + f * (sp.Ht - sp.trunk) * 0.86, R = sp.R * (1 - f * 0.82) * (0.92 + 0.16 * rr());
+          parts.push(tier(y0, R, R * 0.95 + 0.6, rr() * 6.3, rr));
+        }
+        const fol = ADDONS.mergeGeometries(parts);
+        // bend the normals outwards a little: the tree shades like a soft volume instead of a stack of plates
+        const pa = fol.attributes.position, na = fol.attributes.normal;
+        for (let v = 0; v < pa.count; v++) {
+          const x = pa.getX(v), z = pa.getZ(v), l = Math.hypot(x, z) || 1;
+          const nx = na.getX(v) * 0.65 + (x / l) * 0.35, ny = na.getY(v) * 0.65, nz = na.getZ(v) * 0.65 + (z / l) * 0.35, nl = Math.hypot(nx, ny, nz);
+          na.setXYZ(v, nx / nl, ny / nl, nz / nl);
+        }
+        const trunk = new T.CylinderGeometry(0.07 * sp.R, 0.13 * sp.R, sp.Ht * 0.92, 7, 1).translate(0, sp.Ht * 0.46 - 0.3, 0);
+        return { fol, trunk };
       });
+      const pines = placeScatter(Math.round(1900 * dens), (x, z, d, y) => offRoad(d, 4) && d < 700 && y < 260 && y > -2 && slopeAt(x, z) < 0.75 && notChasm(x, z));
+      // groves: thin out the trees that ended up alone in open snow, keep the clumps
+      const groves = []; for (let k = 0; k < 90; k++) groves.push([tr.minX - 700 + R() * (tr.maxX - tr.minX + 1400), tr.minZ - 700 + R() * (tr.maxZ - tr.minZ + 1400), 60 + R() * 140]);
+      const kept = pines.filter((c) => c[3] < 0.12 || groves.some(([gx, gz, gr]) => Math.hypot(c[0] - gx, c[2] - gz) < gr) || distAt(c[0], c[2]) < 60);
+      const bySp = species.map(() => []);
+      for (const c of kept) bySp[c[3] < 0.5 ? 0 : c[3] < 0.82 ? 1 : 2].push(c);
+      const tc = new T.Color();
+      species.forEach((sp, k) => {
+        const list = bySp[k];
+        if (!list.length) return;
+        const place = (c, m) => {
+          const h = G.wrap(c[3] * 7919, 1), sc0 = (k === 2 ? 0.7 : 0.75) + h * 0.7;
+          m.compose(ps.set(c[0], c[1] - 0.4, c[2]), qq.setFromAxisAngle(up, h * 40), sc.set(sc0, sc0 * (0.9 + G.wrap(h * 13, 1) * 0.3), sc0));
+        };
+        const fm = instance(sGeo[k].fol, needleMat, list, place);
+        list.forEach((c, j) => { const h = G.wrap(c[3] * 3571, 1); fm.setColorAt(j, tc.setRGB(0.82 + h * 0.3, 0.86 + h * 0.24, 0.8 + h * 0.2)); });
+        fm.instanceColor.needsUpdate = true;
+        instance(sGeo[k].trunk, barkMat, list, place).castShadow = false;
+      });
+      W.pines = kept;
       // a village of chalets round the start
       const ch = [];
       for (let k = 0; k < 400 && ch.length < Math.round(34 * dens); k++) {
