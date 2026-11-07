@@ -28,7 +28,7 @@
     } finally { clearTimeout(to); }
   }
 
-  G.OFFICIAL_LAPS = { race: 2, course: 1 };
+  G.OFFICIAL_LAPS = { race: 2, course: 1, chal: 5 }; // chal: all five STUNT CHALLENGE levels
   // a ranked street race is run on the same setup by everyone (the server checks it too)
   G.OFFICIAL_RACE = { traffic: 'heavy', rivals: 7, difficulty: 'pro' };
   // what keeps a run off the leaderboard, in words (empty: it's official)

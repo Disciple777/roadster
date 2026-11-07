@@ -29,6 +29,11 @@
       <div class="race-only box"><small>LAP</small><b id="h-lap">1/3</b></div>
       <div class="course-only box hull" id="h-hullbox"><small>HULL</small><b id="h-hull">100%</b><div class="hull-bar"><i id="h-hullbar"></i></div></div>
       <div class="box"><small>TIME</small><b id="h-time">0:00.00</b><span id="h-best" class="sub"></span></div>
+      <div id="h-chal" class="chal-only hidden">
+        <div class="box"><small>LEVEL</small><b id="h-clvl">1/5</b><span id="h-cname" class="sub"></span></div>
+        <div class="box lives"><small>LIVES</small><b id="h-lives">♥♥♥</b></div>
+        <div class="box obj"><small>OBJECTIVE</small><b id="h-cobj"></b></div>
+      </div>
     </div>
     <div class="hud-tr">
       <canvas id="minimap" width="180" height="180"></canvas>
@@ -81,11 +86,7 @@
       <div class="logo-tag">cold-gas street racing</div>
     </div>
     <div class="menu-btns">
-      <button id="btn-race" class="big primary">STREET RACE</button>
-      <button id="btn-free" class="big">FREE RIDE</button>
-      <button id="btn-course" class="big">OBSTACLE COURSE</button>
-      <button id="btn-editor" class="big">COURSE EDITOR</button>
-      <button id="btn-mp" class="big">MULTIPLAYER<small>(local)</small></button>
+      <button id="btn-play" class="big primary">PLAY</button>
       <button id="btn-board" class="big">LEADERBOARD</button>
       <div class="row2">
         <button id="btn-settings">SETTINGS</button>
@@ -96,6 +97,35 @@
       </a>
       <div id="menu-best" class="best"></div>
     </div>
+  </div>
+
+  <!-- PLAY: every game mode -->
+  <div id="play" class="panel card">
+    <h2>PLAY</h2>
+    <div class="scroll">
+    <div class="modes">
+      <button id="btn-race" class="mode"><b>STREET RACE</b><small>Race rivals through traffic on the city circuits</small></button>
+      <button id="btn-chal" class="mode new"><b>STUNT CHALLENGE</b><small>Five stunt levels: rooftop gaps, fire rings, speed gates. One shot, three lives</small><i>NEW</i></button>
+      <button id="btn-course" class="mode"><b>OBSTACLE COURSE</b><small>Smash, dodge and fly a set-piece course for points</small></button>
+      <button id="btn-free" class="mode"><b>FREE RIDE</b><small>No clock, no rules, unlimited N₂</small></button>
+      <button id="btn-mp" class="mode"><b>MULTIPLAYER</b><small>Race friends on the same network</small></button>
+      <button id="btn-editor" class="mode"><b>COURSE EDITOR</b><small>Build and test your own obstacle course</small></button>
+    </div>
+    </div>
+    <div class="actions"><button data-back class="primary">BACK</button></div>
+  </div>
+
+  <!-- STUNT CHALLENGE -->
+  <div id="chal" class="panel card">
+    <h2>STUNT CHALLENGE</h2>
+    <div class="scroll">
+    <p class="hint">Five levels back to back on <b>3 lives</b>. Every level has a fixed N₂ tank that does not recharge. Score: clear bonus, time under par, precision, first try and N₂ left; lives left pay out at the end.</p>
+    <button id="btn-chalrun" class="big primary chal-run">START RUN<small>all 5 levels · ranked</small></button>
+    <div id="chal-best" class="chal-best"></div>
+    <label>PRACTICE A LEVEL <small>(unlimited tries, not ranked)</small></label>
+    <div id="chal-levels" class="chal-levels"></div>
+    </div>
+    <div class="actions"><button data-back class="primary">BACK</button></div>
   </div>
 
   <!-- RACE SETUP -->
@@ -139,7 +169,7 @@
   <div id="board" class="panel card">
     <h2>LEADERBOARD</h2>
     <div class="seg tracks" id="b-track"></div>
-    <div class="seg" id="b-mode"><button data-v="race">STREET RACE · 2 LAPS</button><button data-v="course">OBSTACLE COURSE · 1 LAP</button></div>
+    <div class="seg" id="b-mode"><button data-v="race">STREET RACE · 2 LAPS</button><button data-v="course">OBSTACLE COURSE · 1 LAP</button><button data-v="chal">STUNT CHALLENGE · 5 LEVELS</button></div>
     <div id="b-rows" class="res-rows board-rows"></div>
     <div id="b-mine" class="hint"></div>
     <div class="actions"><button data-back class="primary">BACK</button></div>
@@ -351,7 +381,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry };
     const BUILD = Date.now();
-    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'ghost', 'course', 'editor', 'game'];
+    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'ghost', 'course', 'editor', 'challenge', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }

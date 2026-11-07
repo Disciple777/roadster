@@ -23,10 +23,10 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 
-const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps'];
-const MODES = ['race', 'course'];
+const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps', 'stunt']; // 'stunt': the STUNT CHALLENGE run (its own levels)
+const MODES = ['race', 'course', 'chal'];
 const COURSES = ['street'];
-const OFFICIAL_LAPS = ['race' => 2, 'course' => 1];
+const OFFICIAL_LAPS = ['race' => 2, 'course' => 1, 'chal' => 5]; // chal: the 5-level stunt challenge run
 const OFFICIAL_RACE = ['traffic' => 'heavy', 'rivals' => 7, 'difficulty' => 'pro'];
 const TOP_N = 20;
 const LEVEL_MAX_ITEMS = 600;
@@ -60,8 +60,8 @@ function rank(PDO $db, string $p, string $track, string $mode, int $time, int $s
         $st = $db->prepare("SELECT COUNT(*) FROM {$p}scores WHERE track = ? AND mode = 'race' AND time_ms < ?");
         $st->execute([$track, $time]);
     } else {
-        $st = $db->prepare("SELECT COUNT(*) FROM {$p}scores WHERE track = ? AND mode = 'course' AND (score > ? OR (score = ? AND time_ms < ?))");
-        $st->execute([$track, $score, $score, $time]);
+        $st = $db->prepare("SELECT COUNT(*) FROM {$p}scores WHERE track = ? AND mode = ? AND (score > ? OR (score = ? AND time_ms < ?))");
+        $st->execute([$track, $mode, $score, $score, $time]);
     }
     return (int) $st->fetchColumn() + 1;
 }

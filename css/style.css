@@ -365,3 +365,41 @@ body.editing #hud, body.editing #touch, body.editing .ibtns { display: none !imp
   .ed-top .txt { width: 130px; }
   #editor .ed-pal .grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- PLAY: mode list ---------- */
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modes .mode { position: relative; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px 14px 13px; min-height: 92px; }
+.modes .mode b { font-size: 14px; letter-spacing: 0.1em; }
+.modes .mode small { font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 0.02em; color: var(--dim); line-height: 1.2; }
+.modes .mode:hover b { color: #fff; }
+.modes .mode.new { border-color: rgba(255, 170, 40, 0.55); background: linear-gradient(135deg, rgba(255, 120, 30, 0.16), rgba(255, 42, 60, 0.08)); }
+.modes .mode i { position: absolute; top: 8px; right: 10px; font-style: normal; font-size: 9px; letter-spacing: 0.15em; padding: 2px 6px; border-radius: 4px; background: #ff8a1a; color: #120800; }
+@media (max-width: 520px) { .modes { grid-template-columns: 1fr; } .modes .mode { min-height: 0; } }
+
+/* ---------- STUNT CHALLENGE panel ---------- */
+#chal .hint b { color: var(--txt); }
+.chal-run { width: 100%; margin-top: 10px; padding: 16px; font-size: 17px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.chal-run small { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; opacity: 0.85; }
+.chal-best { margin-top: 8px; text-align: center; font-family: 'Orbitron'; font-size: 12px; letter-spacing: 0.1em; color: #ffd36a; min-height: 14px; }
+.chal-levels { display: flex; flex-direction: column; gap: 8px; }
+.chal-levels .lvl { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; }
+.chal-levels .num { flex: none; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-size: 16px; background: rgba(255, 42, 60, 0.18); border: 1px solid rgba(255, 42, 60, 0.5); }
+.chal-levels .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.chal-levels .txt b { font-size: 13px; letter-spacing: 0.1em; }
+.chal-levels .txt small { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--dim); line-height: 1.2; }
+.chal-levels .best { flex: none; text-align: right; font-size: 13px; color: var(--cyan); min-height: 0; }
+.chal-levels .best small { display: block; font-size: 8px; letter-spacing: 0.2em; color: var(--dim); }
+.res-rows small.tries { font-family: 'Rajdhani', sans-serif; color: var(--dim); font-size: 12px; letter-spacing: 0.04em; }
+.res-rows .row.dim { opacity: 0.55; }
+
+/* ---------- STUNT CHALLENGE HUD ---------- */
+#hud.chal .race-only, #hud.chal .hud-tr { display: none; }
+#h-chal { display: flex; gap: 8px; }
+#h-chal .sub { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#h-chal .lives b { color: #ff4a5a; letter-spacing: 0.08em; text-shadow: 0 0 10px rgba(255, 42, 60, 0.6); }
+#h-chal .obj b { font-size: 13px; letter-spacing: 0.06em; color: #ffd36a; white-space: nowrap; }
+#h-chal .obj b.flash { animation: objflash 0.9s; }
+@keyframes objflash { 0%, 40% { color: #fff; text-shadow: 0 0 14px #ffd36a; } 100% { color: #ffd36a; text-shadow: none; } }
+@media (max-width: 760px) { #h-chal .obj { display: none; } #h-chal .sub { max-width: 90px; } }
+/* the top-right panel is hidden in the challenge, so the score sits there, clear of the objective box */
+#hud.chal .hud-score { left: auto; right: calc(14px + var(--sa-r)); transform: none; text-align: right; }

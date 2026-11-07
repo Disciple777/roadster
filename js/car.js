@@ -468,7 +468,8 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       // --- thrusters ---
       const g0 = this.ground(pos.x, pos.z, pos.y + 0.5), trk = this.game.track;
       // over a gap the thrusters work off the road level (else they'd fade over the drop and nothing could fly it)
-      const gref = trk.gaps.length && this.near.i >= 0 && trk.gapAt(this.near.s) ? Math.max(g0.h, trk.heightAt(this.near.s) - 1) : g0.h;
+      let gref = trk.gaps.length && this.near.i >= 0 && trk.gapAt(this.near.s) ? Math.max(g0.h, trk.heightAt(this.near.s) - 1) : g0.h;
+      if (trk.thrustRef) gref = Math.max(gref, trk.thrustRef(pos.x, pos.z));
       this.altitude = pos.y - gref;
       if (this.fuel <= 0.5) this.fuelLock = true;
       if (this.fuelLock && this.fuel > 12) this.fuelLock = false;
@@ -503,9 +504,10 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       // recharge on the ground, after a short pause since the thrusters were last fired
       this.fuelUse = wantL + wantR + wantB + wantSL + wantSR > 0;
       this.fuelIdle = this.fuelUse ? 0 : this.fuelIdle + dt;
-      this.fuelCharging = grounded && this.fuelIdle > TU.fuelRechargeDelay && this.fuel < 100;
+      this.fuelCharging = !this.noRecharge && grounded && this.fuelIdle > TU.fuelRechargeDelay && this.fuel < 100;
       if (this.fuelCharging) this.fuel += TU.fuelRecharge * dt;
       this.fuel = G.clamp(this.fuel, 0, 100);
+      if (this.infFuel) { this.fuel = 100; this.fuelLock = false; }
 
       // --- assists / air control ---
       const singleSide = Math.abs(this.th.L - this.th.R) > 0.3;
@@ -635,7 +637,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       }
 
       // --- street trees: solid until hit, then they snap and the car loses a good chunk of its speed ---
-      const city = this.game.city;
+      const city = !this.game.chalRun && this.game.city;
       const th = city && city.hitTrees(this);
       if (th) {
         const keep = G.clamp(0.72 - th.speed * 0.003, 0.5, 0.72);
@@ -646,6 +648,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
 
       // --- obstacle-course set pieces ---
       if (this.game.course) this.game.course.collide(this);
+      if (this.game.chalRun) this.game.chalRun.world.collide(this);
 
       // safety: never fall through the world
       if (pos.y < tr.floorY - 2) { pos.y = tr.floorY + 0.5; vel.y = 0; }

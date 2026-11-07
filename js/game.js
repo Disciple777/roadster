@@ -298,6 +298,9 @@
     wireUI() {
       const S = this.settings;
       const click = (id, fn) => $(id).addEventListener('click', (e) => { G.audio.init(); G.audio.tone(700, 0.05, 0.08, 'triangle'); fn(e); });
+      click('btn-play', () => this.showPanel('play'));
+      click('btn-chal', () => { this.buildChalPanel(); this.showPanel('chal'); });
+      click('btn-chalrun', () => this.startRace('challenge', { level: null }));
       click('btn-race', () => this.showPanel('setup', 'race'));
       click('btn-free', () => this.showPanel('setup', 'free'));
       click('btn-course', () => this.showPanel('setup', 'course'));
@@ -311,11 +314,11 @@
       });
       click('btn-pause', () => this.pause(true));
       click('btn-resume', () => this.pause(false));
-      click('btn-restart', () => { this.pause(false, true); this.startRace(this.mode); });
+      click('btn-restart', () => { this.pause(false, true); this.startRace(this.mode, this.mode === 'challenge' ? this.chalOpt : {}); });
       click('btn-quit', () => { this.pause(false, true); if (this.mpGrid) this.mpLeave(); else this.toMenu(); });
       click('btn-psettings', () => this.showPanel('settings'));
       click('btn-pcontrols', () => this.showPanel('controls'));
-      click('btn-again', () => (this.net ? this.mpEnter() : this.mpGrid ? this.mpLeave() : this.startRace(this.mode)));
+      click('btn-again', () => (this.net ? this.mpEnter() : this.mpGrid ? this.mpLeave() : this.startRace(this.mode, this.mode === 'challenge' ? this.chalOpt : {})));
       click('btn-rmenu', () => (this.mpGrid ? this.mpLeave() : this.toMenu()));
       click('btn-pedit', () => { this.pause(false, true); this.editor.back(); });
       click('btn-redit', () => this.editor.back());
@@ -473,6 +476,7 @@
     applyTod() {
       const name = this.settings.tod, tod = G.TOD[name] || G.TOD.night;
       this.city.setTod(name);
+      if (this.chalRun) return; // the challenge level has its own sky; the city picks it up on the way out
       this.renderer.toneMappingExposure = tod.exposure;
       for (const sl of this.headlights) sl.intensity = tod.stars ? 480 : 220;
       this.fx.steam.mat.uniforms.uColor.value.setRGB(0.86, 0.9, 0.98).multiplyScalar(tod.steam);
@@ -519,11 +523,15 @@
         $(id).addEventListener('click', (e) => {
           const b = e.target.closest('button[data-v]');
           if (b) { this.board[key] = b.dataset.v; this.loadBoard(); }
+          if (b && key === 'track' && this.board.mode === 'chal') { this.board.mode = 'race'; this.loadBoard(); }
         });
       }
     }
     async loadBoard() {
       const B = this.board, req = ++B.req, rowsEl = $('b-rows'), mineEl = $('b-mine');
+      const chal = B.mode === 'chal';
+      if (chal) B.track = 'stunt'; else if (B.track === 'stunt') B.track = G.TRACK_ID;
+      $('b-track').classList.toggle('hidden', chal);
       for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === B[key]));
       rowsEl.innerHTML = '<div class="empty">Loading…</div>'; mineEl.textContent = '';
       let res;
@@ -533,7 +541,7 @@
       rowsEl.innerHTML = res.rows.length
         ? res.rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''}"><span class="p">${i + 1}</span><span class="n">${esc(r.name)}</span>` +
             (race ? `<span class="t">${G.fmtTime(r.time_ms / 1000)}</span>` : `<span class="when">${G.fmtTime(r.time_ms / 1000)}</span><span class="t">${r.score.toLocaleString()}</span>`) + '</div>').join('')
-        : `<div class="empty">No official ${race ? '2-lap races' : 'course runs'} on this track yet. Be the first!</div>`;
+        : `<div class="empty">${chal ? 'No Stunt Challenge runs yet. Be the first!' : `No official ${race ? '2-lap races' : 'course runs'} on this track yet. Be the first!`}</div>`;
       const m = res.mine;
       mineEl.textContent = m ? `Your best: #${m.rank} of ${res.total} · ${race ? G.fmtTime(m.time_ms / 1000) : m.score.toLocaleString() + ' pts'}` : `${res.total} driver${res.total === 1 ? '' : 's'} ranked`;
     }
@@ -575,6 +583,7 @@
     }
 
     toMenu() {
+      this.exitChallenge();
       this.state = 'menu';
       this.introHold = false; $('keyhelp').classList.remove('open');
       this.customCourse = null;
@@ -597,6 +606,9 @@
 
     // opt.s0: start the run at this point of the lap (the editor's TEST HERE)
     startRace(mode, opt = {}) {
+      if (mode === 'challenge') return this.startChallenge(opt);
+      this.exitChallenge();
+      this.player.infFuel = mode === 'free'; this.player.noRecharge = false; // free ride: unlimited N₂
       const S = this.settings, tr = this.track, L = tr.length;
       const custom = mode === 'course' && !this.net ? this.customCourse : null;
       document.body.classList.toggle('testing', !!(custom && custom.editing));
@@ -661,6 +673,50 @@
       if (!G.store.get('seenKeys', false) && !this.net && !(custom && custom.editing)) this.showKeyHelp();
     }
 
+    // ---------------- stunt challenge ----------------
+    startChallenge(opt = {}) {
+      this.exitChallenge();
+      this.mode = 'challenge';
+      this.chalOpt = { level: opt.level != null ? opt.level : null };
+      this.closePanels();
+      $('results').classList.remove('open');
+      $('res-board').textContent = '';
+      G.audio.init();
+      if (G.isMobile && !document.fullscreenElement) this.fullscreen();
+      if (this.traffic) { this.traffic.dispose(); this.traffic = null; }
+      if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
+      if (this.course) { this.course.dispose(); this.course = null; }
+      if (this.ghosts) { this.ghosts.dispose(); this.ghosts = null; }
+      this.racers = 1; this.laps = 0; this.lap = 1; this.lapTimes = [];
+      this.raceTime = 0; this.score = 0; this.combo = 1; this.comboT = 0; this.finished = false; this.destroyed = false;
+      this.airT = 0; this.driftT = 0; this.driftScore = 0; this.gapFly = null;
+      this.player.infFuel = false;
+      this.hud.show(true); this.hud.setMode('challenge'); this.hud.hull(100);
+      $('menu').classList.remove('open');
+      document.body.classList.add('playing');
+      this.input.calibrateTilt();
+      this.introHold = false;
+      this.chalRun = new G.ChallengeRun(this, this.chalOpt);
+      if (!G.store.get('seenKeys', false)) this.showKeyHelp();
+    }
+    exitChallenge() {
+      if (!this.chalRun) return;
+      this.chalRun.dispose(); this.chalRun = null;
+      this.applyTod();
+    }
+    // the level list: start a full run, or practise one level (unranked)
+    buildChalPanel() {
+      const el = $('chal-levels'); if (!el) return;
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+      el.innerHTML = G.CHAL_LEVELS.map((L, i) => {
+        const b = G.store.get('chalLvl_' + i, 0);
+        return `<button class="lvl" data-i="${i}"><span class="num">${i + 1}</span><span class="txt"><b>${esc(L.name)}</b><small>${esc(L.brief)}</small></span><span class="best">${b ? b.toLocaleString() : '—'}<small>BEST</small></span></button>`;
+      }).join('');
+      el.querySelectorAll('button.lvl').forEach((b) => b.addEventListener('click', () => { G.audio.init(); this.startRace('challenge', { level: Number(b.dataset.i) }); }));
+      const best = G.store.get('chalBest', 0), bEl = $('chal-best');
+      if (bEl) bEl.textContent = best ? `Your best run: ${best.toLocaleString()} pts` : 'No full run yet';
+    }
+
     showKeyHelp() {
       const inp = this.input, k = (a, cls = '') => {
         const c = (inp.binds[a] || []).filter(Boolean);
@@ -695,7 +751,7 @@
 
     pause(on, silent) {
       if (on) {
-        if (this.state !== 'race' && this.state !== 'countdown' && this.state !== 'wreck') return;
+        if (!['race', 'countdown', 'wreck', 'cfail', 'cdone'].includes(this.state)) return;
         this.prevState = this.state; this.state = 'paused';
         $('pause').classList.add('open');
         $('keyhelp').classList.remove('open'); // back when the race resumes
@@ -710,6 +766,7 @@
     }
 
     resetPlayer() {
+      if (this.chalRun) { this.chalRun.onReset(); return; }
       if (this.state !== 'race' && this.state !== 'countdown') return;
       const n = this.player.near, tr = this.track;
       const lat = G.LANES_FWD.reduce((a, b) => (Math.abs(b - n.lat) < Math.abs(a - n.lat) ? b : a));
@@ -768,6 +825,7 @@
       else if (vrel > 8) this.hud.popup(c.loose ? 'TAKEDOWN' : 'CRASH', c.t.name, 'warn');
     }
     onWallHit(pos, vn, vt) {
+      if (this.chalRun) this.chalRun.onHit(vn);
       if (vn > 6) this.damage((vn - 6) * 1.2);
       if (vn < 2.5) return;
       this.fx.burst(pos.x, pos.y + 0.4, pos.z, Math.min(40, vn * 3), this.player.vel.x, 1, this.player.vel.z, 5);
@@ -1166,8 +1224,9 @@
         this.timeScale = this.wreckT < 1.0 && !this.mpGrid ? 0.3 : 1; // no slow-mo online: the host runs everyone's AI and traffic
         if (this.wreckT > 1.6) { this.timeScale = 1; this.state = 'race'; this.resetPlayer(); }
       }
-      const driving = st === 'race' || st === 'countdown' || st === 'finished' || st === 'wreck';
-      const ctrl = (st === 'race' || st === 'finished') && !this.destroyed ? inp : NO_INPUT;
+      const chal = this.chalRun;
+      const driving = st === 'race' || st === 'countdown' || st === 'finished' || st === 'wreck' || st === 'cfail' || st === 'cdone';
+      const ctrl = (st === 'race' || st === 'finished' || (chal && st === 'cdone')) && !this.destroyed ? inp : NO_INPUT;
       if (st === 'countdown') { p.frozen = true; }
       else if (st !== 'menu') p.frozen = false;
 
@@ -1192,8 +1251,10 @@
       this.lastS = p.near.s;
       if (Math.abs(ds) < 40) this.progress += ds;
 
-      this.xings.update(dt); // the lights keep cycling wherever you are
-      this.track.updateSpans(this.t); this.wild && this.wild.update(dt, this.t); // cable cars, trains
+      if (!chal) {
+        this.xings.update(dt); // the lights keep cycling wherever you are
+        this.track.updateSpans(this.t); this.wild && this.wild.update(dt, this.t); // cable cars, trains
+      }
       if (this.traffic && st !== 'countdown') {
         this.traffic.update(dt, p, p.near.s);
         if (st === 'race' || st === 'finished') this.traffic.detectStunts(p);
@@ -1203,13 +1264,16 @@
 
       if (this.course) this.course.update(dt, st === 'race');
       if (this.ghosts) this.ghosts.update(st === 'countdown' ? 0 : this.raceTime, dt);
-      if (st === 'race') this.updateRace(dt);
-      if (driving) this.updateStunts(dt, ctrl);
-      this.updatePickups(dt);
+      if (chal) chal.update(dt, st);
+      else {
+        if (st === 'race') this.updateRace(dt);
+        if (driving) this.updateStunts(dt, ctrl);
+        this.updatePickups(dt);
+      }
       this.updatePlayerFX(dt, ctrl);
       this.fx.update(dt);
       this.updateCamera(dt);
-      this.city.update(dt, this.camera.position, p.pos);
+      if (!chal) this.city.update(dt, this.camera.position, p.pos);
       if (driving) this.hud.update(dt, this);
       if (driving) this.fuelCues(p);
       p.throttle = ctrl.throttle;
@@ -1447,8 +1511,13 @@
           cx = G.lerp(p.pos.x + Math.sin(a) * 11, cx, k); cz = G.lerp(p.pos.z + Math.cos(a) * 11, cz, k);
           cyPos = G.lerp(p.pos.y + 3.4, cyPos, k);
         }
-        cam.position.set(cx, cyPos, cz);
-        cam.lookAt(p.pos.x - sy * 6, this.camFocusY + 0.9, p.pos.z - cy * 6);
+        const hold = this.chalRun && this.chalRun.camHold;
+        if (hold) { cam.position.copy(hold); cam.lookAt(p.pos.x, p.pos.y + 0.6, p.pos.z); }
+        else {
+          if (this.chalRun) cyPos = this.chalRun.camClamp(cx, cyPos, cz);
+          cam.position.set(cx, cyPos, cz);
+          cam.lookAt(p.pos.x - sy * 6, this.camFocusY + 0.9, p.pos.z - cy * 6);
+        }
       }
       // shake
       const thr = p.th.B * 0.6 + (p.th.L + p.th.R) * 0.2;

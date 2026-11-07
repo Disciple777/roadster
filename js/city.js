@@ -17,6 +17,7 @@
     },
   };
   G.TOD = TOD;
+  G.makeBuildingMaterial = (tod, detail) => makeBuildingMaterial(tod, detail);
 
   G.buildCity = function (game) {
     const { scene, track, Q } = game;

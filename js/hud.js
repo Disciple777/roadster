@@ -30,7 +30,23 @@
     }
 
     show(b) { this.el.classList.toggle('hidden', !b); }
-    setMode(mode) { this.el.classList.toggle('free', mode === 'free'); this.el.classList.toggle('course', mode === 'course'); }
+    setMode(mode) {
+      this.el.classList.toggle('free', mode === 'free'); this.el.classList.toggle('course', mode === 'course');
+      this.el.classList.toggle('chal', mode === 'challenge');
+      this._n2s = '';
+    }
+    // stunt challenge: level, lives and the current objective
+    chal(run) {
+      const box = $('h-chal');
+      if (!box) return;
+      box.classList.toggle('hidden', !run);
+      if (!run) return;
+      $('h-clvl').textContent = run.practice ? 'PRACTICE' : `${run.idx + 1}/5`;
+      $('h-cname').textContent = run.level.name;
+      const lv = $('h-lives');
+      lv.textContent = run.practice ? '∞' : '♥'.repeat(Math.max(0, run.lives)) + '♡'.repeat(Math.max(0, 3 - run.lives));
+    }
+    chalObjective(t) { const el = $('h-cobj'); if (el) { el.textContent = t; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
     // obstacle course hull meter; flash it when it takes a knock
     hull(h, hit) {
       const box = this.hullBox || (this.hullBox = $('h-hullbox'));
@@ -54,7 +70,7 @@
       if (st !== this._n2s) {
         this._n2s = st;
         for (const c of ['locked', 'use', 'full', 'charge', 'wait']) this.n2wrap.classList.toggle(c, c === st);
-        this.n2st.textContent = { locked: 'EMPTY · RECHARGING', use: 'IN USE', full: 'FULL', charge: 'RECHARGING', wait: 'LAND TO RECHARGE' }[st];
+        this.n2st.textContent = { locked: g.chalRun ? 'EMPTY' : 'EMPTY · RECHARGING', use: 'IN USE', full: g.mode === 'free' ? 'UNLIMITED' : 'FULL', charge: 'RECHARGING', wait: g.chalRun ? 'NO RECHARGE · LEVEL BUDGET' : 'LAND TO RECHARGE' }[st];
       }
       this.n2wrap.classList.toggle('low', p.fuel < 20 || p.fuelLock);
       // L / R light up for the key or button you're holding (inverted thrusters swap which way that pushes)
@@ -67,13 +83,13 @@
         this.pos.textContent = g.place; this.posn.textContent = g.racers;
         this.lap.textContent = Math.min(g.lap, g.laps) + '/' + g.laps;
         this.time.textContent = G.fmtTime(g.raceTime);
-        this.best.textContent = g.mode === 'course' ? (g.courseBest ? 'BEST ' + g.courseBest.toLocaleString() : '') : g.bestLap < 1e8 ? 'BEST ' + G.fmtTime(g.bestLap) : '';
+        this.best.textContent = g.chalRun ? `LIMIT ${G.fmtTime(g.chalRun.level.limit)}` : g.mode === 'course' ? (g.courseBest ? 'BEST ' + g.courseBest.toLocaleString() : '') : g.bestLap < 1e8 ? 'BEST ' + G.fmtTime(g.bestLap) : '';
       } else {
         this.time.textContent = G.fmtTime(g.raceTime);
       }
       this.score.textContent = g.score.toLocaleString();
       this.combo.textContent = g.combo > 1 ? 'x' + g.combo : '';
-      this.drawMinimap(g);
+      if (!g.chalRun) this.drawMinimap(g);
       // fps
       this._fc++; this._ft += dt;
       if (this._ft > 0.5) { this.fps.textContent = Math.round(this._fc / this._ft) + ' fps'; this._fc = 0; this._ft = 0; }
