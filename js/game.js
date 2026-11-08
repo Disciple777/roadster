@@ -300,8 +300,7 @@
       const click = (id, fn) => $(id).addEventListener('click', (e) => { G.audio.init(); G.audio.tone(700, 0.05, 0.08, 'triangle'); fn(e); });
       click('btn-play', () => this.showPanel('play'));
       click('btn-chal', () => { this.buildChalPanel(); this.showPanel('chal'); });
-      click('btn-chalrun', () => this.startRace('challenge', { level: null }));
-      click('btn-race', () => this.showPanel('setup', 'race'));
+            click('btn-race', () => this.showPanel('setup', 'race'));
       click('btn-free', () => this.showPanel('setup', 'free'));
       click('btn-course', () => this.showPanel('setup', 'course'));
       click('btn-settings', () => this.showPanel('settings'));
@@ -530,7 +529,7 @@
     async loadBoard() {
       const B = this.board, req = ++B.req, rowsEl = $('b-rows'), mineEl = $('b-mine');
       const chal = B.mode === 'chal';
-      if (chal) B.track = 'stunt'; else if (B.track === 'stunt') B.track = G.TRACK_ID;
+      if (chal) B.track = G.CHAL_RUN.courses[0].track; else if (/^stunt/.test(B.track)) B.track = G.TRACK_ID;
       $('b-track').classList.toggle('hidden', chal);
       for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === B[key]));
       rowsEl.innerHTML = '<div class="empty">Loading…</div>'; mineEl.textContent = '';
@@ -677,7 +676,7 @@
     startChallenge(opt = {}) {
       this.exitChallenge();
       this.mode = 'challenge';
-      this.chalOpt = { level: opt.level != null ? opt.level : null };
+      this.chalOpt = { level: opt.level != null ? opt.level : null, course: opt.course || 0 };
       this.closePanels();
       $('results').classList.remove('open');
       $('res-board').textContent = '';
@@ -708,10 +707,16 @@
     buildChalPanel() {
       const el = $('chal-levels'); if (!el) return;
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+      const RUN = G.CHAL_RUN;
       el.innerHTML = G.CHAL_LEVELS.map((L, i) => {
-        const b = G.store.get('chalLvl_' + i, 0);
-        return `<button class="lvl" data-i="${i}"><span class="num">${i + 1}</span><span class="txt"><b>${esc(L.name)}</b><small>${esc(L.brief)}</small></span><span class="best">${b ? b.toLocaleString() : '—'}<small>BEST</small></span></button>`;
+        const b = G.store.get('chalLvl_' + i, 0), act = RUN.acts.find((a) => a.from === i);
+        return (act ? `<h4>${esc(G.chalActName(i))}</h4>` : '') + `<button class="lvl" data-i="${i}"><span class="num">${i + 1}</span><span class="txt"><b>${esc(L.name)}</b><small>${esc(L.brief)}</small></span><span class="best">${b ? b.toLocaleString() : '—'}<small>BEST</small></span></button>`;
       }).join('');
+      const runs = $('chal-runs');
+      if (runs) {
+        runs.innerHTML = RUN.courses.map((c, k) => `<button class="big ${k ? '' : 'primary '}chal-run" data-c="${k}">START ${RUN.courses.length > 1 ? esc(c.name) : 'RUN'}<small>levels ${c.from + 1}–${c.to + 1} · ${RUN.lives} lives · ranked</small></button>`).join('');
+        runs.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { G.audio.init(); this.startRace('challenge', { level: null, course: Number(b.dataset.c) }); }));
+      }
       el.querySelectorAll('button.lvl').forEach((b) => b.addEventListener('click', () => { G.audio.init(); this.startRace('challenge', { level: Number(b.dataset.i) }); }));
       const best = G.store.get('chalBest', 0), bEl = $('chal-best');
       if (bEl) bEl.textContent = best ? `Your best run: ${best.toLocaleString()} pts` : 'No full run yet';
@@ -1474,6 +1479,7 @@
       if (fl < 0.3 && p.speed > 3) { fx = p.vel.x; fz = p.vel.z; }
       const targetYaw = p.ride ? Math.atan2(-p.ride.lp.tx, -p.ride.lp.tz) : Math.atan2(-fx, -fz); // on a loop: keep looking down the street
       this.camFocusY = G.damp(this.camFocusY, p.pos.y, p.grounded ? 12 : 5, realDt);
+      this.camFocusY = G.clamp(this.camFocusY, p.pos.y - 4, p.pos.y + 4); // a long fall must not leave the car below the frame
 
       if (this.state === 'menu') {
         const a = this.t * 0.18;

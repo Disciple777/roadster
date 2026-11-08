@@ -41,11 +41,42 @@
       if (!box) return;
       box.classList.toggle('hidden', !run);
       if (!run) return;
-      $('h-clvl').textContent = run.practice ? 'PRACTICE' : `${run.idx + 1}/5`;
+      $('h-clvl').textContent = run.practice ? 'PRACTICE' : `${run.idx - run.first + 1}/${run.count}`;
       $('h-cname').textContent = run.level.name;
       const lv = $('h-lives');
-      lv.textContent = run.practice ? '∞' : '♥'.repeat(Math.max(0, run.lives)) + '♡'.repeat(Math.max(0, 3 - run.lives));
+      lv.textContent = run.practice ? '∞' : '♥'.repeat(Math.max(0, run.lives)) + '♡'.repeat(Math.max(0, G.CHAL_RUN.lives - run.lives));
     }
+    // the level card in the middle of the screen during the countdown: level, name, the goal and the brief
+    chalIntro(run, objective) {
+      let el = $('h-cintro');
+      if (!el) { el = document.createElement('div'); el.id = 'h-cintro'; this.el.appendChild(el); }
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+      const n = run.practice ? `PRACTICE · LEVEL ${run.idx + 1}` : `LEVEL ${run.idx - run.first + 1} / ${run.count}`;
+      el.innerHTML = `<small>${n}${run.act ? ' · ' + esc(run.act) : ''}</small><b class="nm">${esc(run.level.name)}</b><div class="goal">${esc(objective)}</div><p>${esc(run.level.brief)}</p>`;
+      el.className = ''; void el.offsetWidth; el.className = 'show';
+      this._introGoal = objective;
+    }
+    // on GO: the card fades and its goal line flies up into the objective box
+    chalIntroGo() {
+      const el = $('h-cintro');
+      if (!el || !el.classList.contains('show')) return;
+      const src = el.querySelector('.goal'), box = $('h-cobj');
+      const a = src.getBoundingClientRect();
+      let b = box && box.getBoundingClientRect();
+      if (!b || !b.width) b = $('h-clvl').getBoundingClientRect();
+      const fly = src.cloneNode(true); fly.className = 'goal fly';
+      Object.assign(fly.style, { left: a.left + 'px', top: a.top + 'px', width: a.width + 'px', height: a.height + 'px' });
+      document.body.appendChild(fly);
+      src.style.visibility = 'hidden';
+      el.className = 'out';
+      const sc = Math.max(0.2, Math.min(1, b.height / a.height * 1.4));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        fly.style.transform = `translate(${b.left - a.left}px, ${b.top + (b.height - a.height * sc) / 2 - a.top}px) scale(${sc})`;
+        fly.style.opacity = '0.25';
+      }));
+      setTimeout(() => { fly.remove(); this.chalObjective(this._introGoal || ''); }, 720);
+    }
+    chalIntroHide() { const el = $('h-cintro'); if (el) el.className = ''; }
     chalObjective(t) { const el = $('h-cobj'); if (el) { el.textContent = t; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
     // obstacle course hull meter; flash it when it takes a knock
     hull(h, hit) {

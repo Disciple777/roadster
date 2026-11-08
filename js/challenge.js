@@ -1,6 +1,7 @@
-// challenge.js — STUNT CHALLENGE: five hand-built stunt levels (rooftops, a container yard, an avenue, a parking
-// garage, a skyline), each its own little world with its own sky and light, built when the level loads.
-// One run = the five levels back to back on three shared lives; each level has a fixed N₂ budget (no recharge).
+// challenge.js — STUNT CHALLENGE: fifteen hand-built stunt levels in three acts (rooftops, yards, avenues, garages,
+// loops, beams, crushers, a skyline), each its own little world with its own sky and light, built when the level loads.
+// One run = the levels back to back on shared lives; each level has a fixed N₂ budget (no recharge).
+// How runs are cut is set in RUN below: one 15-level run, or three 5-level courses, each with its own leaderboard.
 (function () {
   const T = THREE;
   const $ = (id) => document.getElementById(id);
@@ -143,6 +144,7 @@
       this.facades = []; // instanced building boxes
       this.anim = []; // per-frame callbacks (fire, LEDs)
       this.disposables = [];
+      this.loops = []; this.coins = []; this.movers = []; this._buf = [];
       this.R = G.rng(level.seed || 99);
       this.tx = textures();
       this.mats();
@@ -408,6 +410,121 @@
       const strip = new T.Mesh(new T.BoxGeometry(hw * 2, 0.12, 0.6), ledM); strip.position.set(x, y + 0.02, z); this.root.add(strip);
       return { ledM };
     }
+    // a 360° loop standing on y0, entered heading -z at (x, z); it drifts 'shift' metres sideways so it clears itself
+    loop(x, y0, z, R = 9, w = 6, shift = 7.5) {
+      const lp = { id: this.loops.length, x, z, y0, R, w, shift, tx: 0, tz: -1, rx: 1, rz: 0 };
+      this.loops.push(lp);
+      const N = 140, P = new T.Vector3(), pos = [], uv = [], idx = [], edges = [[], []];
+      for (let i = 0; i <= N; i++) {
+        this.loopPoint(lp, (i / N) * Math.PI * 2, P);
+        for (let e = 0; e < 2; e++) {
+          const o = (e ? 1 : -1) * w / 2, v = new T.Vector3(P.x + o, P.y + 0.03, P.z);
+          pos.push(v.x, v.y, v.z); uv.push(e * w / 3, (i / N) * Math.PI * 2 * R / 3);
+          edges[e].push(v);
+        }
+        if (i < N) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      }
+      const rg = new T.BufferGeometry();
+      rg.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); rg.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); rg.setIndex(idx); rg.computeVertexNormals();
+      if (!this.m.loopDeck) {
+        this.m.loopDeck = new T.MeshStandardMaterial({ map: this.tx.plate, bumpMap: this.tx.plate, bumpScale: 1.5, color: 0x9aa0a8, roughness: 0.4, metalness: 0.8, side: T.DoubleSide });
+        this.m.loopRail = new T.MeshBasicMaterial({ color: new T.Color(0.5, 2.4, 3.4), toneMapped: false });
+        this.disposables.push(this.m.loopDeck, this.m.loopRail);
+      }
+      const ribbon = new T.Mesh(rg, this.m.loopDeck); ribbon.castShadow = ribbon.receiveShadow = !!this.Q.shadows;
+      this.root.add(ribbon); this.disposables.push(rg);
+      for (const e of edges) { const tg = new T.TubeGeometry(new T.CatmullRomCurve3(e), N, 0.14, 6, false); this.root.add(new T.Mesh(tg, this.m.loopRail)); this.disposables.push(tg); }
+      // a steel portal frame around it, the yellow entry lane and a white stripe where you come out
+      const xl = Math.min(x, x + shift) - w / 2 - 1.2, xr = Math.max(x, x + shift) + w / 2 + 1.2, top = y0 + 2 * R + 1.2;
+      for (const px of [xl, xr]) for (const dz of [-R * 0.55, R * 0.55]) this.box(this.m.steel, px, y0, z + dz, 0.5, top - y0, 0.5);
+      for (const dz of [-R * 0.55, R * 0.55]) this.box(this.m.steel, (xl + xr) / 2, top, z + dz, xr - xl + 0.5, 0.5, 0.5, { solid: false });
+      this.box(this.m.hazard, x, y0, z + 8, w * 0.6, 0.04, 14, { solid: false, tile: 1 });
+      this.box(this.m.ledW, x + shift, y0, z - 4, w * 0.5, 0.03, 6, { solid: false });
+      return lp;
+    }
+    loopPoint(lp, th, out) {
+      const a = lp.R * Math.sin(th), lat = lp.shift * th / (Math.PI * 2);
+      return out.set(lp.x + lp.tx * a + lp.rx * lat, lp.y0 + lp.R * (1 - Math.cos(th)), lp.z + lp.tz * a + lp.rz * lat);
+    }
+    enterLoops(b) {
+      if (b.ride) return;
+      for (const lp of this.loops) {
+        if (b.pos.y > lp.y0 + 1.2 || b.pos.y < lp.y0 - 1) continue;
+        const dx = b.pos.x - lp.x, dz = b.pos.z - lp.z, along = dx * lp.tx + dz * lp.tz, side = dx * lp.rx + dz * lp.rz;
+        if (along < 0 || along > 1.6 || Math.abs(side) > lp.w / 2 - 0.4) continue;
+        const v = b.vel.x * lp.tx + b.vel.z * lp.tz;
+        if (v < 6) continue;
+        b.ride = { lp, th: along / lp.R, v, off: G.clamp(side, -lp.w / 2 + 1, lp.w / 2 - 1) };
+        return;
+      }
+    }
+    // on the loop the car follows the ribbon; gravity bleeds speed on the way up, too slow and it drops off
+    rideStep(b, dt, inp) {
+      const r = b.ride, lp = r.lp, g = G.GRAV, V = this._rv || (this._rv = [new T.Vector3(), new T.Vector3(), new T.Vector3(), new T.Vector3(), new T.Matrix4()]);
+      if (!b.frozen) r.v += (inp.throttle * 10 - inp.brake * 14) * dt;
+      r.v -= g * Math.sin(r.th) * dt;
+      r.th += (r.v / lp.R) * dt;
+      const done = r.th >= Math.PI * 2;
+      if (done) r.th = Math.PI * 2;
+      const th = r.th, c = Math.cos(th), s = Math.sin(th);
+      this.loopPoint(lp, th, b.pos);
+      b.pos.x += lp.rx * r.off; b.pos.z += lp.rz * r.off;
+      const fw = V[0].set(lp.tx * c, s, lp.tz * c), up = V[1].set(-lp.tx * s, c, -lp.tz * s), rt = V[2].crossVectors(fw, up);
+      V[4].makeBasis(rt, up, V[3].copy(fw).negate());
+      b.q.setFromRotationMatrix(V[4]);
+      b.vel.copy(fw).multiplyScalar(r.v);
+      b.w.copy(rt).multiplyScalar(r.v / lp.R);
+      b.grounded = true; b.contacts = 4; b.altitude = 0; b.speed = Math.abs(r.v); b.fwdSpeed = r.v; b.sideSlip = 0; b.slipMax = 0;
+      b.steerAngle = 0; b.rollAcc = 0; b.pitchAcc = 0;
+      for (const wh of b.wheels) { wh.contact = true; wh.slip = 0; wh.spinV = r.v / 0.34; wh.spin += wh.spinV * dt; }
+      this.game.track.nearest(b.pos.x, b.pos.z, b.near.i, b.near);
+      const fall = th > 0.3 && th < Math.PI * 1.7 && (r.v < 2 || (r.v * r.v) / lp.R < -g * c);
+      if (done || fall) {
+        b.ride = null;
+        if (done) { b.pos.y = lp.y0 + 0.02; b.vel.y = 0; b.w.set(0, 0, 0); this.loopDone = lp; }
+        else this.loopFell = lp;
+      }
+    }
+    // a gold coin with a light beam above it so you can find it from afar
+    coin(x, y, z) {
+      if (!this.m.coin) {
+        this.m.coin = new T.MeshStandardMaterial({ color: 0xffc23a, roughness: 0.22, metalness: 1, emissive: new T.Color(1.0, 0.62, 0.1), emissiveIntensity: 1.5 });
+        this.m.coinBeam = new T.MeshBasicMaterial({ color: new T.Color(1.0, 0.75, 0.25), transparent: true, opacity: 0.16, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false });
+        this.coinGeo = new T.CylinderGeometry(1.0, 1.0, 0.18, 36); this.coinGeo.rotateX(Math.PI / 2);
+        this.coinRim = new T.TorusGeometry(1.0, 0.09, 8, 36);
+        this.beamGeo = new T.CylinderGeometry(0.35, 0.35, 60, 10, 1, true); this.beamGeo.translate(0, 31, 0);
+        this.disposables.push(this.m.coin, this.m.coinBeam, this.coinGeo, this.coinRim, this.beamGeo);
+      }
+      const g = new T.Group(); g.position.set(x, y, z);
+      const disc = new T.Mesh(this.coinGeo, this.m.coin); disc.castShadow = true; g.add(disc);
+      g.add(new T.Mesh(this.coinRim, this.m.coin));
+      g.add(new T.Mesh(this.beamGeo, this.m.coinBeam));
+      this.root.add(g);
+      const c = { x, y, z, g, got: false, t: this.R() * 6 };
+      this.coins.push(c);
+      this.anim.push((dt) => {
+        c.t += dt;
+        if (c.got) { g.scale.setScalar(Math.max(0, g.scale.x - dt * 4)); g.position.y += dt * 6; return; }
+        g.rotation.y = c.t * 2.4; g.position.y = y + Math.sin(c.t * 2) * 0.25;
+      });
+      return c;
+    }
+    resetCoins() { for (const c of this.coins) { c.got = false; c.g.scale.setScalar(1); c.g.position.set(c.x, c.y, c.z); } }
+    // something that moves (crushers, sliding walls): fn(t, s) places the solid; touching a deadly one ends the try
+    mover(mat, w, h, d, fn, o = {}) {
+      const mesh = new T.Mesh(uvBox(w, h, d, o.tile || 3), mat);
+      mesh.castShadow = mesh.receiveShadow = !!this.Q.shadows;
+      this.root.add(mesh); this.disposables.push(mesh.geometry);
+      const s = { x: 0, z: 0, c: 1, s: 0, hw: w / 2, hl: d / 2, y0: 0, y1: h, h, deadly: o.deadly !== false };
+      const m = { s, mesh, fn, t: 0, place: null };
+      m.place = () => { fn(m.t, s); s.y1 = s.y0 + s.h; mesh.position.set(s.x, s.y0 + h / 2, s.z); };
+      m.place();
+      this.movers.push(m);
+      this.anim.push((dt) => { m.t += dt; m.place(); });
+      return m;
+    }
+    resetMovers() { for (const m of this.movers) { m.t = 0; m.place(); } }
+
     // finish line: a checker band across the road under a gantry
     finishLine(x, y, z, hw) {
       const tex = this.tx.checker.clone(); tex.wrapS = T.RepeatWrapping; tex.repeat.set(hw / 2, 1); tex.needsUpdate = true; this.disposables.push(tex);
@@ -651,7 +768,14 @@
     }
 
     // ---------- physics: ground, ceilings and solid walls ----------
-    at(x, z) { return this.grid.get(ckey(Math.floor(x / CELL), Math.floor(z / CELL))); }
+    at(x, z) {
+      const l = this.grid.get(ckey(Math.floor(x / CELL), Math.floor(z / CELL)));
+      if (!this.movers.length) return l;
+      const b = this._buf; b.length = 0;
+      if (l) for (const s of l) b.push(s);
+      for (const m of this.movers) if (Math.abs(m.s.x - x) < m.s.hw + 6 && Math.abs(m.s.z - z) < m.s.hl + 6) b.push(m.s);
+      return b;
+    }
     top(s, lz) { return s.wedge ? s.yN + (s.yF - s.yN) * G.clamp((s.hl - lz) / (2 * s.hl), 0, 1) : s.y1; }
     groundAt(x, z, q, yRef) {
       q.h = 0; q.nx = 0; q.ny = 1; q.nz = 0; q.vx = 0; q.vy = 0; q.vz = 0; q.roof = false; q.ceil = Infinity;
@@ -686,6 +810,7 @@
           if (px <= 0 || pz <= 0 || P.y < s.y0) continue;
           const top = this.top(s, lz);
           if (P.y > top) continue;
+          if (s.deadly && this.onDeadly) this.onDeadly(s);
           const pTop = top - P.y, pBot = P.y - s.y0;
           const under = pos.y + 0.5 < s.y0;
           if (pTop < 0.6 && !under) continue; // a step / the surface: the wheels handle it
@@ -751,7 +876,7 @@
     {
       name: 'RING OF FIRE', tod: 'dusk', seed: 22, n2: 25, par: 13, limit: 45,
       brief: 'Build speed through the container yard and fly through the burning ring.',
-      tip: 'Leave the ramp at 110 to 130 km/h',
+      tip: 'Leave the ramp at 130 to 160 km/h',
       build(w) {
         // yard surface
         w.box(w.m.concrete, 0, -0.5, -170, 70, 0.52, 400, { solid: false, tile: 6 });
@@ -773,14 +898,14 @@
         // ramp, ring, landing
         w.ramp(w.m.plate, 0, 7, -150, 0, -170, 6);
         for (const sx of [-1, 1]) w.box(w.m.hazard, sx * 3.75, 0, -160, 0.5, 1.0, 20, { tile: 1 });
-        const RING_Y = 10.2;
-        w.fireRing(0, RING_Y, -210, 3.2, { posts: true });
-        w.ramp(w.m.plate, 0, 10, -215, 5, -255, 0);
-        w.finishLine(0, 0, -320, 10);
-        w.skyline({ seed: 33, keep: [[-80, 80, -400, 40]], hMin: 10, hMax: 40, radius: 700 });
+        const RING_Y = 10.2, RING_Z = -224;
+        w.fireRing(0, RING_Y, RING_Z, 3.2, { posts: true });
+        w.ramp(w.m.plate, 0, 10, RING_Z - 5, 5, RING_Z - 45, 0);
+        w.finishLine(0, 0, RING_Z - 110, 10);
+        w.skyline({ seed: 33, keep: [[-80, 80, -420, 40]], hMin: 10, hMax: 40, radius: 700 });
         return {
           start: [0, 0, 6],
-          goals: [{ type: 'ring', x: 0, y: RING_Y, z: -210, r: 3.2 }, { type: 'line', x: 0, y: 0, z: -320, hw: 10 }],
+          goals: [{ type: 'ring', x: 0, y: RING_Y, z: RING_Z, r: 3.2 }, { type: 'line', x: 0, y: 0, z: RING_Z - 110, hw: 10 }],
           kill: (p) => p.pos.x * p.pos.x > 40 * 40 && 'LEFT THE YARD',
           ref: () => 0,
         };
@@ -946,6 +1071,436 @@
       },
     },
   ];
+  // ---------------------------------------------------------------- levels 6 to 15 (and the order of the run)
+  const mat = (w, o, phys) => { const m = phys ? new T.MeshPhysicalMaterial(o) : new T.MeshStandardMaterial(o); w.disposables.push(m); return m; };
+  // a red-primer steel I-beam from (x0, z0) to (x1, z1), its top at y; only the top flange is solid
+  function ibeam(w, x0, z0, x1, z1, y, wid, m) {
+    const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    w.box(m, cx, y - 0.16, cz, wid, 0.16, L, { yaw, tile: 2 });
+    w.box(m, cx, y - 1.0, cz, 0.22, 0.84, L, { yaw, solid: false, tile: 2 });
+    w.box(m, cx, y - 1.16, cz, wid * 0.8, 0.16, L, { yaw, solid: false, tile: 2 });
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    for (const sx of [-1, 1]) for (let t = 1.5; t < L; t += 3) {
+      const k = t - L / 2;
+      w.box(w.m.ledW, cx + s * k + c * sx * (wid / 2 - 0.08), y, cz + c * k - s * sx * (wid / 2 - 0.08), 0.1, 0.04, 0.5, { yaw, solid: false });
+    }
+  }
+  // a tower crane: lattice mast, jib and a beacon (scenery)
+  function crane(w, x, z, h, yaw, m) {
+    w.box(m, x, 0, z, 2.2, h, 2.2, { tile: 2 });
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    w.box(m, x + s * 14, h, z + c * 14, 1.4, 1.6, 44, { yaw, solid: false, tile: 2 });
+    w.box(w.m.darkPaint, x - s * 6, h - 1.6, z - c * 6, 3, 3, 4, { yaw, solid: false });
+    w.box(w.m.beacon, x, h + 1.6, z, 0.5, 0.5, 0.5, { solid: false });
+  }
+  // a water surface far below (the harbour level)
+  function water(w, y = 0) {
+    const t = w.tx.concrete.clone(); t.repeat.set(300, 300); t.needsUpdate = true; w.disposables.push(t);
+    const m = mat(w, { color: 0x0a2230, roughness: 0.08, metalness: 0.55, bumpMap: t, bumpScale: 0.6 });
+    const pl = new T.Mesh(new T.PlaneGeometry(4000, 4000), m); pl.rotation.x = -Math.PI / 2; pl.position.y = y; pl.receiveShadow = true;
+    w.root.add(pl); w.disposables.push(pl.geometry);
+    w.anim.push((dt) => { t.offset.x += dt * 0.02; t.offset.y += dt * 0.012; });
+  }
+
+  const NEW = {
+    // ---------------- FLIP AND STICK: kicker, a full flip, a deck to land on
+    flip: {
+      name: 'FLIP AND STICK', tod: 'day', seed: 61, n2: 20, par: 14, limit: 45,
+      brief: 'Hit the kicker, roll the car all the way round in the air, land on the deck and stop in the box.',
+      tip: 'Kicker at about 80 km/h. In the air hold Space + Q (or E) to roll, let go after a quarter turn: it comes round on its own',
+      build(w) {
+        w.box(w.m.asphalt, 0, -0.5, -60, 120, 0.52, 260, { solid: false, tile: 5 });
+        // parking bays and cars on both sides of the lot
+        const lt = w.tx.lines.clone(); lt.repeat.set(16, 1); lt.needsUpdate = true; w.disposables.push(lt);
+        for (const sx of [-1, 1]) for (const row of [18, 32]) {
+          w.decal(lt, sx * row, 0, -40, 5, 120, 0);
+          for (let z = 15; z > -95; z -= 2.8) if (w.R() < 0.6) w.parked(sx * row, 0, z, sx > 0 ? Math.PI / 2 : -Math.PI / 2);
+        }
+        // run-up lane and the kicker
+        for (let z = -10; z > -54; z -= 6) w.box(w.m.hazard, 0, 0, z, 1.2, 0.02, 2.4, { solid: false, tile: 1 });
+        w.ramp(w.m.plate, 0, 9, -54, 0, -70, 7.5);
+        for (const sx of [-1, 1]) w.box(w.m.steel, sx * 3.2, 0, -66, 0.4, 7.2, 0.4, { solid: false });
+        // the landing deck: a wide stage on the lot
+        w.box(w.m.deck, 0, 0, -140, 48, 2.4, 90, { tile: 5 });
+        w.box(w.m.hazard, 0, 2.4, -95.6, 48, 0.03, 0.8, { solid: false, tile: 1 });
+        for (const sx of [-1, 1]) for (let z = -97; z > -184; z -= 3) w.box(w.m.ledA, sx * 23.85, 2.4, z, 0.12, 0.05, 0.8, { solid: false });
+        w.decal(w.tx.stop, 0, 2.4, -165, 12, 14);
+        w.box(w.m.concrete, 0, 0, -190, 54, 4.5, 4, { tile: 3 }); // a crash wall behind the stage
+        // stadium beyond, warehouses, masts
+        w.building(0, -250, 140, 60, 26, 2, {});
+        w.building(-74, -60, 30, 120, 18, 1, {}); w.building(76, -100, 30, 160, 22, 3, {});
+        for (const [x, z] of [[-45, -10], [45, -10], [-45, -120], [45, -120]]) w.floodMast(x, z, 24, x < 0 ? Math.PI / 2 : -Math.PI / 2);
+        w.billboard(26, -196, 0, 0, 'FLIP AND STICK', '#16324f');
+        w.skyline({ seed: 71, keep: [[-90, 90, -285, 40]], hMin: 15, hMax: 70, radius: 700 });
+        return {
+          start: [0, 0, 8],
+          goals: [{ type: 'flip', n: 1 }, { type: 'pad', x: 0, y: 2.4, z: -165, hw: 6, hl: 7 }],
+          kill: (p) => p.grounded && p.pos.y < 1.2 && p.pos.z < -72 && 'MISSED THE DECK',
+          ref: (x, z) => (Math.abs(x) < 24 && z < -95 && z > -185 ? 2.4 : 0),
+        };
+      },
+    },
+
+    // ---------------- TRIPLE LOOP: three loops, none of them in line with the last
+    loops: {
+      name: 'TRIPLE LOOP', tod: 'night', seed: 62, n2: 25, par: 21, limit: 50,
+      brief: 'Three loops in a row on the old airfield. Each one comes out of line with the next: steer into every entry lane.',
+      tip: 'Each loop throws you out sideways: steer for the next yellow lane straight away, at 60 km/h or more',
+      build(w) {
+        w.box(w.m.concrete, 0, -0.5, -150, 140, 0.52, 460, { solid: false, tile: 8 });
+        // runway lights and taxiway lines
+        for (let z = 30; z > -380; z -= 10) for (const sx of [-1, 1]) w.box(w.m.ledA, sx * 26, 0, z, 0.4, 0.1, 0.4, { solid: false });
+        for (let z = 30; z > -380; z -= 7) w.box(w.m.ledW, -18, 0.005, z, 0.25, 0.02, 3, { solid: false });
+        const l1 = w.loop(0, 0, -100, 9, 6, 7.5);
+        const l2 = w.loop(-3, 0, -190, 9, 6, -7.5);
+        const l3 = w.loop(5, 0, -280, 9, 6, 7.5);
+        w.finishLine(12.5, 0, -345, 9);
+        // hangars and the tower
+        for (const [x, z, d] of [[-62, -60, 70], [-62, -170, 70], [64, -110, 90], [64, -250, 80]]) {
+          w.box(w.m.cont[4], x, 0, z, 34, 14, d, { tile: 2.4 });
+          const arch = new T.CylinderGeometry(17, 17, d, 24, 1, false, -Math.PI / 2, Math.PI); arch.rotateX(Math.PI / 2); arch.scale(1, 0.32, 1); arch.translate(x, 14, z); w.add(w.m.cont[4], arch);
+        }
+        w.building(-40, -330, 12, 12, 34, 3, {}); w.box(w.m.glassRail, -40, 34, -330, 14, 4, 14, { solid: false }); w.box(w.m.darkPaint, -40, 38, -330, 15, 0.5, 15, { solid: false });
+        for (const z of [-40, -150, -260, -360]) for (const sx of [-1, 1]) w.floodMast(sx * 34, z, 20, sx > 0 ? -Math.PI / 2 : Math.PI / 2);
+        w.skyline({ seed: 72, keep: [[-100, 100, -420, 60]], hMin: 10, hMax: 50, radius: 760 });
+        return {
+          start: [0, 0, 40],
+          goals: [{ type: 'loop', lp: l1, k: 1, of: 3 }, { type: 'loop', lp: l2, k: 2, of: 3 }, { type: 'loop', lp: l3, k: 3, of: 3 }, { type: 'line', x: 12.5, y: 0, z: -345, hw: 10 }],
+          kill: (p) => Math.abs(p.pos.x) > 60 && 'LEFT THE AIRFIELD',
+          ref: () => 0,
+        };
+      },
+    },
+
+    // ---------------- COIN RUSH: five coins over three roofs
+    coins: {
+      name: 'COIN RUSH', tod: 'sunset', seed: 63, n2: 30, par: 24, limit: 60,
+      brief: 'Five coins over three rooftops. Some sit on the roofs, some hang in the air: jump for them and use the thrusters.',
+      tip: 'No way back up: side coin, jump the gap, over the stair housing, then a short burst of thrusters (Space) off the last kicker',
+      build(w) {
+        const HA = 40, HB = 38, HC = 31;
+        // roof A
+        w.building(0, -50, 40, 104, HA, 0, { par: { s: true, e: true, w: true, n: [[-4.6, 4.6]] } });
+        w.roofProps(0, -50, 40, 104, HA, 10, (x, z) => Math.abs(x) > 16 && z < -10 && Math.abs(z + 50) > 6);
+        w.waterTank(15, -20, HA, 1.8);
+        w.ramp(w.m.plate, 0, 8, -88, HA, -100, HA + 2.6, HA);
+        w.decal(w.tx.hazard, 0, HA, -86, 8, 1.2);
+        w.billboard(-14, -96, HA, 0, 'COIN RUSH', '#3a1c0a');
+        // roof B: a ramp onto a stair housing, then a kicker off the far end
+        w.building(0, -162, 36, 90, HB, 2, { par: { e: true, w: true, n: [[-5, 5]] } });
+        w.ramp(w.m.plate, 11, 6, -142, HB, -154, HB + 3.0, HB);
+        w.box(w.m.concrete, 11, HB, -160, 6, 3.0, 12, { tile: 3 });
+        w.box(w.m.darkPaint, 11, HB + 3.0, -160, 6.3, 0.2, 12.3, { solid: false });
+        w.decal(w.tx.hazard, 11, HB, -140, 6, 1.2);
+        w.ramp(w.m.plate, 0, 8, -195, HB, -207, HB + 2.6, HB);
+        w.decal(w.tx.hazard, 0, HB, -193, 8, 1.2);
+        w.roofProps(0, -162, 36, 90, HB, 6, (x, z) => Math.abs(x) > 14 && z > -190);
+        // roof C
+        w.building(0, -265, 40, 80, HC, 3, { par: { n: true, e: true, w: true } });
+        w.roofProps(0, -265, 40, 80, HC, 6, (x) => x > 10);
+        // the street canyon and neighbours
+        w.building(-44, -130, 30, 220, 52, 1, {}); w.building(46, -120, 34, 200, 30, 3, {});
+        w.building(-42, -285, 30, 70, 44, 0, {}); w.building(44, -280, 30, 60, 58, 2, {});
+        for (const sx of [-1, 1]) for (let z = -100; z > -230; z -= 6) if (w.R() < 0.5) w.parked(sx * 6, 0, z, sx > 0 ? 0 : Math.PI);
+        // the coins
+        w.coin(-13, HA + 1.3, -50);
+        w.coin(0, HA + 5.2, -111);
+        w.coin(11, HB + 4.4, -160);
+        w.coin(0, HB + 8, -227);
+        w.coin(-10, HC + 1.3, -292);
+        w.skyline({ seed: 73, keep: [[-70, 70, -330, 20]], hMin: 20, hMax: 90, radius: 720 });
+        const got = () => w.coins.filter((c) => c.got).length;
+        return {
+          start: [0, HA, -4],
+          goals: [{ type: 'coins' }],
+          kill: (p) => (p.pos.y < (p.pos.z > -110 ? HA - 4 : p.pos.z > -215 ? HB - 4 : HC - 4) ? 'FELL' : p.pos.z < -240 && got() < 4 ? 'MISSED A COIN' : false),
+          ref: (x, z) => (z > -110 ? HA : z > -215 ? HB : HC),
+        };
+      },
+    },
+
+    // ---------------- THE CORRIDOR: a 5 m wide viaduct, no rails, two speed gates
+    corridor: {
+      name: 'THE CORRIDOR', tod: 'night', seed: 64, n2: 30, par: 19, limit: 45,
+      brief: 'A viaduct five metres wide, 26 metres up, no rails. It bends. Hit 200 at the first gate and 245 through the last.',
+      tip: 'Stay on the throttle through the bends and keep the N₂ for the last straight',
+      build(w) {
+        const H = 26, WD = 5;
+        const bump = (z, z0, L, A) => (z <= z0 && z >= z0 - L ? (A * (1 - Math.cos((2 * Math.PI * (z0 - z)) / L))) / 2 : 0);
+        const px = (z) => bump(z, -160, 240, 7) + bump(z, -500, 240, -7);
+        const STEP = 6;
+        for (let z = 12; z > -960; z -= STEP) {
+          const xA = px(z), xB = px(z - STEP), dx = xB - xA, L = Math.hypot(dx, STEP) + 0.3, yaw = Math.atan2(-dx, STEP);
+          const cx = (xA + xB) / 2, cz = z - STEP / 2;
+          w.box(w.m.deck, cx, H - 1.2, cz, WD, 1.2, L, { yaw, tile: 4 });
+          const c = Math.cos(yaw), s = Math.sin(yaw);
+          for (const sx of [-1, 1]) w.box(sx > 0 ? w.m.led : w.m.ledW, cx + c * sx * (WD / 2 - 0.06), H, cz - s * sx * (WD / 2 - 0.06), 0.1, 0.05, 1.6, { yaw, solid: false });
+          if (Math.round(z) % 24 === 0) w.box(w.m.concrete, cx, 0, cz, 2.2, H - 1.2, 2.2, { tile: 3 });
+        }
+        for (let z = -20; z > -900; z -= 12) w.box(w.m.white, px(z), H, z, 0.15, 0.02, 3, { solid: false });
+        // the gates: tall pillars from the street, the last one narrows the deck to 3.8 m
+        const g1 = w.speedGate(0, H, -450, 2.6, 200, { noPillars: true });
+        for (const sx of [-1, 1]) w.box(w.m.darkPaint, sx * 3.0, 0, -450, 0.8, H + 6.5, 0.8);
+        const g2 = w.speedGate(0, H, -800, 1.9, 245, { noPillars: true });
+        for (const sx of [-1, 1]) w.box(w.m.darkPaint, sx * 2.3, H, -800, 0.8, 6.5, 0.8);
+        w.finishLine(0, H, -860, 2.5);
+        for (const sx of [-1, 1]) w.box(w.m.concrete, sx * 3.1, 0, -860, 0.6, H, 0.6);
+        // the canyon of towers along it
+        const R = w.R;
+        for (const sx of [-1, 1]) for (let z = 0; z > -960; ) {
+          const d = 22 + R() * 26;
+          w.building(sx * (34 + R() * 10), z - d / 2, 30, d - 2, 18 + R() * 80, (R() * 4) | 0, {});
+          z -= d + 4;
+        }
+        for (let z = -10; z > -950; z -= 40) for (const sx of [-1, 1]) w.lamp(sx * 12, 0, z, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 8);
+        for (let z = -20; z > -940; z -= 14) for (const sx of [-1, 1]) if (R() < 0.5) w.parked(sx * 6, 0, z, sx > 0 ? 0 : Math.PI);
+        w.skyline({ seed: 74, keep: [[-60, 60, -1000, 40]], hMin: 30, hMax: 120, radius: 900, cz: -450 });
+        return {
+          start: [0, H, 6],
+          goals: [{ type: 'gate', x: 0, y: H, z: -450, hw: 2.6, h: 6.5, min: 200, led: g1.ledM }, { type: 'gate', x: 0, y: H, z: -800, hw: 1.9, h: 6.5, min: 245, led: g2.ledM }, { type: 'line', x: 0, y: H, z: -860, hw: 3 }],
+          kill: (p) => p.pos.y < H - 4 && 'FELL',
+          ref: () => H,
+        };
+      },
+    },
+
+    // ---------------- THRUSTER HOP: pier to pier over the harbour, each gap longer than the last
+    hop: {
+      name: 'THRUSTER HOP', tod: 'dusk', seed: 65, n2: 45, par: 17, limit: 60, ground: false,
+      brief: 'Pier to pier across the harbour. The gaps get longer, and the last pier has no kicker: hover across on the under-thrusters.',
+      tip: 'Over 100 km/h off the first kicker, 140 off the second. Hold Space just before the end of the last pier and keep it lit',
+      build(w) {
+        water(w, 0);
+        const H = 6;
+        const pier = (z0, z1, kick) => {
+          const zc = (z0 + z1) / 2, d = z0 - z1;
+          w.box(w.m.concrete, 0, 0, zc, 14, H, d, { tile: 4 });
+          w.box(w.m.deck, 0, H, zc, 14, 0.02, d, { solid: false, tile: 5 });
+          for (const sx of [-1, 1]) {
+            for (let z = z0 - 4; z > z1 + 2; z -= 9) { const b = new T.CylinderGeometry(0.28, 0.34, 0.7, 12); b.translate(sx * 6.4, H + 0.35, z); w.add(w.m.darkPaint, b); }
+            w.box(w.m.hazard, sx * 6.85, H, zc, 0.3, 0.05, d, { solid: false, tile: 1 });
+            for (let z = z0 - 2; z > z1; z -= 6) w.box(w.m.rubber, sx * 7.1, H - 2.2, z, 0.3, 1.6, 1.2, { solid: false });
+          }
+          if (kick) { w.ramp(w.m.plate, 0, 8, z1 + 12, H, z1, H + kick, H); w.decal(w.tx.hazard, 0, H, z1 + 13.5, 8, 1.2); }
+        };
+        pier(10, -80, 1.5);
+        pier(-110, -170, 2.2);
+        pier(-220, -280, 0);
+        pier(-330, -470, 0);
+        for (const z of [-280.3, -329.7]) w.box(w.m.ledA, 0, H, z, 14, 0.04, 0.4, { solid: false });
+        w.decal(w.tx.stop, 0, H, -440, 10, 12);
+        w.box(w.m.concrete, 0, H, -468, 14, 1.2, 0.6, { tile: 3 });
+        for (const z of [-30, -150, -250, -360, -440]) for (const sx of [-1, 1]) w.lamp(sx * 6.2, H, z, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 7);
+        // the harbour: container stacks on the quays, a ship, cranes
+        let ci = 0;
+        for (const sx of [-1, 1]) {
+          w.box(w.m.concrete, sx * 70, 0, -190, 60, 4, 600, { tile: 6 });
+          for (let z = 60; z > -460; z -= 13) for (let k = 0; k < 1 + ((ci * 7) % 3); k++) w.container(sx * (52 + (ci % 3) * 3), 4 + k * 2.6, z, 0, ci++ + k);
+          crane(w, sx * 46, -120 + sx * 70, 48, sx > 0 ? -Math.PI / 2 : Math.PI / 2, w.m.cont[3]);
+        }
+        w.box(w.m.cont[1], -34, 0, -540, 22, 12, 120, { tile: 3 }); w.box(w.m.white, -34, 12, -570, 16, 10, 22, { solid: false });
+        w.skyline({ seed: 75, keep: [[-110, 110, -620, 80]], hMin: 20, hMax: 80, radius: 760 });
+        return {
+          start: [0, H, 4],
+          goals: [{ type: 'pad', x: 0, y: H, z: -440, hw: 5, hl: 6 }],
+          kill: (p) => p.pos.y < H - 2.5 && 'SPLASH',
+          ref: () => H,
+        };
+      },
+    },
+
+    // ---------------- BEAM WALK: steel beams between roofs, 90 m up
+    beams: {
+      name: 'BEAM WALK', tod: 'nightRoof', seed: 66, n2: 10, par: 30, limit: 80,
+      brief: 'Cross from roof to roof on bare steel beams 90 metres up. They get narrower, and the second one turns.',
+      tip: 'Slow is fast here: 20 to 30 km/h on the beams and line the car up on the roof before each one',
+      build(w) {
+        const H = 90, bm = mat(w, { color: 0x8a3a24, roughness: 0.55, metalness: 0.45 });
+        w.building(0, -30, 26, 70, H, 0, { par: { s: true, e: true, w: true, n: [[-1.6, 1.6]] } });
+        w.roofProps(0, -30, 26, 70, H, 8, (x) => Math.abs(x) > 6);
+        ibeam(w, 0, -64.6, 0, -95.4, H, 2.8, bm);
+        w.building(0, -105, 14, 20, H, 3, {});
+        ibeam(w, -3, -114.6, -16.0, -137.6, H, 2.6, bm);
+        w.building(-18, -150, 16, 26, H, 2, {});
+        ibeam(w, -18, -162.6, -18, -197.4, H, 2.2, bm);
+        w.building(-18, -215, 24, 36, H, 0, { par: { n: true, e: true, w: true, s: [[-19.4, -16.6]] } });
+        w.decal(w.tx.stop, -18, H, -217, 9, 11);
+        for (const [x, z] of [[0, -105], [-18, -150]]) for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) w.box(w.m.beacon, x + a * 5, H, z + b * 7, 0.3, 0.3, 0.3, { solid: false });
+        crane(w, 22, -150, 120, -Math.PI / 2, mat(w, { color: 0xd8a51c, roughness: 0.5, metalness: 0.4 }));
+        w.building(30, -70, 30, 50, 70, 1, {}); w.building(-34, -70, 28, 60, 110, 0, {});
+        w.building(22, -230, 26, 40, 80, 3, {}); w.building(-50, -170, 24, 40, 60, 2, {});
+        w.skyline({ seed: 76, keep: [[-60, 50, -250, 20]], hMin: 40, hMax: 150, radius: 800 });
+        return {
+          start: [0, H, -2],
+          goals: [{ type: 'pad', x: -18, y: H, z: -217, hw: 4.5, hl: 5.5 }],
+          kill: (p) => p.pos.y < H - 3 && 'FELL',
+          ref: () => H,
+        };
+      },
+    },
+
+    // ---------------- CRUSHER ALLEY: presses and sliding walls; learn the rhythm
+    crusher: {
+      name: 'CRUSHER ALLEY', tod: 'dusk', seed: 67, n2: 20, par: 22, limit: 55,
+      brief: 'A factory street of hydraulic presses and sliding walls. Learn the rhythm, then hit the speed gate at the end.',
+      tip: 'The presses work in a green wave: about 75 km/h through them. Watch the walls and go for the open side',
+      build(w) {
+        w.box(w.m.asphalt, 0, -0.5, -200, 60, 0.52, 480, { solid: false, tile: 5 });
+        for (let z = 0; z > -400; z -= 9) w.box(w.m.ledA, 0, 0.005, z, 0.18, 0.02, 4, { solid: false });
+        // factory halls left and right
+        for (const sx of [-1, 1]) for (let z = 10; z > -420; z -= 52) {
+          w.box(w.m.cont[sx > 0 ? 4 : 0], sx * 21, 0, z - 25, 22, 16 + w.R() * 8, 48, { tile: 2.4 });
+          w.box(w.m.galv, sx * 10.4, 0, z - 25, 0.4, 1.0, 48, { tile: 2 });
+        }
+        const press = (z, ph) => {
+          for (const sx of [-1, 1]) w.box(w.m.steel, sx * 5.8, 0, z, 1.0, 9, 1.4);
+          w.box(w.m.steel, 0, 9, z, 12.6, 1.2, 1.6, { solid: false });
+          const om = 2 * Math.PI / 2.4;
+          w.mover(w.m.hazard, 10, 3, 4, (t, s) => { s.x = 0; s.z = z; s.y0 = 0.15 + 5.6 * (0.5 + 0.5 * Math.sin(om * t + ph)); }, { tile: 1.5 });
+          w.mover(w.m.galv, 1.0, 6, 1.0, (t, s) => { s.x = 0; s.z = z; s.y0 = 3.15 + 5.6 * (0.5 + 0.5 * Math.sin(om * t + ph)); }, { deadly: false });
+        };
+        const v = 21; // the green wave: 75 km/h
+        [-80, -110, -140, -170].forEach((z, i) => press(z, -Math.PI / 2 - (2 * Math.PI / 2.4) * ((-z - 50) / v - 2.4) + Math.PI));
+        const slide = (z, ph) => {
+          const om = 2 * Math.PI / 3.2;
+          w.mover(w.m.cont[3], 6, 2.8, 3, (t, s) => { s.x = 4.3 * Math.sin(om * t + ph); s.z = z; s.y0 = 0; }, { tile: 2.4 });
+          w.box(w.m.steel, 0, 3.2, z, 12, 0.3, 0.3, { solid: false });
+        };
+        slide(-230, 0); slide(-265, 2.2); slide(-300, 4.4);
+        const g = w.speedGate(0, 0, -360, 5, 140);
+        w.finishLine(0, 0, -385, 9);
+        for (let z = -20; z > -400; z -= 30) for (const sx of [-1, 1]) w.lamp(sx * 9.4, 0, z, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 7);
+        w.skyline({ seed: 77, keep: [[-50, 50, -460, 40]], hMin: 10, hMax: 50, radius: 700 });
+        return {
+          start: [0, 0, 6],
+          goals: [{ type: 'gate', x: 0, y: 0, z: -360, hw: 5, h: 6.5, min: 140, led: g.ledM, label: 'GET THROUGH · 140 KM/H AT THE GATE', short: 'GATE · 140 KM/H' }, { type: 'line', x: 0, y: 0, z: -385, hw: 10 }],
+          kill: (p) => Math.abs(p.pos.x) > 11 && 'LEFT THE STREET',
+          ref: () => 0,
+        };
+      },
+    },
+
+    // ---------------- THE THREADER: three slots, side to side, faster each time
+    threader: {
+      name: 'THE THREADER', tod: 'night', seed: 68, n2: 45, par: 14, limit: 45,
+      brief: 'Three walls of towers across the avenue, each with one slot: left, right, centre. 185, 240, then 255 km/h.',
+      tip: 'Start each lane change about 100 m before the slot, smooth and early. Save the N₂ until you are through the first one',
+      build(w) {
+        w.box(w.m.asphalt, 0, -0.5, -320, 24, 0.52, 720, { solid: false, tile: 5 });
+        for (const sx of [-1, 1]) w.box(w.m.concrete, sx * 13, 0, -320, 2, 0.16, 720, { tile: 3 });
+        for (let z = 0; z > -660; z -= 9) for (const lx of [-3.5, 3.5]) w.box(w.m.white, lx, 0.005, z, 0.15, 0.02, 3.5, { solid: false });
+        const R = w.R;
+        for (const sx of [-1, 1]) for (let z = 10; z > -680; ) { const d = 20 + R() * 18; w.building(sx * 28, z - d / 2, 26, d - 1, 30 + R() * 70, (R() * 4) | 0, {}); z -= d; }
+        const wall = (z, x, wid, min, st) => {
+          const L = x - wid / 2, Rr = x + wid / 2;
+          w.building((-14 + L) / 2, z, L + 14, 30, 70 + R() * 50, st, {});
+          w.building((Rr + 14) / 2, z, 14 - Rr, 30, 60 + R() * 60, (st + 1) % 4, {});
+          for (const sx of [L, Rr]) for (let y = 0.5; y < 12; y += 1.5) w.box(w.m.led, sx + (sx === L ? 0.05 : -0.05), y, z, 0.1, 0.12, 30, { solid: false });
+          w.decal(w.tx.hazard, x, 0, z + 17, wid, 2);
+          const g = w.speedGate(x, 0, z - 16, wid / 2, min, { noPillars: true, h: 7.5 });
+          return { type: 'gate', x, y: 0, z: z - 16, hw: wid / 2, h: 9, min, led: g.ledM };
+        };
+        const goals = [wall(-250, -6, 4.6, 185, 0), wall(-400, 6, 4.4, 240, 2), wall(-550, 0, 4.0, 255, 1)];
+        w.box(w.m.deck, 0, -0.5, -680, 80, 0.52, 120, { solid: false, tile: 6 });
+        w.finishLine(0, 0, -620, 12);
+        for (let z = -10; z > -660; z -= 30) for (const sx of [-1, 1]) w.lamp(sx * 12.4, 0.16, z, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 9);
+        w.skyline({ seed: 78, keep: [[-50, 50, -760, 30]], hMin: 30, hMax: 130, radius: 800, cz: -300 });
+        goals.push({ type: 'line', x: 0, y: 0, z: -620, hw: 14 });
+        return { start: [0, 0, 6], goals, kill: () => false, ref: () => 0 };
+      },
+    },
+
+    // ---------------- FREEFALL: off the tallest tower, three rings on the way down
+    freefall: {
+      name: 'FREEFALL', tod: 'sunset', seed: 69, n2: 30, par: 14, limit: 45,
+      brief: 'Launch off a 130 metre tower, fall through three rings of fire on the way down and touch down on the landing hill.',
+      tip: 'Leave the ramp at 104 to 110 km/h. A bit slow? A short burst of thrusters (Space) lifts you back onto the line. Hands off them after the last ring',
+      build(w) {
+        const H = 130, F = FREEFALL;
+        w.building(0, -40, 30, 100, H, 0, { par: { s: true, e: true, w: true, n: [[-4.2, 4.2]] } });
+        for (let z = -4; z > -76; z -= 8) for (const sx of [-4.4, 4.4]) w.box(w.m.ledA, sx, H, z, 0.25, 0.08, 0.6, { solid: false });
+        w.roofProps(0, -40, 30, 100, H, 8, (x) => Math.abs(x) > 7);
+        w.ramp(w.m.plate, 0, 8, -78, H, -90, H + 2.0, H);
+        F.rings.forEach(([z, y], i) => w.fireRing(0, y, z, 4.2, { cables: [[-30, y + 20, z - 4], [30, y + 18, z + 4]] }));
+        // the landing hill: segments bending from steep to flat, on a steel frame
+        const hill = F.hill;
+        for (let i = 0; i < hill.length - 1; i++) {
+          const [zA, yA] = hill[i], [zB, yB] = hill[i + 1];
+          w.ramp(w.m.deck, 0, 16, zA, yA, zB, yB, Math.max(0, Math.min(yA, yB) - 1.2), { edges: true });
+          if (i % 3 === 0 && yB > 1.5) for (const sx of [-1, 1]) w.box(w.m.steel, sx * 7.6, 0, (zA + zB) / 2, 0.6, Math.min(yA, yB) - 1.2, 0.6);
+        }
+        w.box(w.m.asphalt, 0, -0.5, F.finish + 60, 60, 0.52, 260, { solid: false, tile: 5 });
+        w.finishLine(0, 0, F.finish, 12);
+        for (const [x, z, d, h] of [[-40, -160, 30, 60], [42, -150, 30, 80], [-46, -300, 34, 40], [48, -320, 30, 50]]) w.building(x, z, d, 40, h, 2, {});
+        w.skyline({ seed: 79, keep: [[-70, 70, -560, 30]], hMin: 30, hMax: 110, radius: 800, cz: -200 });
+        return {
+          start: [0, H, 4],
+          goals: F.rings.map(([z, y]) => ({ type: 'ring', x: 0, y, z, r: 4.2 })).concat([{ type: 'line', x: 0, y: 0, z: F.finish, hw: 14 }]),
+          kill: (p) => p.grounded && p.pos.y < 1 && p.pos.z > F.under && 'MISSED THE SLOPE',
+          ref: (x, z) => (z > -92 ? H : 0),
+          camUp: 16,
+        };
+      },
+    },
+
+    // ---------------- THE GAUNTLET: everything at once
+    gauntlet: {
+      name: 'THE GAUNTLET', tod: 'nightRoof', seed: 70, n2: 40, par: 24, limit: 90,
+      brief: 'The last one: speed gate, a loop on the roof, a ring of fire over the street, a bare beam and the helipad.',
+      tip: '150 at the gate, keep 90 into the loop, 110 off the kicker, crawl the beam, stop on the H',
+      build(w) {
+        const HA = 80, HB = 74, HC = 74, bm = mat(w, { color: 0x8a3a24, roughness: 0.55, metalness: 0.45 });
+        w.building(0, -110, 34, 240, HA, 0, { par: { s: true, e: true, w: true, n: [[0, 15]] } });
+        for (let z = -4; z > -120; z -= 8) for (const sx of [-4.4, 4.4]) w.box(w.m.ledA, sx, HA, z, 0.25, 0.08, 0.6, { solid: false });
+        const g = w.speedGate(0, HA, -100, 5, 150);
+        const lp = w.loop(0, HA, -150, 9, 6, 7.5);
+        w.ramp(w.m.plate, 7.5, 7, -218, HA, -230, HA + 2.6, HA);
+        w.decal(w.tx.hazard, 7.5, HA, -216, 7, 1.2);
+        w.fireRing(7.5, G.GAUNTLET_RING_Y || HA + 6.2, -252, 3.8, { cables: [[-26, HA + 26, -252], [40, HA + 20, -252]] });
+        // roof B over the street
+        w.building(7.5, -305, 24, 60, HB, 2, { par: { e: true, w: true, n: [[6.3, 8.7]] } });
+        ibeam(w, 7.5, -334.6, 7.5, -366.4, HB, 2.0, bm);
+        w.building(7.5, -380, 18, 26, HC - 4, 3, { par: false });
+        w.decal(w.tx.heli, 7.5, HC - 4, -380, 15, 15);
+        for (let a = 0; a < 16; a++) { const t = (a / 16) * Math.PI * 2; w.box(w.m.ledA, 7.5 + Math.cos(t) * 7.6, HC - 4, -380 + Math.sin(t) * 7.6, 0.3, 0.1, 0.3, { solid: false }); }
+        // a short drop from the end of the beam onto the helipad roof
+        w.building(-40, -260, 30, 80, 60, 1, {}); w.building(50, -250, 30, 70, 96, 0, {});
+        w.building(-36, -400, 30, 50, 90, 2, {}); w.building(46, -410, 26, 40, 70, 3, {});
+        w.billboard(-10, -60, HA, 0, 'THE GAUNTLET', '#2a0f14');
+        w.skyline({ seed: 80, keep: [[-70, 70, -440, 20]], hMin: 40, hMax: 130, radius: 820, cz: -200 });
+        return {
+          start: [0, HA, -2],
+          goals: [{ type: 'gate', x: 0, y: HA, z: -100, hw: 5, h: 6.5, min: 150, led: g.ledM }, { type: 'loop', lp }, { type: 'ring', x: 7.5, y: G.GAUNTLET_RING_Y || HA + 6.2, z: -252, r: 3.8 }, { type: 'pad', x: 7.5, y: HC - 4, z: -380, hw: 7, hl: 7 }],
+          kill: (p) => p.pos.y < (p.pos.z > -235 ? HA - 4 : p.pos.z > -368 ? HB - 4 : HC - 8) && 'FELL',
+          ref: (x, z) => (z > -235 ? HA : z > -368 ? HB : HC - 4),
+        };
+      },
+    },
+  };
+  // FREEFALL's flight line, measured: take-off at z -92, y 132.3, rise 0.146 per metre, gravity 12.26 m/s² (the game's)
+  // The rings sit on the 108 km/h arc; the hill runs 8 m under the 112 km/h arc, then bends flat 0.1° per metre, so
+  // anything from about 102 to 112 km/h touches down at a shallow angle.
+  const FREEFALL = (() => {
+    const Z0 = -92, Y0 = 132.3, A = 0.146, GR = 12.26;
+    const arc = (kmh, dz) => { const vx = kmh / 3.6, t = dz / vx; return Y0 + A * vx * t - 0.5 * GR * t * t; };
+    const slope = (kmh, dz) => { const vx = kmh / 3.6, t = dz / vx; return Math.atan(-(A * vx - GR * t) / vx); };
+    const hill = [];
+    let dz = 57;
+    for (; dz < 108; dz += 3) hill.push([Z0 - dz, arc(112, dz) - 8]);
+    let y = arc(112, dz) - 8, th = slope(112, dz);
+    hill.push([Z0 - dz, y]);
+    const k = (0.1 * Math.PI) / 180;
+    while (y > 0 && th > 0) { const st = 3; dz += st * Math.cos(th); y -= st * Math.sin(th); th = Math.max(0, th - k * st); hill.push([Z0 - dz, Math.max(0, y)]); }
+    const end = hill[hill.length - 1][0];
+    hill.push([end - 20, 0]);
+    const under = hill.filter((h) => h[1] > 3).pop()[0]; // anything grounded and low before here is under the hill
+    return { rings: [25, 50, 75].map((d) => [Z0 - d, +arc(108, d).toFixed(1)]), hill, under, finish: Math.round(end - 70) };
+  })();
+  {
+    const L0 = LEVELS.slice();
+    LEVELS.length = 0;
+    LEVELS.push(L0[0], L0[1], NEW.flip, L0[2], L0[3], NEW.loops, NEW.coins, NEW.corridor, NEW.hop, L0[4], NEW.beams, NEW.crusher, NEW.threader, NEW.freefall, NEW.gauntlet);
+  }
   G.CHAL_LEVELS = LEVELS;
 
   // the stand-in "track" while a level is loaded: no road, no walls; ground comes from the level
@@ -961,19 +1516,39 @@
     };
   }
 
+  // ---------------------------------------------------------------- how runs are cut
+  // courses: one entry per ranked run, each with its own leaderboard (track id + level count). To play the challenge
+  // as three 5-level courses instead of one 15-level run, swap in:
+  //   [{ name: 'ACT I', from: 0, to: 4, track: 'stunt1', laps: 5 }, { name: 'ACT II', from: 5, to: 9, track: 'stunt2', laps: 5 },
+  //    { name: 'ACT III', from: 10, to: 14, track: 'stunt3', laps: 5 }]
+  const RUN = {
+    lives: 5,
+    actLife: true, // clearing the last level of an act gives a life back (up to the max)
+    acts: [{ name: 'STREET SCHOOL', from: 0 }, { name: 'STEEL AND SPEED', from: 5 }, { name: 'NO MERCY', from: 10 }],
+    courses: [{ name: 'FULL RUN', from: 0, to: 14, track: 'stunt15', laps: 15 }],
+  };
+  G.CHAL_RUN = RUN;
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
+  const actOf = (i) => { let k = 0; RUN.acts.forEach((a, j) => { if (i >= a.from) k = j; }); return k; };
+  G.chalActName = (i) => `ACT ${ROMAN[actOf(i)]} · ${RUN.acts[actOf(i)].name}`;
+
+  const UP = new T.Vector3();
   // ---------------------------------------------------------------- a run
   class ChallengeRun {
     constructor(game, opt = {}) {
       this.game = game;
       this.practice = opt.level != null;
-      this.first = this.practice ? opt.level : 0;
-      this.last = this.practice ? opt.level : LEVELS.length - 1;
-      this.lives = this.practice ? Infinity : 3;
+      this.course = RUN.courses[opt.course || 0] || RUN.courses[0];
+      this.first = this.practice ? opt.level : this.course.from;
+      this.last = this.practice ? opt.level : Math.min(this.course.to, LEVELS.length - 1);
+      this.count = this.last - this.first + 1;
+      this.lives = this.practice ? Infinity : RUN.lives;
       this.total = 0; this.runTime = 0;
       this.results = [];
       this.realTrack = game.track;
       this.load(this.first);
     }
+    get act() { return G.chalActName(this.idx); }
 
     load(i) {
       const g = this.game;
@@ -983,15 +1558,18 @@
       this.spec = this.level.build(this.world);
       this.world.finalize();
       this.world.enter();
+      this.world.onDeadly = () => this.fail('CRUSHED');
       g.track = stubTrack(this.world, this.spec);
       this.tries = 0;
       this.startAttempt(false);
     }
 
     startAttempt(retry) {
-      const g = this.game, p = g.player, sp = this.spec;
+      const g = this.game, p = g.player, sp = this.spec, w = this.world;
       this.tries++;
       this.goal = 0; this.prec = []; this.t = 0; this.padT = 0; this.camHold = null; this.failed = null; this.doneT = 0;
+      this.airT = 0; this.flipT = 0; this.prevSt = 'countdown';
+      w.loopDone = null; w.loopFell = null; w.resetCoins(); w.resetMovers();
       // place the car (what Player.place does, off the level's start)
       const [x, y, z] = sp.start;
       p.pos.set(x, y + 0.02, z);
@@ -999,35 +1577,46 @@
       p.vel.set(0, 0, 0); p.w.set(0, 0, 0); p.ride = null;
       for (const wh of p.wheels) { wh.comp = 0.1; wh.len = 0.45; wh.spinV = 0; }
       p.near.i = -1; g.track.nearest(p.pos.x, p.pos.z, -1, p.near);
-      p.flipT = 0; p.airTime = 0;
+      p.flipT = 0; p.airTime = 0; p.pitchAcc = 0; p.rollAcc = 0;
       p.fuel = this.level.n2; p.fuelLock = false; p.noRecharge = true; p.infFuel = false;
       p.health = 100;
       g.lastS = p.near.s; g.progress = 0;
       g.state = 'countdown';
       g.cdT = retry ? 1.999 : 3.999; g.cdLast = -1; g.camIntro = retry ? 0.3 : 0;
       g.camYaw = 0;
-      for (const gl of this.spec.goals) if (gl.led) gl.led.color.setRGB(4, 0.3, 0.2);
-      for (const gl of this.spec.goals) gl.prevD = null;
+      for (const gl of sp.goals) { if (gl.led) gl.led.color.setRGB(4, 0.3, 0.2); gl.prevD = null; }
       g.hud.chal(this);
-      if (!retry) g.hud.message(this.level.name, 1800);
-      else g.hud.message(`TRY ${this.tries}`, 1000);
-      this.hint();
+      g.hud.chalObjective('');
+      g.hud.chalIntro(this, this.goalText(sp.goals[0], false));
+      if (retry) g.hud.message(`TRY ${this.tries}`, 1000);
     }
 
-    hint() {
-      const g = this.game;
-      const gl = this.spec.goals[this.goal];
-      const t = !gl ? '' : gl.type === 'ring' ? 'FLY THROUGH THE RING' : gl.type === 'gate' ? `SPEED GATE · MIN ${gl.min} KM/H` : gl.type === 'pad' ? 'STOP INSIDE THE BOX' : 'REACH THE FINISH';
-      g.hud.chalObjective(t);
+    // what a goal asks for: the long line for the objective box, the short one for "NEXT: …"
+    goalText(gl, short) {
+      if (!gl) return '';
+      if (gl.label) return short ? gl.short || gl.label : gl.label;
+      const coins = this.world.coins, got = coins.filter((c) => c.got).length;
+      switch (gl.type) {
+        case 'ring': return short ? 'THE RING' : 'FLY THROUGH THE RING';
+        case 'gate': return short ? `GATE · ${gl.min} KM/H` : `SPEED GATE · MIN ${gl.min} KM/H`;
+        case 'pad': return short ? 'STOP IN THE BOX' : 'STOP INSIDE THE BOX';
+        case 'coins': return short ? 'THE COINS' : `GRAB ALL ${coins.length} COINS · ${got}/${coins.length}`;
+        case 'loop': return short ? 'THE LOOP' : gl.of > 1 ? `HIT LOOP ${gl.k} OF ${gl.of}` : 'HIT THE LOOP';
+        case 'flip': return short ? 'A FLIP' : gl.n > 1 ? `DO ${gl.n} FLIPS AND LAND THEM` : 'DO A FLIP AND LAND IT';
+        default: return short ? 'FINISH' : 'REACH THE FINISH';
+      }
     }
+    hint() { this.game.hud.chalObjective(this.goalText(this.spec.goals[this.goal], false)); }
 
     // called every frame by the game
     update(dt, st) {
       const g = this.game, p = g.player;
       this.world.update(dt, g.camera, p.pos);
       if (st === 'race') {
+        if (this.prevSt === 'countdown') g.hud.chalIntroGo();
         this.t += dt; this.runTime += dt;
         g.raceTime = this.t;
+        this.world.enterLoops(p);
         this.check(dt);
         if (g.state === 'race' && this.t > this.level.limit) this.fail('OUT OF TIME');
       } else if (st === 'cfail') {
@@ -1037,13 +1626,40 @@
         this.doneT += dt;
         if (this.doneT > 3.0) this.next();
       }
+      this.prevSt = st;
       g.score = Math.round(this.total);
     }
 
     check(dt) {
-      const g = this.game, p = g.player, sp = this.spec;
+      const g = this.game, p = g.player, sp = this.spec, w = this.world;
       const k = sp.kill(p);
       if (k) { this.camHold = g.camera.position.clone(); return this.fail(k === 'FELL' ? 'YOU FELL' : k); }
+      // upside down and stuck
+      UP.set(0, 1, 0).applyQuaternion(p.q);
+      if (!p.ride && UP.y < 0.1 && p.speed < 3) { this.flipT += dt; if (this.flipT > 1.2) return this.fail('FLIPPED'); } else this.flipT = 0;
+      // coins can be picked up in any order, whatever the current goal
+      for (const c of w.coins) {
+        if (c.got) continue;
+        const dx = p.pos.x - c.x, dy = p.pos.y + 0.6 - c.y, dz = p.pos.z - c.z;
+        if (dx * dx + dy * dy + dz * dz < 2.6 * 2.6) {
+          c.got = true;
+          const n = w.coins.filter((q) => q.got).length;
+          G.audio.stunt();
+          g.fx && g.fx.burst && g.fx.burst(c.x, c.y, c.z, 30, 0, 3, 0, 7);
+          const gl = sp.goals[this.goal];
+          if (gl && gl.type === 'coins' && n === w.coins.length) { this.prec.push(G.clamp(1 - this.t / this.level.limit, 0, 1) * 0.5 + 0.5); this.pass('ALL COINS'); }
+          else g.hud.popup(`COIN ${n}/${w.coins.length}`, '', 'blue');
+          if (gl && gl.type === 'coins') this.hint();
+        }
+      }
+      if (g.state !== 'race') return;
+      // air time: flips are judged on landing
+      if (!p.grounded && !p.ride) this.airT += dt;
+      else {
+        if (this.airT > 0.35) this.landed();
+        if (g.state !== 'race') return;
+        this.airT = 0; p.pitchAcc = 0; p.rollAcc = 0;
+      }
       const gl = sp.goals[this.goal];
       if (!gl) return;
       const cx = p.pos.x, cy = p.pos.y + 0.6, cz = p.pos.z;
@@ -1057,6 +1673,13 @@
             this.complete();
           }
         } else this.padT = 0;
+        return;
+      }
+      if (gl.type === 'coins' || gl.type === 'flip') return;
+      if (gl.type === 'loop') {
+        if (w.loopDone === gl.lp) { w.loopDone = null; this.prec.push(1); return this.pass(gl.of > 1 ? `LOOP ${gl.k}/${gl.of}` : 'LOOP!'); }
+        if (w.loopFell === gl.lp) return this.fail('TOO SLOW FOR THE LOOP');
+        if (!p.ride && cz < gl.lp.z - 3) return this.fail('MISSED THE LOOP');
         return;
       }
       // plane crossing: the goal plane faces -z (every set piece is laid out along the run)
@@ -1083,15 +1706,26 @@
       }
     }
 
+    // back on the wheels after a jump: was there a flip in it?
+    landed() {
+      const p = this.game.player, gl = this.spec.goals[this.goal];
+      if (!gl || gl.type !== 'flip') return;
+      const turns = Math.abs(p.pitchAcc) / (Math.PI * 2), flips = Math.floor(turns + 0.2) + Math.floor(Math.abs(p.rollAcc) / (Math.PI * 2) + 0.2);
+      UP.set(0, 1, 0).applyQuaternion(p.q);
+      if (flips >= (gl.n || 1) && UP.y > 0.3) { // on two wheels is fine: the car rights itself
+        this.prec.push(G.clamp(1 - Math.abs(turns - Math.round(turns)) * 3, 0, 1));
+        this.pass(flips > 1 ? `${flips}× FLIP!` : 'FLIP!');
+      } else if (this.airT > 0.9 && (gl.strict !== false || flips)) this.fail(flips ? 'BAD LANDING' : 'NO FLIP');
+    }
+
     pass(text) {
       const g = this.game;
       this.goal++;
-      g.hud.popup(text, this.goal < this.spec.goals.length ? 'NEXT: ' + this.objText() : '', 'blue');
+      g.hud.popup(text, this.goal < this.spec.goals.length ? 'NEXT: ' + this.goalText(this.spec.goals[this.goal], true) : '', 'blue');
       G.audio.stunt();
       if (this.goal >= this.spec.goals.length) this.complete();
       else this.hint();
     }
-    objText() { const gl = this.spec.goals[this.goal]; return !gl ? '' : gl.type === 'ring' ? 'THE RING' : gl.type === 'gate' ? `GATE · ${gl.min} KM/H` : gl.type === 'pad' ? 'STOP IN THE BOX' : 'FINISH'; }
 
     // a crash into a wall or a ledge ends the attempt
     onHit(vn) {
@@ -1131,6 +1765,11 @@
       if (pts > best) G.store.set(key, pts);
       g.hud.message('LEVEL CLEAR', 2400);
       g.hud.popup(`+${pts.toLocaleString()}`, [timeB && `TIME +${timeB}`, `PRECISION +${precB}`, firstB && 'FIRST TRY +500', fuelB && `N₂ +${fuelB}`].filter(Boolean).join(' · '), 'big');
+      // the end of an act gives a life back
+      if (!this.practice && RUN.actLife && this.idx < this.last && RUN.acts.some((a) => a.from === this.idx + 1) && this.lives < RUN.lives) {
+        this.lives++;
+        setTimeout(() => { g.hud.popup(`ACT ${ROMAN[actOf(this.idx)]} CLEAR`, '+1 LIFE', 'blue'); g.hud.chal(this); }, 1300);
+      }
       G.audio.stunt();
     }
     next() {
@@ -1138,11 +1777,12 @@
       this.load(this.idx + 1);
     }
 
-    // the results card (and the leaderboard for a full run)
+    // the results card (and the leaderboard for a ranked run, finished or not)
     results_(cleared) {
       const g = this.game;
       g.state = 'finished'; g.finished = true;
       g.player.frozen = true;
+      g.hud.chalIntroHide();
       const lifeB = cleared && !this.practice ? this.lives * 1000 : 0;
       this.total += lifeB;
       g.score = Math.round(this.total);
@@ -1155,33 +1795,47 @@
       const best = G.store.get('chalBest', 0), isBest = !this.practice && this.total > best;
       if (isBest) G.store.set('chalBest', Math.round(this.total));
       $('res-stats').innerHTML = `<div><b>${Math.round(this.total).toLocaleString()}</b><small>${isBest ? 'NEW BEST SCORE' : 'SCORE'}</small></div>` +
-        `<div><b>${this.results.length}/${this.last - this.first + 1}</b><small>LEVELS</small></div><div><b>${G.fmtTime(this.runTime)}</b><small>TIME</small></div>`;
+        `<div><b>${this.results.length}/${this.count}</b><small>LEVELS</small></div><div><b>${G.fmtTime(this.runTime)}</b><small>TIME</small></div>`;
       $('btn-again').textContent = this.practice ? 'PLAY AGAIN' : 'NEW RUN';
       document.body.classList.remove('playing');
       $('results').classList.add('open');
       const el = $('res-board');
-      if (this.practice) { el.textContent = 'Practice: only a full 5-level run goes on the leaderboard.'; return; }
-      if (this.total <= 0 || this.runTime < 15) { el.textContent = 'Clear a level to get on the leaderboard.'; return; }
-      el.textContent = 'Sending to the leaderboard…';
-      G.api.submit({ name: g.settings.mpName, track: 'stunt', mode: 'chal', laps: 5, time_ms: Math.round(this.runTime * 1000), score: Math.round(this.total) })
-        .then((r) => { el.innerHTML = `${r.best ? 'NEW PERSONAL BEST · ' : ''}<b>#${r.rank}</b> of ${r.total} on the Stunt Challenge leaderboard`; })
-        .catch(() => { el.textContent = 'Leaderboard offline: this run was not saved.'; });
+      if (this.practice) { el.textContent = 'Practice runs are not ranked: start a run from the Stunt Challenge menu.'; return; }
+      this.submit_(el);
+    }
+    // a ranked run goes on the board as soon as it ends, finished or not (and when you quit it)
+    submit_(el) {
+      if (this.submitted || this.practice) return;
+      if (this.total <= 0) { if (el) el.textContent = 'Clear a level to get on the leaderboard.'; return; }
+      this.submitted = true;
+      if (el) el.textContent = 'Sending to the leaderboard…';
+      const g = this.game, c = this.course;
+      G.api.submit({ name: g.settings.mpName, track: c.track, mode: 'chal', laps: c.laps, time_ms: Math.round(this.runTime * 1000), score: Math.round(this.total) })
+        .then((r) => { if (el) el.innerHTML = `${r.best ? 'NEW PERSONAL BEST · ' : ''}<b>#${r.rank}</b> of ${r.total} on the Stunt Challenge leaderboard`; })
+        .catch(() => { if (el) el.textContent = 'Leaderboard offline: this run was not saved.'; });
     }
 
     // camera: stay under ceilings (the garage) and above surfaces
     camClamp(x, y, z) {
       const q = this._cq || (this._cq = {});
-      this.world.groundAt(x, z, q, this.game.player.pos.y + 1.0);
+      // camUp: on a steep slope the ground behind the car is far above it; look that high for it (no ceilings there)
+      const up = this.spec && this.spec.camUp;
+      this.world.groundAt(x, z, q, up ? Math.max(this.game.player.pos.y + 1.0, y + up) : this.game.player.pos.y + 1.0);
       if (q.ceil < Infinity) y = Math.min(y, q.ceil - 0.35);
       return Math.max(y, q.h + 0.6);
     }
 
     dispose() {
       const g = this.game;
+      if (!this.submitted && !this.practice && this.results.length) {
+        const best = G.store.get('chalBest', 0);
+        if (this.total > best) G.store.set('chalBest', Math.round(this.total));
+        this.submit_(null);
+      }
       if (this.world) { this.world.exit(); this.world.dispose(); this.world = null; }
       g.track = this.realTrack;
-      g.player.noRecharge = false;
-      g.hud.chal(null);
+      g.player.noRecharge = false; g.player.ride = null;
+      g.hud.chal(null); g.hud.chalIntroHide();
     }
   }
   G.ChallengeRun = ChallengeRun;

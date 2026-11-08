@@ -403,3 +403,21 @@ body.editing #hud, body.editing #touch, body.editing .ibtns { display: none !imp
 @media (max-width: 760px) { #h-chal .obj { display: none; } #h-chal .sub { max-width: 90px; } }
 /* the top-right panel is hidden in the challenge, so the score sits there, clear of the objective box */
 #hud.chal .hud-score { left: auto; right: calc(14px + var(--sa-r)); transform: none; text-align: right; }
+
+/* stunt challenge: the level card during the countdown, and its goal flying into the objective box */
+#h-cintro { position: fixed; left: 50%; top: 58%; transform: translate(-50%, 0) scale(0.92); z-index: 6; pointer-events: none; text-align: center; opacity: 0; width: min(92vw, 640px); }
+#h-cintro.show { opacity: 1; transform: translate(-50%, 0) scale(1); transition: opacity 0.35s, transform 0.35s; }
+#h-cintro.out { opacity: 0; transition: opacity 0.4s; }
+#h-cintro small { display: block; font-size: 13px; letter-spacing: 0.3em; color: #9fb4c8; }
+#h-cintro .nm { display: block; font-family: 'Orbitron'; font-size: clamp(22px, 5vw, 40px); letter-spacing: 0.08em; margin: 2px 0 10px; text-shadow: 0 0 22px rgba(255, 42, 60, 0.85), 0 3px 6px #000; }
+#h-cintro p { margin: 10px auto 0; max-width: 520px; font-size: clamp(13px, 2.6vw, 16px); line-height: 1.4; color: #e8eef5; text-shadow: 0 2px 6px #000, 0 0 12px #000; }
+.goal { display: inline-block; padding: 8px 18px; border-radius: 8px; background: rgba(6, 8, 12, 0.66); border: 1px solid rgba(255, 211, 106, 0.55); font-weight: 900; font-size: clamp(17px, 3.6vw, 26px); letter-spacing: 0.06em; color: #ffd36a; text-shadow: 0 0 14px rgba(255, 190, 60, 0.6); white-space: nowrap; }
+.goal.fly { position: fixed; z-index: 7; margin: 0; pointer-events: none; transform-origin: 0 0; box-sizing: border-box; transition: transform 0.7s cubic-bezier(0.6, 0, 0.3, 1), opacity 0.7s ease-in; display: flex; align-items: center; justify-content: center; }
+@media (max-width: 760px) {
+  #h-chal { flex-wrap: wrap; max-width: 64vw; }
+  #h-chal .obj { display: block; }
+  #h-chal .obj b { font-size: 11px; white-space: normal; }
+}
+
+.chal-runs { display: flex; flex-direction: column; gap: 8px; }
+.chal-levels h4 { margin: 14px 0 6px; font-size: 12px; letter-spacing: 0.24em; color: #ffd36a; }

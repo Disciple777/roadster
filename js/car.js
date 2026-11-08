@@ -356,7 +356,8 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     }
 
     step(dt, inp) {
-      if (this.ride && this.game.course) { this.game.course.rideStep(this, dt, inp); return; } // on a loop: follows the track
+      const rider = this.game.chalRun ? this.game.chalRun.world : this.game.course;
+      if (this.ride && rider) { rider.rideStep(this, dt, inp); return; } // on a loop: follows the track
       const pos = this.pos, vel = this.vel, q = this.q, w = this.w;
       const up = _v[0].set(0, 1, 0).applyQuaternion(q);
       const fwd = _v[1].set(0, 0, -1).applyQuaternion(q);

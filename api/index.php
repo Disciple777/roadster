@@ -23,10 +23,11 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 
-const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps', 'stunt']; // 'stunt': the STUNT CHALLENGE run (its own levels)
+const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps', 'stunt', 'stunt15', 'stunt1', 'stunt2', 'stunt3']; // stunt*: STUNT CHALLENGE runs (their own levels)
 const MODES = ['race', 'course', 'chal'];
 const COURSES = ['street'];
-const OFFICIAL_LAPS = ['race' => 2, 'course' => 1, 'chal' => 5]; // chal: the 5-level stunt challenge run
+const OFFICIAL_LAPS = ['race' => 2, 'course' => 1, 'chal' => 15]; // chal: levels in the run (see CHAL_LAPS)
+const CHAL_LAPS = ['stunt' => 5, 'stunt15' => 15, 'stunt1' => 5, 'stunt2' => 5, 'stunt3' => 5]; // levels per stunt challenge run
 const OFFICIAL_RACE = ['traffic' => 'heavy', 'rivals' => 7, 'difficulty' => 'pro'];
 const TOP_N = 20;
 const LEVEL_MAX_ITEMS = 600;
@@ -94,7 +95,8 @@ function submit(): void {
     $name = rd_name(rd_in('name', ''));
     $track = rd_pick('track', TRACKS);
     $mode = rd_pick('mode', MODES);
-    if ((int) rd_in('laps', 0) !== OFFICIAL_LAPS[$mode]) rd_fail(400, 'not_official', 'Only official-length runs are ranked.');
+    $official = $mode === 'chal' ? (CHAL_LAPS[(string) rd_in('track', '')] ?? -1) : OFFICIAL_LAPS[$mode];
+    if ((int) rd_in('laps', 0) !== $official) rd_fail(400, 'not_official', 'Only official-length runs are ranked.');
     if ($mode === 'race' && ((string) rd_in('traffic', '') !== OFFICIAL_RACE['traffic'] || (int) rd_in('rivals', 0) !== OFFICIAL_RACE['rivals']
         || (string) rd_in('difficulty', '') !== OFFICIAL_RACE['difficulty'])) rd_fail(400, 'not_official', 'Ranked street races use heavy traffic and 7 pro rivals.');
     $time = (int) rd_in('time_ms', 0);

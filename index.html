@@ -105,7 +105,7 @@
     <div class="scroll">
     <div class="modes">
       <button id="btn-race" class="mode"><b>STREET RACE</b><small>Race rivals through traffic on the city circuits</small></button>
-      <button id="btn-chal" class="mode new"><b>STUNT CHALLENGE</b><small>Five stunt levels: rooftop gaps, fire rings, speed gates. One shot, three lives</small><i>NEW</i></button>
+      <button id="btn-chal" class="mode new"><b>STUNT CHALLENGE</b><small>15 stunt levels in three acts: rooftop gaps, fire rings, loops, beams, crushers. Five lives</small><i>NEW</i></button>
       <button id="btn-course" class="mode"><b>OBSTACLE COURSE</b><small>Smash, dodge and fly a set-piece course for points</small></button>
       <button id="btn-free" class="mode"><b>FREE RIDE</b><small>No clock, no rules, unlimited N₂</small></button>
       <button id="btn-mp" class="mode"><b>MULTIPLAYER</b><small>Race friends on the same network</small></button>
@@ -119,8 +119,8 @@
   <div id="chal" class="panel card">
     <h2>STUNT CHALLENGE</h2>
     <div class="scroll">
-    <p class="hint">Five levels back to back on <b>3 lives</b>. Every level has a fixed N₂ tank that does not recharge. Score: clear bonus, time under par, precision, first try and N₂ left; lives left pay out at the end.</p>
-    <button id="btn-chalrun" class="big primary chal-run">START RUN<small>all 5 levels · ranked</small></button>
+    <p class="hint">Fifteen levels in three acts, back to back on <b>5 lives</b>; clearing an act gives a life back. Every level has a fixed N₂ tank that does not recharge. Score: clear bonus, time under par, precision, first try and N₂ left; lives left pay out at the end. Your score goes on the board however far you get.</p>
+    <div id="chal-runs" class="chal-runs"></div>
     <div id="chal-best" class="chal-best"></div>
     <label>PRACTICE A LEVEL <small>(unlimited tries, not ranked)</small></label>
     <div id="chal-levels" class="chal-levels"></div>
@@ -169,7 +169,7 @@
   <div id="board" class="panel card">
     <h2>LEADERBOARD</h2>
     <div class="seg tracks" id="b-track"></div>
-    <div class="seg" id="b-mode"><button data-v="race">STREET RACE · 2 LAPS</button><button data-v="course">OBSTACLE COURSE · 1 LAP</button><button data-v="chal">STUNT CHALLENGE · 5 LEVELS</button></div>
+    <div class="seg" id="b-mode"><button data-v="race">STREET RACE · 2 LAPS</button><button data-v="course">OBSTACLE COURSE · 1 LAP</button><button data-v="chal">STUNT CHALLENGE</button></div>
     <div id="b-rows" class="res-rows board-rows"></div>
     <div id="b-mine" class="hint"></div>
     <div class="actions"><button data-back class="primary">BACK</button></div>
