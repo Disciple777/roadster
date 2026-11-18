@@ -120,7 +120,7 @@
 varying vec3 vFlakeP;
 vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-{ vec3 fp = vFlakeP * 260.0; float fade = 1.0 - smoothstep(0.35, 1.0, length(fwidth(fp)));
+{ vec3 fp = vFlakeP * 260.0; float fade = 1.0 -smoothstep(0.35, 1.0, length(fwidth(fp)));
   normal = normalize(normal + (flakeHash(floor(fp)) - 0.5) * 0.35 * fade); }`);
     };
     mat.customProgramCacheKey = () => 'flakes';
@@ -185,6 +185,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       add(discGeo, rearGlow, x, y, z - 0.15, 0, 0, 0);
       const j = new T.Mesh(G.jetGeometry(), jetMatRear);
       j.position.set(x, y, z); j.rotation.x = -Math.PI / 2; // plume -Y -> +Z (backwards)
+      j.userData.w = (kit && kit.rearW) || 1; // plume width for bigger nozzles
       j.scale.set(1, 0.001, 1); j.visible = false; j.frustumCulled = false;
       group.add(j); jetsRear.push(j);
     }
@@ -285,11 +286,18 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   G.CARS = [
     { id: 'thruster', name: 'THRUSTER', desc: 'The original faceted wedge. Four rear nozzles, gull-wing doors.' },
     {
-      id: 'comet', name: 'COMET', desc: 'Low open-top roadster with a long hood and twin rear thrusters.', glb: 'models/comet.glb', v: 2,
+      id: 'comet', name: 'COMET', desc: 'Low open-top roadster with a long hood and twin rear thrusters.', glb: 'models/comet.glb', v: 4,
       kit: { rear: [[-0.42, 0.5, 2.38], [-0.3, 0.5, 2.38], [0.3, 0.5, 2.38], [0.42, 0.5, 2.38]], sideX: 0.97, sideY: 0.5,
         wheelR: 0.464, wheelX: 0.98 },
-      shade: 0.3, // Meshy bakes soft shading into the albedo; keep only 30% of it so the paint reads clean
+      shade: 0.05, // Meshy bakes blotchy shading into the albedo; the real lighting does that job
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.8, whiteHi: 0.95, satLo: 0.1, satHi: 0.22 },
+    },
+    {
+      id: 'bastion', name: 'BASTION', desc: 'Widebody grand tourer with a long hood, ducktail and twin rear thrusters.', glb: 'models/bastion.glb', v: 1,
+      kit: { rear: [[-0.3, 0.33, 2.42], [0.3, 0.33, 2.42]], rearW: 1.8, sideX: 1.05, sideY: 0.5,
+        wheelR: 0.437, wheelX: 0.955 },
+      shade: 0.05,
+      mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.97, whiteHi: 1.01, satLo: 0.1, satHi: 0.22 }, // no white parts: Meshy baked a bright roof highlight
     },
   ];
   G.PAINTS = [
@@ -312,7 +320,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
         const src = meshes[0] && meshes[0].material;
         const gray = src && src.map ? maskedGray(src.map.image, car.mask) : 0.5;
         return (glbReady[id] = { scene: gltf.scene, gray });
-      }).catch((e) => { console.warn('car ' + id + ' failed to load', e); return null; });
+      }).catch((e) => { console.warn('car ' + id + ' failed to load', e); delete glbCache[id]; return null; }); // a later pick retries
     }
     return glbCache[id];
   };
@@ -369,6 +377,7 @@ float paintMask;
         .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
 roughnessFactor = mix(roughnessFactor, 0.36, paintMask); metalnessFactor = mix(metalnessFactor, 0.6, paintMask);`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = normalize(mix(normal, nonPerturbedNormal, paintMask * 0.85)); // the AI normal map is lumpy on panels
 { vec3 fp = vFlakeP * 260.0; float fade = (1.0 - smoothstep(0.35, 1.0, length(fwidth(fp)))) * paintMask;
   normal = normalize(normal + (flakeHash(floor(fp)) - 0.5) * 0.35 * fade); }`)
         .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
@@ -415,9 +424,11 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
       j.visible = v > 0.02;
       const fl = 0.9 + Math.random() * 0.2;
       j.scale.set(0.9 + v * 0.5, v * 3.2 * fl, 0.9 + v * 0.5);
-      const r = model.jetsRear[i];
+    }
+    for (const r of model.jetsRear) { // a kit car can have any number of rear nozzles
+      const fl = 0.9 + Math.random() * 0.2, w = r.userData.w || 1;
       r.visible = bi > 0.02;
-      r.scale.set(0.9 + bi * 0.4, bi * 4.5 * fl, 0.9 + bi * 0.4);
+      r.scale.set((0.9 + bi * 0.4) * w, bi * 4.5 * fl, (0.9 + bi * 0.4) * w);
     }
     const sl = th.SL || 0, sr = th.SR || 0;
     for (let i = 0; i < 4; i++) {

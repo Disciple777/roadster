@@ -22,6 +22,9 @@ YAW = opt('--yaw', 0.0, float)
 PNG = opt('--analyze')
 TRIS = opt('--tris', 60000, int)
 CUT = opt('--cut', 1.0, float)          # wheel cut radius multiplier
+SMOOTH = opt('--smooth', 0, int)         # Laplacian passes on the real surface (0 = off)
+NSMOOTH = opt('--nsmooth', 14, int)     # passes on the copy the shading normals come from (0 = off)
+ARCH = opt('--arch', 1, int)           # 1 = clean round wheel arches via boolean
 
 WZ_F, WZ_R, WY, WX, WR = -1.42, 1.45, 0.36, 0.88, 0.37
 
@@ -38,6 +41,13 @@ bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 for o in list(bpy.context.scene.objects):
     if o is not car: bpy.data.objects.remove(o, do_unlink=True)
+# the GLB's own normals would ride along stale through smoothing and decimation: drop them, and weld
+# UV-seam splits so the surface is one connected skin
+if car.data.has_custom_normals:
+    bpy.ops.mesh.customdata_custom_splitnormals_clear()
+bm = bmesh.new(); bm.from_mesh(car.data)
+bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+bm.to_mesh(car.data); bm.free()
 
 # Blender is Z-up; glTF -Z forward == Blender +Y forward. Work in Blender
 # coords: forward(+Y blender) == -Z game, up = +Z blender, right = +X.
@@ -60,13 +70,17 @@ for v in low:
 print('LOWHIST', hist)
 half = bins // 2
 def peak(lo, hi):
-    best = max(range(lo, hi), key=lambda i: hist[i])
-    # centroid of contiguous region above 25% of peak
-    th = hist[best] * 0.25
-    a = best
-    while a > lo and hist[a - 1] > th: a -= 1
-    b = best
-    while b < hi - 1 and hist[b + 1] > th: b += 1
+    # contiguous runs above 25% of the half's peak; the wheel is the WIDEST run, not the tallest
+    # bin (bumpers, intakes and nozzles make tall narrow spikes)
+    th = max(hist[lo:hi]) * 0.25
+    runs, i = [], lo
+    while i < hi:
+        if hist[i] > th:
+            j = i
+            while j < hi - 1 and hist[j + 1] > th: j += 1
+            runs.append((i, j)); i = j + 1
+        else: i += 1
+    a, b = max(runs, key=lambda r: (r[1] - r[0], sum(hist[r[0]:r[1] + 1])))
     ys = [v.y for v in low if a <= int((v.y - mn.y) / L * bins) <= b]
     return (min(ys) + max(ys)) / 2, (max(ys) - min(ys)) / 2
 yR, rR = peak(0, half)            # blender -Y = game +Z = rear
@@ -100,23 +114,80 @@ if CUT > 0:
     rc = r_ai * s * CUT * 1.04
     xin = track * s * 0.55
     kill = []
+    # rough pass: drop the bulk of the AI tyres by face centre (fast) ...
+    rk = rc * (0.92 if ARCH else 1.0)
     for f in bm.faces:
         c = f.calc_center_median()
         if abs(c.x) < xin: continue
         for gz in (WZ_F, WZ_R):
             by = -gz
-            if (c.y - by) ** 2 + (c.z - WYB) ** 2 < rc * rc:
+            if (c.y - by) ** 2 + (c.z - WYB) ** 2 < rk * rk:
                 kill.append(f); break
     print('CUT faces', len(kill), 'of', len(bm.faces))
     bmesh.ops.delete(bm, geom=kill, context='FACES')
     bm.to_mesh(me); bm.free()
+    # ... then a boolean with true cylinders, so the wheel arches end in a clean round edge
+    if ARCH:
+        xout = max(abs(v.co.x) for v in me.vertices) + 0.1
+        for gz in (WZ_F, WZ_R):
+            for sd in (1, -1):
+                bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=rc, depth=xout - xin,
+                    location=(sd * (xin + xout) / 2, -gz, WYB), rotation=(0, math.pi / 2, 0))
+                cyl = bpy.context.object
+                bpy.context.view_layer.objects.active = car
+                m = car.modifiers.new('arch', 'BOOLEAN'); m.operation = 'DIFFERENCE'; m.object = cyl
+                m.solver = 'EXACT'; m.use_hole_tolerant = True
+                bpy.ops.object.modifier_apply(modifier=m.name)
+                bpy.data.objects.remove(cyl, do_unlink=True)
+        print('ARCH boolean done, faces', len(me.polygons))
+
+bpy.context.view_layer.objects.active = car
+def apply(mod):
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+
+# ---- smooth the AI surface: image-to-3D panels come out lumpy, which car paint reflections exaggerate ----
+if SMOOTH > 0:
+    m = car.modifiers.new('lap', 'LAPLACIANSMOOTH')
+    m.iterations = SMOOTH; m.lambda_factor = 0.6; m.lambda_border = 0.0; m.use_volume_preserve = True
+    apply(m)
 
 # ---- decimate ----
 tri = sum(len(p.vertices) - 2 for p in me.polygons)
 if tri > TRIS:
     m = car.modifiers.new('dec', 'DECIMATE'); m.ratio = TRIS / tri
-    bpy.ops.object.modifier_apply(modifier='dec')
+    apply(m)
 print('TRIS', sum(len(p.vertices) - 2 for p in me.polygons))
+
+# ---- drop tiny loose islands: the arch boolean and decimation leave stray shards under the sills ----
+bm = bmesh.new(); bm.from_mesh(me)
+bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=1e-4)
+seen, junk = set(), []
+for f0 in bm.faces:
+    if f0 in seen: continue
+    isl, stack = [], [f0]; seen.add(f0)
+    while stack:
+        f = stack.pop(); isl.append(f)
+        for e in f.edges:
+            for g in e.link_faces:
+                if g not in seen: seen.add(g); stack.append(g)
+    if len(isl) < 60: junk.extend(isl)
+bmesh.ops.delete(bm, geom=junk, context='FACES')
+bm.to_mesh(me); bm.free()
+print('ISLANDS dropped faces', len(junk))
+
+# ---- reflection normals: take them from a much smoother copy so highlights flow like real panels ----
+for p in me.polygons: p.use_smooth = True
+if NSMOOTH > 0:
+    ref = car.copy(); ref.data = me.copy(); bpy.context.scene.collection.objects.link(ref)
+    bpy.context.view_layer.objects.active = ref
+    m = ref.modifiers.new('lap', 'LAPLACIANSMOOTH')
+    m.iterations = NSMOOTH; m.lambda_factor = 0.8; m.lambda_border = 0.0; m.use_volume_preserve = True
+    apply(m)
+    bpy.context.view_layer.objects.active = car
+    m = car.modifiers.new('dt', 'DATA_TRANSFER')
+    m.object = ref; m.use_loop_data = True; m.data_types_loops = {'CUSTOM_NORMAL'}; m.loop_mapping = 'POLYINTERP_NEAREST'
+    apply(m)
+    bpy.data.objects.remove(ref, do_unlink=True)
 
 # ---- optional preview renders ----
 if PNG:
