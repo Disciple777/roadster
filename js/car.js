@@ -128,19 +128,24 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   };
 
   let plateTex = null;
-  G.buildRoadster = function (paintHex, { shadows = true } = {}) {
+  // kit = { rear: [[x,y,z] x4], sideX, sideY, wheelR?, wheelX? } builds only the shared hardware (wheels, thrusters, jets) with no body,
+  // for a GLB car body to sit on (see G.buildCar)
+  G.buildRoadster = function (paintHex, { shadows = true, kit = null } = {}) {
     const group = new T.Group();
     const paint = addFlakes(new T.MeshPhysicalMaterial({ color: paintHex, metalness: 0.7, roughness: 0.36, clearcoat: 1, clearcoatRoughness: 0.03 }));
     const glass = new T.MeshPhysicalMaterial({ color: 0x22120a, metalness: 0.05, roughness: 0.1, clearcoat: 0.5, clearcoatRoughness: 0.05, envMapIntensity: 0.5 });
     const trim = new T.MeshPhysicalMaterial({ color: 0x0b0c0e, metalness: 0.3, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.2 });
     const satin = new T.MeshStandardMaterial({ color: 0x141518, metalness: 0.5, roughness: 0.6 });
-    const body = new T.Mesh(bodyGeometry(), [paint, glass, trim]);
-    body.castShadow = shadows; body.receiveShadow = false;
-    group.add(body);
+    if (!kit) {
+      const body = new T.Mesh(bodyGeometry(), [paint, glass, trim]);
+      body.castShadow = shadows; body.receiveShadow = false;
+      group.add(body);
+    }
 
-    const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const addAny = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
       const m = new T.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); group.add(m); return m;
     };
+    const add = kit ? () => null : addAny; // body-only details: skipped when a GLB body supplies its own
     // nose: two slim light blades angled in towards a body-colour gap, dark intake band and splitter below
     const front = new T.MeshBasicMaterial({ color: new T.Color(1.6, 1.6, 1.75), toneMapped: false });
     for (const sx of [-1, 1]) add(new T.BoxGeometry(0.66, 0.022, 0.03), front, sx * 0.53, 0.505, -2.372, 0, 0, sx * 0.05);
@@ -171,15 +176,15 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     const nozGeo = new T.CylinderGeometry(0.075, 0.085, 0.2, 18, 1, true);
     const lipGeo = new T.TorusGeometry(0.08, 0.012, 6, 18);
     const discGeo = new T.CircleGeometry(0.075, 16);
-    const rearX = [-0.5, -0.17, 0.17, 0.5];
+    const rearPos = kit ? kit.rear : [-0.5, -0.17, 0.17, 0.5].map((x) => [x, 0.5, 2.4]);
     const jetsRear = [];
     const jetMatRear = G.jetMaterial(new T.Color(0.6, 0.85, 1.5));
-    for (const x of rearX) {
-      add(nozGeo, ring, x, 0.5, 2.3, Math.PI / 2, 0, 0);
-      add(lipGeo, ring, x, 0.5, 2.4);
-      add(discGeo, rearGlow, x, 0.5, 2.25, 0, 0, 0);
+    for (const [x, y, z] of rearPos) {
+      add(nozGeo, ring, x, y, z - 0.1, Math.PI / 2, 0, 0);
+      add(lipGeo, ring, x, y, z);
+      add(discGeo, rearGlow, x, y, z - 0.15, 0, 0, 0);
       const j = new T.Mesh(G.jetGeometry(), jetMatRear);
-      j.position.set(x, 0.5, 2.4); j.rotation.x = -Math.PI / 2; // plume -Y -> +Z (backwards)
+      j.position.set(x, y, z); j.rotation.x = -Math.PI / 2; // plume -Y -> +Z (backwards)
       j.scale.set(1, 0.001, 1); j.visible = false; j.frustumCulled = false;
       group.add(j); jetsRear.push(j);
     }
@@ -206,8 +211,8 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     const underPos = [[-0.42, -0.95], [0.42, -0.95], [-0.42, 0.95], [0.42, 0.95]];
     const jetsUnder = [];
     for (const [x, z] of underPos) {
-      add(new T.CylinderGeometry(0.12, 0.13, 0.1, 14, 1, true), ring, x, 0.19, z);
-      add(discGeo, underGlow, x, 0.17, z, Math.PI / 2, 0, 0);
+      addAny(new T.CylinderGeometry(0.12, 0.13, 0.1, 14, 1, true), ring, x, 0.19, z);
+      addAny(discGeo, underGlow, x, 0.17, z, Math.PI / 2, 0, 0);
       const j = new T.Mesh(G.jetGeometry(), jetMatUnder);
       j.position.set(x, 0.15, z); j.scale.set(1.2, 0.001, 1.2); j.visible = false; j.frustumCulled = false;
       group.add(j); jetsUnder.push(j);
@@ -216,11 +221,12 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     // jetsSide[2..3] on the right flank fire right (Q: push left)
     const sideGlow = new T.MeshBasicMaterial({ color: new T.Color(0.05, 0.08, 0.12), toneMapped: false, side: T.DoubleSide });
     const jetsSide = [];
+    const sideX = kit ? kit.sideX : 1.0, sideY = kit ? kit.sideY : 0.5;
     for (const sx of [-1, 1]) for (const z of [-0.5, 0.45]) {
-      add(new T.CylinderGeometry(0.09, 0.1, 0.08, 14, 1, true), ring, sx * 1.0, 0.5, z, 0, 0, Math.PI / 2);
-      add(new T.CircleGeometry(0.09, 14), sideGlow, sx * 0.97, 0.5, z, 0, sx * Math.PI / 2, 0);
+      addAny(new T.CylinderGeometry(0.09, 0.1, 0.08, 14, 1, true), ring, sx * sideX, sideY, z, 0, 0, Math.PI / 2);
+      addAny(new T.CircleGeometry(0.09, 14), sideGlow, sx * (sideX - 0.03), sideY, z, 0, sx * Math.PI / 2, 0);
       const j = new T.Mesh(G.jetGeometry(), jetMatUnder);
-      j.position.set(sx * 1.03, 0.5, z); j.rotation.z = sx * Math.PI / 2; // plume -Y -> outwards
+      j.position.set(sx * (sideX + 0.03), sideY, z); j.rotation.z = sx * Math.PI / 2; // plume -Y -> outwards
       j.scale.set(1, 0.001, 1); j.visible = false; j.frustumCulled = false;
       group.add(j); jetsSide.push(j);
     }
@@ -245,7 +251,14 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     for (const [x, z, fr] of wp) {
       const side = Math.sign(x);
       const pivot = new T.Group(); pivot.position.set(x, WHEEL_Y, z);
-      const spin = new T.Group(); pivot.add(spin);
+      // hold: a GLB body with bigger arches scales the wheel up and lifts it (the body is lifted by the same amount
+      // in tools/prep_car.py) so the tyre still meets the ground where the physics wheel does
+      const hold = new T.Group(); pivot.add(hold);
+      if (kit && kit.wheelR) {
+        hold.scale.setScalar(kit.wheelR / 0.37);
+        hold.position.set(side * ((kit.wheelX || 0.88) - 0.88), kit.wheelR - 0.37, 0);
+      }
+      const spin = new T.Group(); hold.add(spin);
       const tyre = new T.Mesh(tyreGeo, tyreMat); tyre.castShadow = shadows; spin.add(tyre);
       spin.add(new T.Mesh(barrelGeo, satin));
       const lip = new T.Mesh(rimLipGeo, bladeMat); lip.position.x = side * 0.14; spin.add(lip);
@@ -257,11 +270,137 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       }
       const hub = new T.Mesh(hubGeo, bladeMat); hub.position.x = side * 0.13; spin.add(hub);
       const disc = new T.Mesh(discGeo2, discMat); disc.position.x = side * 0.02; spin.add(disc);
-      const cal = new T.Mesh(caliperGeo, caliperMat); cal.position.set(side * 0.055, 0.15, fr ? 0.08 : -0.08); pivot.add(cal);
+      const cal = new T.Mesh(caliperGeo, caliperMat); cal.position.set(side * 0.055, 0.15, fr ? 0.08 : -0.08); hold.add(cal);
       group.add(pivot);
       wheels.push({ pivot, spin, front: fr, x, z });
     }
     return { group, wheels, jetsUnder, jetsRear, jetsSide, rearGlow, underGlow, sideGlow, tail, paint, glass, jetMatRear, jetMatUnder };
+  };
+
+  // ---------------- car roster ----------------
+  // GLB bodies are generated in flat light grey and painted here: a shader mask picks the grey body panels out of the
+  // texture (mid luminance, low saturation) and tints them with the chosen colour under a clearcoat with metal flake.
+  // Glass, tyres, trim and lights keep their texture. The GLB is already scaled and centred by tools/prep_car.py:
+  // front towards -Z, wheel centres on the physics wheels, its own wheels cut away (the code wheels spin and steer).
+  G.CARS = [
+    { id: 'thruster', name: 'THRUSTER', desc: 'The original faceted wedge. Four rear nozzles, gull-wing doors.' },
+    {
+      id: 'comet', name: 'COMET', desc: 'Low open-top roadster with a long hood and twin rear thrusters.', glb: 'models/comet.glb', v: 2,
+      kit: { rear: [[-0.42, 0.5, 2.38], [-0.3, 0.5, 2.38], [0.3, 0.5, 2.38], [0.42, 0.5, 2.38]], sideX: 0.97, sideY: 0.5,
+        wheelR: 0.464, wheelX: 0.98 },
+      shade: 0.3, // Meshy bakes soft shading into the albedo; keep only 30% of it so the paint reads clean
+      mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.8, whiteHi: 0.95, satLo: 0.1, satHi: 0.22 },
+    },
+  ];
+  G.PAINTS = [
+    { name: 'Arctic', hex: 0xd9dcdf }, { name: 'Rosso', hex: 0xb3121b }, { name: 'Ember', hex: 0xe0561a }, { name: 'Solar', hex: 0xe8b51c },
+    { name: 'Venom', hex: 0x5fae2a }, { name: 'Lagoon', hex: 0x0f8c8c }, { name: 'Cobalt', hex: 0x1c4fc4 }, { name: 'Midnight', hex: 0x18213f },
+    { name: 'Violet', hex: 0x6a2bb3 }, { name: 'Sakura', hex: 0xe87fa8 }, { name: 'Graphite', hex: 0x3a3d42 }, { name: 'Onyx', hex: 0x0c0d0f },
+  ];
+  G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
+
+  const glbCache = {}, glbReady = {};
+  // load (once) and prepare a car's GLB; resolves to null for code-built cars or if the file is missing
+  G.loadCar = function (id) {
+    const car = G.carInfo(id);
+    if (!car.glb) return Promise.resolve(null);
+    if (!glbCache[id]) {
+      glbCache[id] = new ADDONS.GLTFLoader().loadAsync(car.glb + '?v=' + (car.v || 1)).then((gltf) => {
+        const meshes = [];
+        gltf.scene.traverse((o) => { if (o.isMesh) meshes.push(o); });
+        // average grey of the masked body texels, so any paint colour lands at its true value
+        const src = meshes[0] && meshes[0].material;
+        const gray = src && src.map ? maskedGray(src.map.image, car.mask) : 0.5;
+        return (glbReady[id] = { scene: gltf.scene, gray });
+      }).catch((e) => { console.warn('car ' + id + ' failed to load', e); return null; });
+    }
+    return glbCache[id];
+  };
+
+  const lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function bodyMask(r, g, b, M) {
+    const l = 0.2126 * r + 0.7152 * g + 0.0722 * b, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const sat = mx > 1e-4 ? (mx - mn) / mx : 0;
+    return { l, m: sstep(M.lumLo, M.lumHi, l) * (1 - sstep(M.whiteLo, M.whiteHi, l)) * (1 - sstep(M.satLo, M.satHi, sat)) };
+  }
+  function maskedGray(img, M) {
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, 128, 128);
+      const d = ctx.getImageData(0, 0, 128, 128).data;
+      let sw = 0, sl = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const { l, m } = bodyMask(lin(d[i] / 255), lin(d[i + 1] / 255), lin(d[i + 2] / 255), M);
+        sw += m; sl += m * l;
+      }
+      return sw > 1 ? sl / sw : 0.5;
+    } catch (e) { return 0.5; }
+  }
+
+  function paintMaterial(src, car, gray, paintHex) {
+    const mat = new T.MeshPhysicalMaterial({
+      map: src.map, normalMap: src.normalMap, roughnessMap: src.roughnessMap, metalnessMap: src.metalnessMap,
+      aoMap: src.aoMap, emissiveMap: src.emissiveMap, emissive: src.emissive, color: 0xffffff,
+      roughness: src.roughnessMap ? 1 : 0.6, metalness: src.metalnessMap ? 1 : 0.1,
+      clearcoat: 1, clearcoatRoughness: 0.03,
+    });
+    if (src.normalMap) mat.normalScale.copy(src.normalScale);
+    const M = car.mask;
+    const u = mat.userData.u = {
+      uPaint: { value: new T.Color(paintHex) }, uGray: { value: Math.max(0.05, gray) }, uShade: { value: car.shade ?? 1 },
+      uMask: { value: new T.Vector4(M.lumLo, M.lumHi, M.whiteLo, M.whiteHi) }, uSat: { value: new T.Vector2(M.satLo, M.satHi) },
+    };
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, u);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFlakeP;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlakeP = position;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+uniform vec3 uPaint; uniform float uGray; uniform float uShade; uniform vec4 uMask; uniform vec2 uSat;
+varying vec3 vFlakeP;
+vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }`)
+        .replace('#include <map_fragment>', `#include <map_fragment>
+float paintMask;
+{ vec3 c = diffuseColor.rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float mx = max(c.r, max(c.g, c.b)), sat = mx > 1e-4 ? (mx - min(c.r, min(c.g, c.b))) / mx : 0.0;
+  paintMask = smoothstep(uMask.x, uMask.y, l) * (1.0 - smoothstep(uMask.z, uMask.w, l)) * (1.0 - smoothstep(uSat.x, uSat.y, sat));
+  diffuseColor.rgb = mix(c, uPaint * mix(1.0, clamp(l / uGray, 0.35, 1.6), uShade), paintMask); }`)
+        .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+roughnessFactor = mix(roughnessFactor, 0.36, paintMask); metalnessFactor = mix(metalnessFactor, 0.6, paintMask);`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+{ vec3 fp = vFlakeP * 260.0; float fade = (1.0 - smoothstep(0.35, 1.0, length(fwidth(fp)))) * paintMask;
+  normal = normalize(normal + (flakeHash(floor(fp)) - 0.5) * 0.35 * fade); }`)
+        .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+material.clearcoat *= mix(0.25, 1.0, paintMask);`);
+    };
+    mat.customProgramCacheKey = () => 'carpaint';
+    return mat;
+  }
+
+  // build any car in the roster. GLB cars must have been loaded with G.loadCar first; until then (or if the file
+  // is missing) the THRUSTER stands in. Returns the same model shape as buildRoadster.
+  G.buildCar = function (id, paintHex, opts = {}) {
+    const car = G.carInfo(id);
+    const asset = car.glb && glbReady[id];
+    if (!asset) return G.buildRoadster(paintHex, opts);
+    const model = G.buildRoadster(paintHex, Object.assign({}, opts, { kit: car.kit }));
+    const body = asset.scene.clone(true);
+    let paint = null;
+    body.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = opts.shadows !== false; o.receiveShadow = false;
+      paint = paint || paintMaterial(o.material, car, asset.gray, paintHex);
+      o.material = paint;
+    });
+    model.group.add(body);
+    model.paint = paint; model.glass = paint; // the reflection probe feeds both
+    model.carId = id;
+    return model;
+  };
+  G.setPaint = function (model, hex) {
+    if (model.paint && model.paint.userData.u) model.paint.userData.u.uPaint.value.setHex(hex);
+    else if (model.paint) model.paint.color.setHex(hex);
   };
 
   // update visual thruster bits. th = {L, R, B, SL, SR} in 0..1

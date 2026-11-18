@@ -87,6 +87,7 @@
     </div>
     <div class="menu-btns">
       <button id="btn-play" class="big primary">PLAY</button>
+      <button id="btn-garage" class="big">GARAGE</button>
       <button id="btn-board" class="big">LEADERBOARD</button>
       <div class="row2">
         <button id="btn-settings">SETTINGS</button>
@@ -97,6 +98,16 @@
       </a>
       <div id="menu-best" class="best"></div>
     </div>
+  </div>
+
+  <!-- GARAGE: pick a car and its paint; the menu camera swings in on the live car behind the panel -->
+  <div id="garage" class="panel garage">
+    <h2>GARAGE</h2>
+    <div class="g-cars" id="g-cars"></div>
+    <p class="g-desc" id="g-desc"></p>
+    <label>PAINT <i id="g-pname"></i></label>
+    <div class="g-paints" id="g-paints"></div>
+    <div class="actions"><button data-back class="primary">DONE</button></div>
   </div>
 
   <!-- PLAY: every game mode -->
@@ -378,8 +389,9 @@
     import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
     import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
     import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     window.THREE = THREE;
-    window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry };
+    window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry, GLTFLoader };
     const BUILD = Date.now();
     const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'ghost', 'course', 'editor', 'challenge', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });

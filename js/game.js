@@ -15,7 +15,7 @@
   const DEFAULTS = {
     quality: G.isMobile ? 'medium' : 'high', tod: 'night', traffic: 'medium', laps: 2, courseLaps: 1, rivals: 5, difficulty: 'normal', track: 'city',
     camera: 0, autoAccel: G.isTouch, tilt: false, sens: 1, showFps: false, touchUI: 'auto', vol: 0.7, shake: true,
-    thrInvert: true, ghosts: 'on', keyPreset: 1, keysBy: {}, // keysBy: { preset: { action: [code, code] } }, missing = that layout's defaults
+    thrInvert: true, ghosts: 'on', keyPreset: 1, car: 'thruster', paint: 0xd9dcdf, keysBy: {}, // keysBy: { preset: { action: [code, code] } }, missing = that layout's defaults
   };
 
   const RadialShader = {
@@ -99,6 +99,7 @@
     constructor() {
       this.settings = Object.assign({}, DEFAULTS, G.store.get('settings', {}));
       // v2 laps: street races default to 2 laps and courses to 1 (the official lengths); 3 is the long option
+      if (!G.CARS.some((c) => c.id === this.settings.car)) this.settings.car = 'thruster';
       if (this.settings.lapsV !== 2) { Object.assign(this.settings, { laps: 2, courseLaps: 1, lapsV: 2 }); G.store.set('settings', this.settings); }
       this.Q = QUALITY[this.settings.quality] || QUALITY.high;
       this.state = 'loading';
@@ -167,31 +168,28 @@
       this.xings = new G.Crossings(this);
 
       // player
-      this.playerModel = G.buildRoadster(0xd9dcdf, { shadows: Q.shadows });
-      this.scene.add(this.playerModel.group);
-      this.player = new G.Player(this, this.playerModel);
-      this.headlights = [];
+      $('load-text').textContent = 'Warming up the car…';
+      await G.loadCar(S.car);
+      this.headlights = []; this.headTargets = [];
       if (Q.lights) {
         for (const sx of [-0.62, 0.62]) {
           const sl = new T.SpotLight(0xf2f5ff, S.tod === 'night' ? 480 : 220, 140, 0.42, 0.7, 1.6);
           sl.position.set(sx, 0.55, -2.2);
           const tg = new T.Object3D(); tg.position.set(sx * 2.5, -1.5, -30);
-          this.playerModel.group.add(sl, tg); sl.target = tg; this.headlights.push(sl);
+          sl.target = tg; this.headlights.push(sl); this.headTargets.push(tg);
         }
         this.jetLight = new T.PointLight(0x7fd0ff, 0, 18, 1.6);
         this.jetLight.position.set(0, -0.3, 0);
-        this.playerModel.group.add(this.jetLight);
       }
       // live reflections on the player's paint and glass (high/ultra): a low-res cube camera riding with the car
       if (Q.level >= 4) {
         this.reflRT = new T.WebGLCubeRenderTarget(Q.level >= 5 ? 256 : 128, { type: T.HalfFloatType });
         this.reflCam = new T.CubeCamera(0.5, 450, this.reflRT);
         this.scene.add(this.reflCam);
-        const pm = this.playerModel;
-        pm.paint.envMap = pm.glass.envMap = this.reflRT.texture;
-        pm.paint.envMapIntensity = 1.4;
         this.reflN = 0;
       }
+      this.setPlayerCar(S.car, S.paint);
+      this.player = new G.Player(this, this.playerModel);
       this.fx = new FX(this);
       this.buildPickups();
 
@@ -305,6 +303,7 @@
       click('btn-course', () => this.showPanel('setup', 'course'));
       click('btn-settings', () => this.showPanel('settings'));
       click('btn-controls', () => this.showPanel('controls'));
+      click('btn-garage', () => { this.buildGarage(); this.showPanel('garage'); });
       document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => this.backPanel()));
       click('btn-go', () => {
         // another circuit means rebuilding the world: reload straight into the race
@@ -494,6 +493,63 @@
       if (cur) { this.panelStack.push(cur.id); cur.classList.remove('open'); }
       $(name).classList.add('open');
     }
+    // ---------------- garage ----------------
+    buildGarage() {
+      const S = this.settings;
+      const hex = (h) => '#' + h.toString(16).padStart(6, '0');
+      const cars = $('g-cars'), paints = $('g-paints');
+      const refresh = () => {
+        const car = G.carInfo(S.car);
+        cars.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.id === S.car));
+        $('g-desc').textContent = car.desc;
+        const p = G.PAINTS.find((x) => x.hex === S.paint);
+        $('g-pname').textContent = p ? p.name : 'Custom ' + hex(S.paint);
+        paints.querySelectorAll('[data-hex]').forEach((b) => b.classList.toggle('sel', +b.dataset.hex === S.paint));
+        $('g-custom').value = hex(S.paint);
+      };
+      if (!cars.childElementCount) {
+        for (const c of G.CARS) {
+          const b = document.createElement('button'); b.dataset.id = c.id; b.textContent = c.name;
+          b.addEventListener('click', async () => {
+            G.audio.tone(700, 0.05, 0.08, 'triangle');
+            S.car = c.id; G.store.set('settings', S); refresh();
+            b.classList.add('busy');
+            await G.loadCar(c.id);
+            b.classList.remove('busy');
+            if (S.car === c.id) this.setPlayerCar(c.id, S.paint);
+          });
+          cars.appendChild(b);
+        }
+        const setPaint = (h) => { S.paint = h; G.store.set('settings', S); G.setPaint(this.playerModel, h); refresh(); };
+        for (const p of G.PAINTS) {
+          const b = document.createElement('button'); b.dataset.hex = p.hex; b.title = p.name; b.style.background = hex(p.hex);
+          b.addEventListener('click', () => setPaint(p.hex));
+          paints.appendChild(b);
+        }
+        const inp = document.createElement('input'); inp.type = 'color'; inp.id = 'g-custom'; inp.title = 'Custom colour';
+        inp.addEventListener('input', () => setPaint(parseInt(inp.value.slice(1), 16)));
+        paints.appendChild(inp);
+      }
+      refresh();
+    }
+
+    // build (or swap) the player's car body; lights ride along, the physics keeps running on the same wheels
+    setPlayerCar(id, paint) {
+      const old = this.playerModel;
+      const m = G.buildCar(id, paint, { shadows: this.Q.shadows });
+      if (old) {
+        this.scene.remove(old.group);
+        m.group.position.copy(old.group.position); m.group.quaternion.copy(old.group.quaternion);
+        for (let i = 0; i < 4; i++) m.wheels[i].pivot.position.y = old.wheels[i].pivot.position.y;
+      }
+      for (const o of [...(this.headlights || []), ...(this.headTargets || [])]) m.group.add(o);
+      if (this.jetLight) m.group.add(this.jetLight);
+      if (this.reflRT) { m.paint.envMap = m.glass.envMap = this.reflRT.texture; m.paint.envMapIntensity = 1.4; }
+      this.scene.add(m.group);
+      this.playerModel = m;
+      if (this.player) this.player.model = m;
+    }
+
     backPanel() {
       const cur = document.querySelector('.panel.open');
       if (cur) cur.classList.remove('open');
@@ -1482,9 +1538,13 @@
       this.camFocusY = G.clamp(this.camFocusY, p.pos.y - 4, p.pos.y + 4); // a long fall must not leave the car below the frame
 
       if (this.state === 'menu') {
-        const a = this.t * 0.18;
-        cam.position.set(p.pos.x + Math.sin(a) * 7.5, p.pos.y + 1.9 + Math.sin(this.t * 0.3) * 0.4, p.pos.z + Math.cos(a) * 7.5);
-        cam.lookAt(p.pos.x, p.pos.y + 0.7, p.pos.z);
+        // in the garage the camera closes in and slides the car left, clear of the panel
+        const gar = $('garage').classList.contains('open');
+        this.garK = G.damp(this.garK || 0, gar ? 1 : 0, 3, realDt);
+        const k = this.garK, a = this.t * (0.18 - k * 0.08), r = 7.5 - k * 1.6;
+        cam.position.set(p.pos.x + Math.sin(a) * r, p.pos.y + 1.9 - k * 0.5 + Math.sin(this.t * 0.3) * 0.4 * (1 - k), p.pos.z + Math.cos(a) * r);
+        const sh = k * (window.innerWidth > 700 ? 1.7 : 0); // look past the car's right so it sits left of centre
+        cam.lookAt(p.pos.x + Math.cos(a) * sh, p.pos.y + 0.7 - k * 0.1, p.pos.z - Math.sin(a) * sh);
         cam.fov = 50; cam.updateProjectionMatrix();
         this.camYaw = targetYaw;
         if (this.radial) this.radial.uniforms.uAmount.value = 0;

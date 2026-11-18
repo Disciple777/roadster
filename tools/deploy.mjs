@@ -5,7 +5,7 @@
 //   node tools/deploy.mjs --only=api   upload just one folder or file
 //
 // Mirrors upward only: never deletes anything remote. Builds an explicit file list so
-// reference photos, videos, backups and .env.deploy never reach the web server.
+// reference photos, videos, backups, raw AI models (models/source) and .env.deploy never reach the web server.
 // The contents of .env.deploy never reach stdout, stderr or an error message.
 // api/config.php (database credentials) lives only on the server: tools/push-config.mjs writes it,
 // this script never uploads anything config-shaped and refuses to run if a local copy exists.
@@ -18,12 +18,12 @@ const DRY = process.argv.includes('--dry-run');
 const ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 
 /** The only things that belong on the web server. */
-const INCLUDE = [{ file: 'index.html' }, { file: '.htaccess' }, { dir: 'css' }, { dir: 'js' }, { dir: 'api' }];
+const INCLUDE = [{ file: 'index.html' }, { file: '.htaccess' }, { dir: 'css' }, { dir: 'js' }, { dir: 'api' }, { dir: 'models', skip: ['source'] }];
 
-function walk(abs, rel, out) {
+function walk(abs, rel, out, skip = []) {
   for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
     const r = `${rel}/${e.name}`;
-    if (e.isDirectory()) walk(path.join(abs, e.name), r, out);
+    if (e.isDirectory()) { if (!skip.includes(e.name)) walk(path.join(abs, e.name), r, out, skip); }
     else if (e.isFile() && !/^(\.env|thumbs\.db$|\.ds_store$|config(?!\.example))/i.test(e.name)) out.push(r);
   }
 }
@@ -33,7 +33,7 @@ function collect() {
   for (const it of INCLUDE) {
     const abs = path.join(ROOT, it.file || it.dir);
     if (!fs.existsSync(abs)) { console.warn(`  ! missing locally, skipped: ${it.file || it.dir}`); continue; }
-    if (it.file) files.push(it.file); else walk(abs, it.dir, files);
+    if (it.file) files.push(it.file); else walk(abs, it.dir, files, it.skip);
   }
   return files.sort();
 }
