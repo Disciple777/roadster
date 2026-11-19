@@ -9,10 +9,14 @@ When a task is done, always do all three without asking:
 3. Deploy live with `node tools/deploy.mjs`, then open the live site and check it loads.
 
 ## Adding a car
-ChatGPT concept images in one chat: front 3/4 first, then "the exact same car from a rear 3/4 view" (flat matte gray) →
-Meshy workspace, Image to 3D, turn on **Multi-view**: front image in Main View, rear image in Back (Meshy 7, texture on, 35 credits) → GLB in `models/source/` →
-`blender -b -P tools/prep_car.py -- models/source/X_meshy.glb models/X.glb --yaw -90 --tris 200000` →
-add an entry to `G.CARS` in `js/car.js` using the `KIT wheelR … wheelX …` line the script prints.
-Raw Meshy GLBs stay out of git (`models/source/*.glb`); the concept PNGs are kept.
-prep_car.py clears Meshy's stale normals, cuts round wheel arches (`--arch 1`) and takes shading normals from a smoothed copy (`--nsmooth 14`) so panels don't look dented.
-In `G.CARS` keep `shade` low (~0.05): Meshy bakes blotchy lighting into the albedo.
+Use **Tripo** (studio.tripo3d.ai), not Meshy: Meshy's meshes come out dented.
+ChatGPT, one chat: front 3/4 concept, then "the exact same car from a rear 3/4 view" (flat matte gray), then straight
+orthographic front, left side and back views of that same car (Tripo's multi-view wants straight-on views) →
+Tripo, HD Model, multi-view icon: Front / Left / Back slots. Geometry & Texture: Ultra Mesh, 4K texture, Remove Lighting,
+PBR, **Polycount 150000** (the default 3000 is faceted) → export GLB → `models/source/X_tripo.glb` →
+`blender -b -P tools/prep_car.py -- models/source/X_tripo.glb models/X.glb --yaw 0 --tris 200000 --analyze <tmpdir>` →
+check the renders; if the printed WHEELS are wrong, pass `--wheels yFront,yRear,radius` (source units) →
+add an entry to `G.CARS` in `js/car.js` using the `KIT wheelR … wheelX …` line the script prints, place the `rear` nozzles on the model's ports.
+Raw GLBs stay out of git (`models/source/*.glb`); the concept PNGs are kept.
+prep_car.py clears stale normals, cuts round wheel arches (`--arch 1`) and takes shading normals from a smoothed copy (`--nsmooth 14`).
+In `G.CARS` keep `shade` low (~0.05). Older cars (COMET, BASTION) came from Meshy with `--yaw -90`.

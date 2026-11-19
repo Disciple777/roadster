@@ -25,6 +25,7 @@ CUT = opt('--cut', 1.0, float)          # wheel cut radius multiplier
 SMOOTH = opt('--smooth', 0, int)         # Laplacian passes on the real surface (0 = off)
 NSMOOTH = opt('--nsmooth', 14, int)     # passes on the copy the shading normals come from (0 = off)
 ARCH = opt('--arch', 1, int)           # 1 = clean round wheel arches via boolean
+WHEELS = opt('--wheels')                # 'yFront,yRear,radius' in source units (after yaw) when auto-finding fails
 
 WZ_F, WZ_R, WY, WX, WR = -1.42, 1.45, 0.36, 0.88, 0.37
 
@@ -86,6 +87,7 @@ def peak(lo, hi):
 yR, rR = peak(0, half)            # blender -Y = game +Z = rear
 yF, rF = peak(half, bins)         # blender +Y = front
 r_ai = (rR + rF) / 2
+if WHEELS: yF, yR, r_ai = map(float, WHEELS.split(','))
 zc = mn.z + r_ai
 print('WHEELS front y %.3f rear y %.3f radius %.3f centre z %.3f' % (yF, yR, r_ai, zc))
 outer = [v.x for v in low]

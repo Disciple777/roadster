@@ -299,6 +299,13 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       shade: 0.05,
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.97, whiteHi: 1.01, satLo: 0.1, satHi: 0.22 }, // no white parts: Meshy baked a bright roof highlight
     },
+    {
+      id: 'pebble', name: 'PEBBLE', desc: 'Bubbly city pod on oversized wheels, with a panoramic canopy and one round tail thruster.', glb: 'models/pebble.glb', v: 1,
+      kit: { rear: [[0, 0.9, 2.42]], rearW: 1.1, sideX: 1.55, sideY: 0.8,
+        wheelR: 0.684, wheelX: 1.357 },
+      shade: 0.05,
+      mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.97, whiteHi: 1.01, satLo: 0.1, satHi: 0.22 },
+    },
   ];
   G.PAINTS = [
     { name: 'Arctic', hex: 0xd9dcdf }, { name: 'Rosso', hex: 0xb3121b }, { name: 'Ember', hex: 0xe0561a }, { name: 'Solar', hex: 0xe8b51c },
