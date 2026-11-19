@@ -353,6 +353,23 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     } catch (e) { return 0.5; }
   }
 
+  // paint finishes: rough/metal = body paint, coat/coatRough = clear coat, flat = how much of the AI normal map is
+  // ignored on paint (1 = all), flake = metal flake sparkle. 'gloss' is the original look.
+  G.FINISHES = {
+    gloss: { name: 'Gloss metallic', rough: 0.36, metal: 0.6, coat: 1, coatRough: 0.03, flat: 0.85, flake: 0.35 },
+    soft: { name: 'Soft gloss', rough: 0.45, metal: 0.45, coat: 1, coatRough: 0.18, flat: 1, flake: 0.25 },
+    satin: { name: 'Satin', rough: 0.55, metal: 0.3, coat: 0.6, coatRough: 0.4, flat: 1, flake: 0.15 },
+    matte: { name: 'Matte', rough: 0.8, metal: 0.1, coat: 0, coatRough: 0.6, flat: 1, flake: 0 },
+    pearl: { name: 'Pearl', rough: 0.4, metal: 0.25, coat: 1, coatRough: 0.12, flat: 1, flake: 0.6 },
+  };
+  G.setFinish = function (model, f) {
+    const m = model && model.paint, u = m && m.userData.u;
+    if (!m) return;
+    if (!u) { m.roughness = f.rough; m.metalness = f.metal; m.clearcoat = f.coat; m.clearcoatRoughness = f.coatRough; return; } // code-built THRUSTER
+    u.uFin.value.set(f.rough, f.metal, f.flat, f.flake);
+    m.clearcoat = f.coat; m.clearcoatRoughness = f.coatRough;
+  };
+
   function paintMaterial(src, car, gray, paintHex) {
     const mat = new T.MeshPhysicalMaterial({
       map: src.map, normalMap: src.normalMap, roughnessMap: src.roughnessMap, metalnessMap: src.metalnessMap,
@@ -365,14 +382,17 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     const u = mat.userData.u = {
       uPaint: { value: new T.Color(paintHex) }, uGray: { value: Math.max(0.05, gray) }, uShade: { value: car.shade ?? 1 },
       uMask: { value: new T.Vector4(M.lumLo, M.lumHi, M.whiteLo, M.whiteHi) }, uSat: { value: new T.Vector2(M.satLo, M.satHi) },
+      uFin: { value: new T.Vector4() },
     };
+    const F = G.FINISHES.gloss;
+    u.uFin.value.set(F.rough, F.metal, F.flat, F.flake);
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, u);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFlakeP;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlakeP = position;');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
-uniform vec3 uPaint; uniform float uGray; uniform float uShade; uniform vec4 uMask; uniform vec2 uSat;
+uniform vec3 uPaint; uniform float uGray; uniform float uShade; uniform vec4 uMask; uniform vec2 uSat; uniform vec4 uFin;
 varying vec3 vFlakeP;
 vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }`)
         .replace('#include <map_fragment>', `#include <map_fragment>
@@ -382,11 +402,11 @@ float paintMask;
   paintMask = smoothstep(uMask.x, uMask.y, l) * (1.0 - smoothstep(uMask.z, uMask.w, l)) * (1.0 - smoothstep(uSat.x, uSat.y, sat));
   diffuseColor.rgb = mix(c, uPaint * mix(1.0, clamp(l / uGray, 0.35, 1.6), uShade), paintMask); }`)
         .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.36, paintMask); metalnessFactor = mix(metalnessFactor, 0.6, paintMask);`)
+roughnessFactor = mix(roughnessFactor, uFin.x, paintMask); metalnessFactor = mix(metalnessFactor, uFin.y, paintMask);`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-normal = normalize(mix(normal, nonPerturbedNormal, paintMask * 0.85)); // the AI normal map is lumpy on panels
+normal = normalize(mix(normal, nonPerturbedNormal, paintMask * uFin.z)); // the AI normal map is lumpy on panels
 { vec3 fp = vFlakeP * 260.0; float fade = (1.0 - smoothstep(0.35, 1.0, length(fwidth(fp)))) * paintMask;
-  normal = normalize(normal + (flakeHash(floor(fp)) - 0.5) * 0.35 * fade); }`)
+  normal = normalize(normal + (flakeHash(floor(fp)) - 0.5) * uFin.w * fade); }`)
         .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 material.clearcoat *= mix(0.25, 1.0, paintMask);`);
     };

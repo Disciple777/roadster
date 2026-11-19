@@ -18,7 +18,7 @@ const DRY = process.argv.includes('--dry-run');
 const ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 
 /** The only things that belong on the web server. */
-const INCLUDE = [{ file: 'index.html' }, { file: '.htaccess' }, { dir: 'css' }, { dir: 'js' }, { dir: 'api' }, { dir: 'models', skip: ['source'] }];
+const INCLUDE = [{ file: 'index.html' }, { file: 'showroom.html' }, { file: '.htaccess' }, { dir: 'css' }, { dir: 'js' }, { dir: 'api' }, { dir: 'models', skip: ['source'] }];
 
 function walk(abs, rel, out, skip = []) {
   for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
