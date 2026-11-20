@@ -316,6 +316,32 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       shade: 0.05,
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.97, whiteHi: 1.01, satLo: 0.1, satHi: 0.22 },
     },
+    // hand-built in Blender by tools/model_<id>.py (shared kit in tools/carlib.py)
+    {
+      id: 'mantis', name: 'MANTIS', desc: 'Open-wheel single-seater: needle nose, side pods, halo, big wings and one ribbed tail thruster.',
+      glb: 'models/mantis.glb', v: 1, hand: true,
+      kit: { rear: [[0, 0.42, 2.3]], rearW: 1.7, sideX: 0.72, sideY: 0.36, wheelR: 0.40, wheelX: 0.98 },
+    },
+    {
+      id: 'ridgeback', name: 'RIDGEBACK', desc: 'Long-travel desert buggy: faceted tub, full roll cage, roof light bar, twin thrusters on the cage.',
+      glb: 'models/ridgeback.glb', v: 1, hand: true,
+      kit: { rear: [[-0.3, 1.36, 2.12], [0.3, 1.36, 2.12]], rearW: 1.6, sideX: 0.9, sideY: 0.75, wheelR: 0.52, wheelX: 1.15 },
+    },
+    {
+      id: 'halo', name: 'HALO', desc: '1950s jet-age teardrop: bubble canopy, tail fins, skirted rear wheels and a turbine at each end.',
+      glb: 'models/halo.glb', v: 1, hand: true,
+      kit: { rear: [[0, 0.5, 2.48]], rearW: 2.1, sideX: 1.02, sideY: 0.45, wheelR: 0.40, wheelX: 0.80 },
+    },
+    {
+      id: 'brick', name: 'BRICK', desc: 'Boxy 80s rally hatch: bolt-on flares, roof wing, four rally lamps and twin thrusters in the bumper.',
+      glb: 'models/brick.glb', v: 1, hand: true,
+      kit: { rear: [[-0.32, 0.42, 2.34], [0.32, 0.42, 2.34]], rearW: 1.1, sideX: 0.92, sideY: 0.6, wheelR: 0.43, wheelX: 0.86 },
+    },
+    {
+      id: 'rhino', name: 'RHINO', desc: 'Armoured off-roader: slit windows, ram plows, roof rails and two big thrusters on the roof corners.',
+      glb: 'models/rhino.glb', v: 1, hand: true,
+      kit: { rear: [[-0.46, 1.95, 2.44], [0.46, 1.95, 2.44]], rearW: 2.1, sideX: 1.1, sideY: 0.85, wheelR: 0.52, wheelX: 1.10 },
+    },
   ];
   G.PAINTS = [
     { name: 'Arctic', hex: 0xd9dcdf }, { name: 'Rosso', hex: 0xb3121b }, { name: 'Ember', hex: 0xe0561a }, { name: 'Solar', hex: 0xe8b51c },
