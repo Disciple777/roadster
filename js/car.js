@@ -348,8 +348,12 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     { name: 'Venom', hex: 0x5fae2a }, { name: 'Lagoon', hex: 0x0f8c8c }, { name: 'Cobalt', hex: 0x1c4fc4 }, { name: 'Midnight', hex: 0x18213f },
     { name: 'Violet', hex: 0x6a2bb3 }, { name: 'Sakura', hex: 0xe87fa8 }, { name: 'Graphite', hex: 0x3a3d42 }, { name: 'Onyx', hex: 0x0c0d0f },
   ];
-  G.GARAGE_CARS = false; // the Garage shows paint only (THRUSTER) until the hand-built roster is ready; the showroom lists every car
+  // Garage roster, in display order. START_CARS can be picked from the first run; the rest show locked.
+  // The Meshy/Tripo cars (comet, bastion, pebble) stay showroom-only. Ctrl+Shift+U toggles "unlock all" for testing.
+  G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2'];
+  G.START_CARS = ['thruster', 'mantis', 'ridgeback'];
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
+  G.carUnlocked = (id) => G.START_CARS.includes(id) || G.store.get('unlockAll', false) || G.store.get('unlockedCars', []).includes(id);
 
   const glbCache = {}, glbReady = {};
   // load (once) and prepare a car's GLB; resolves to null for code-built cars or if the file is missing

@@ -99,8 +99,7 @@
     constructor() {
       this.settings = Object.assign({}, DEFAULTS, G.store.get('settings', {}));
       // v2 laps: street races default to 2 laps and courses to 1 (the official lengths); 3 is the long option
-      if (!G.CARS.some((c) => c.id === this.settings.car)) this.settings.car = 'thruster';
-      if (!G.GARAGE_CARS) this.settings.car = 'thruster'; // car picking is paused while the new hand-built cars are made
+      if (!G.GARAGE_CARS.includes(this.settings.car) || !G.carUnlocked(this.settings.car)) this.settings.car = 'thruster';
       if (this.settings.lapsV !== 2) { Object.assign(this.settings, { laps: 2, courseLaps: 1, lapsV: 2 }); G.store.set('settings', this.settings); }
       this.Q = QUALITY[this.settings.quality] || QUALITY.high;
       this.state = 'loading';
@@ -326,6 +325,19 @@
       click('btn-full', () => this.fullscreen());
       click('rot-ok', () => $('rotate').classList.add('dismissed'));
       click('kh-go', () => this.closeKeyHelp());
+      // tester shortcut: Ctrl+Shift+U unlocks every Garage car (press again to lock them back)
+      window.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyU')) return;
+        e.preventDefault();
+        const on = !G.store.get('unlockAll', false);
+        G.store.set('unlockAll', on);
+        if (!on && !G.carUnlocked(S.car)) {
+          S.car = 'thruster'; G.store.set('settings', S);
+          G.loadCar('thruster').then(() => { if (S.car === 'thruster') this.setPlayerCar('thruster', S.paint); });
+        }
+        if (this.garageRefresh) this.garageRefresh();
+        this.toast(on ? 'ALL CARS UNLOCKED' : 'CARS LOCKED AGAIN');
+      });
       window.addEventListener('keydown', (e) => { if (this.introHold && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.state === 'countdown') { e.preventDefault(); this.closeKeyHelp(); } });
 
       // track pickers: built from G.TRACKS, so a new circuit shows up everywhere on its own (a grid that wraps)
@@ -494,6 +506,14 @@
       if (cur) { this.panelStack.push(cur.id); cur.classList.remove('open'); }
       $(name).classList.add('open');
     }
+    // a short message at the top of the screen
+    toast(text) {
+      let el = $('toast');
+      if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
+      el.textContent = text; el.style.opacity = 1;
+      clearTimeout(this.toastT); this.toastT = setTimeout(() => { el.style.opacity = 0; }, 1800);
+    }
+
     // ---------------- garage ----------------
     buildGarage() {
       const S = this.settings;
@@ -501,18 +521,26 @@
       const cars = $('g-cars'), paints = $('g-paints');
       const refresh = () => {
         const car = G.carInfo(S.car);
-        cars.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.id === S.car));
+        cars.querySelectorAll('button').forEach((b) => {
+          b.classList.toggle('sel', b.dataset.id === S.car);
+          b.classList.toggle('locked', !G.carUnlocked(b.dataset.id));
+        });
         $('g-desc').textContent = car.desc;
         const p = G.PAINTS.find((x) => x.hex === S.paint);
         $('g-pname').textContent = p ? p.name : 'Custom ' + hex(S.paint);
         paints.querySelectorAll('[data-hex]').forEach((b) => b.classList.toggle('sel', +b.dataset.hex === S.paint));
         $('g-custom').value = hex(S.paint);
       };
-      cars.style.display = G.GARAGE_CARS ? '' : 'none';
+      this.garageRefresh = refresh;
       if (!paints.childElementCount) {
-        for (const c of G.GARAGE_CARS ? G.CARS : []) {
+        for (const c of G.GARAGE_CARS.map(G.carInfo)) {
           const b = document.createElement('button'); b.dataset.id = c.id; b.textContent = c.name;
           b.addEventListener('click', async () => {
+            if (!G.carUnlocked(c.id)) {
+              G.audio.tone(180, 0.08, 0.08, 'square');
+              $('g-desc').textContent = c.name + ' is locked. ' + c.desc;
+              return;
+            }
             G.audio.tone(700, 0.05, 0.08, 'triangle');
             S.car = c.id; G.store.set('settings', S); refresh();
             b.classList.add('busy');
