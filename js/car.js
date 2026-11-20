@@ -293,7 +293,12 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.8, whiteHi: 0.95, satLo: 0.1, satHi: 0.22 },
     },
     {
-      id: 'bastion', name: 'BASTION', desc: 'Widebody grand tourer with a long hood, ducktail and twin rear thrusters.', glb: 'models/bastion.glb', v: 1,
+      id: 'comet2', name: 'COMET v2', desc: 'Hand-built open two-seater: wedge nose with a full-width light strip, wraparound screen, twin head fairings.',
+      glb: 'models/comet2.glb', v: 3, hand: true, // modelled in Blender by tools/model_comet2.py
+      kit: { rear: [[-0.36, 0.43, 2.33], [0.36, 0.43, 2.33]], rearW: 1.6, sideX: 1.03, sideY: 0.5, wheelR: 0.46, wheelX: 0.94 },
+    },
+    {
+      id: 'bastion',name: 'BASTION', desc: 'Widebody grand tourer with a long hood, ducktail and twin rear thrusters.', glb: 'models/bastion.glb', v: 1,
       kit: { rear: [[-0.3, 0.33, 2.42], [0.3, 0.33, 2.42]], rearW: 1.8, sideX: 1.05, sideY: 0.5,
         wheelR: 0.437, wheelX: 0.955 },
       shade: 0.05,
@@ -301,7 +306,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     },
     {
       id: 'bastion2', name: 'BASTION v2', desc: 'Hand-built widebody grand tourer: long domed hood, ducktail, four ring tail lights and twin turbines.',
-      glb: 'models/bastion2.glb', v: 1, hand: true, // modelled in Blender by tools/model_bastion2.py, no AI texture
+      glb: 'models/bastion2.glb', v: 2, hand: true, // modelled in Blender by tools/model_bastion2.py, no AI texture
       kit: { rear: [[-0.3, 0.37, 2.56], [0.3, 0.37, 2.56]], rearW: 1.8, sideX: 1.06, sideY: 0.5, wheelR: 0.42, wheelX: 0.92 },
     },
     {

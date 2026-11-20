@@ -109,7 +109,7 @@ def seg_mat(s, y):
     if s <= 1: return 2                       # underbody: black
     if s == 6 and cabin(y) > 0.01 and y > SIDE_END: return 1   # side glass
     if s >= 8:
-        if ROOF_F < y < COWL or DECK < y < ROOF_R: return 1      # windscreen, rear glass
+        if ROOF_F < y < COWL: return 1      # windscreen (the rear window is an inset panel, see rear_glass)
     return 0
 
 def catmull(P, n_per, closed=True):
@@ -263,6 +263,22 @@ for sx in (1, -1):
 bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1.0)
 for vt in bm.verts: vt.co = Vector((vt.co.x * 1.62, vt.co.y * 0.42, vt.co.z * 0.035))
 sp = new_obj('splitter', bm, ['trim']); sp.location = (0, 2.2, 0.17); parts.append(sp)
+
+# --- rear window: an inset trapezoid on the fastback with painted C pillars around it, rounded corners
+def rounded(poly, r=0.05, n=4):
+    out = []
+    P = [Vector((*p, 0)) for p in poly]
+    for i, c in enumerate(P):
+        a, b = P[i - 1], P[(i + 1) % len(P)]
+        da, db = (a - c).normalized(), (b - c).normalized()
+        for k in range(n + 1):
+            t = k / n
+            p0, p1 = c + da * r, c + db * r
+            q = p0 * (1 - t) ** 2 + c * 2 * t * (1 - t) + p1 * t * t
+            out.append((q.x, q.y))
+    return out
+rg = rounded([(-0.50, -0.50), (0.50, -0.50), (0.44, -1.30), (-0.44, -1.30)], 0.07)
+parts.append(top_decal('rear_glass', rg, 'glass', 0.003, 4))
 
 # --- hood vents and side vents behind the front wheels
 for sx in (1, -1):
