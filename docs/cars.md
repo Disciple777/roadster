@@ -20,14 +20,30 @@ How the RoadsterThruster cars are made, and the numbers they have to fit.
 ### Locks
 In `js/car.js`:
 - `G.GARAGE_CARS` is the Garage list, in display order.
-- `G.START_CARS` are the cars you can pick on a first run. Every other Garage car shows greyed out with a padlock, and
-  clicking it only shows its description.
+- `G.START_CARS` are the cars you can pick on a first run. Every other Garage car shows greyed out with a padlock.
+- Clicking a locked car previews it on the live car as a cyan **hologram** (`G.HOLO`, a scanline/static shader; the
+  game loop ticks its time) and shows the unlock goal with progress. `S.car` stays on the last car you can drive, and
+  leaving the Garage or starting anything (`endPreview()`, called from `backPanel` and `closePanels`) swaps it back.
 - `G.carUnlocked(id)` decides. It is true for a start car, when "unlock all" is on (localStorage `rt_unlockAll`), or when
-  the id is in localStorage `rt_unlockedCars`. That list is ready for real unlock rules (win a race, finish a
-  challenge…) but nothing writes to it yet.
+  the id is in localStorage `rt_unlockedCars`.
 - **Ctrl+Shift+U** anywhere in the game toggles "unlock all" and shows a toast. Pressing it again locks them back, and if
   you were driving a locked car you are put back in THRUSTER.
 - On load, a saved car that is no longer in the Garage or is locked falls back to THRUSTER.
+
+### Unlock goals
+`G.UNLOCKS` in `js/car.js`, one goal per locked car, each with `of() → [done, needed]`:
+
+| car | goal | recorded in |
+|---|---|---|
+| HALO | finish a Street Race on every track | `finish()` adds the track to `rt_progress.tracks` |
+| BRICK | win an Official Street Race (`G.unofficial` empty, P1) | `finish()` sets `officialWin` |
+| RHINO | clear every Stunt Challenge level (practice counts) | `rt_chalLvl_<i>`, written by `challenge.js complete()` |
+| COMET v2 | complete the official Obstacle Course without wrecking (solo or multiplayer) | `finishCourse()` sets `courseDone` |
+| BASTION v2 | finish a multiplayer race with at least one other person | `mpProgress()` sets `mpRaced` |
+
+`game.checkUnlocks()` runs after each of those (and once at startup, so old progress counts). It moves met goals into
+`rt_unlockedCars` and shows a "NEW CAR UNLOCKED" toast per car. To add a goal: add an `G.UNLOCKS` entry, record its
+progress with `G.progress({...})` where it happens, and call `this.checkUnlocks()` there.
 
 To add a car to the game: add its `G.CARS` entry, then put its id in `G.GARAGE_CARS` (and in `G.START_CARS` if it should
 be free).

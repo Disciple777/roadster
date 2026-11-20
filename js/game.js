@@ -197,6 +197,7 @@
       this.setupPost();
 
       this.hud = new G.HUD(this);
+      this.checkUnlocks(1500); // goals met before the unlock rules existed count too
       this.input = new G.Input();
       this.input.autoAccel = S.autoAccel; this.input.sens = S.sens; this.input.thrInvert = S.thrInvert;
       // settings from before the layouts existed kept their custom keys in S.keys: those were made on layout 2
@@ -331,6 +332,8 @@
         e.preventDefault();
         const on = !G.store.get('unlockAll', false);
         G.store.set('unlockAll', on);
+        if (on && this.previewId) { S.car = this.previewId; G.store.set('settings', S); this.previewId = null; const id = S.car; G.loadCar(id).then(() => { if (S.car === id) this.setPlayerCar(id, S.paint); }); }
+        this.endPreview();
         if (!on && !G.carUnlocked(S.car)) {
           S.car = 'thruster'; G.store.set('settings', S);
           G.loadCar('thruster').then(() => { if (S.car === 'thruster') this.setPlayerCar('thruster', S.paint); });
@@ -507,11 +510,11 @@
       $(name).classList.add('open');
     }
     // a short message at the top of the screen
-    toast(text) {
+    toast(text, ms = 1800) {
       let el = $('toast');
       if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
       el.textContent = text; el.style.opacity = 1;
-      clearTimeout(this.toastT); this.toastT = setTimeout(() => { el.style.opacity = 0; }, 1800);
+      clearTimeout(this.toastT); this.toastT = setTimeout(() => { el.style.opacity = 0; }, ms);
     }
 
     // ---------------- garage ----------------
@@ -520,12 +523,12 @@
       const hex = (h) => '#' + h.toString(16).padStart(6, '0');
       const cars = $('g-cars'), paints = $('g-paints');
       const refresh = () => {
-        const car = G.carInfo(S.car);
+        const shown = this.previewId || S.car, car = G.carInfo(shown);
         cars.querySelectorAll('button').forEach((b) => {
-          b.classList.toggle('sel', b.dataset.id === S.car);
+          b.classList.toggle('sel', b.dataset.id === shown);
           b.classList.toggle('locked', !G.carUnlocked(b.dataset.id));
         });
-        $('g-desc').textContent = car.desc;
+        $('g-desc').innerHTML = this.previewId ? `<b class="g-lock">LOCKED · ${G.unlockHint(shown)}</b>${car.desc}` : car.desc;
         const p = G.PAINTS.find((x) => x.hex === S.paint);
         $('g-pname').textContent = p ? p.name : 'Custom ' + hex(S.paint);
         paints.querySelectorAll('[data-hex]').forEach((b) => b.classList.toggle('sel', +b.dataset.hex === S.paint));
@@ -536,17 +539,18 @@
         for (const c of G.GARAGE_CARS.map(G.carInfo)) {
           const b = document.createElement('button'); b.dataset.id = c.id; b.textContent = c.name;
           b.addEventListener('click', async () => {
-            if (!G.carUnlocked(c.id)) {
-              G.audio.tone(180, 0.08, 0.08, 'square');
-              $('g-desc').textContent = c.name + ' is locked. ' + c.desc;
-              return;
-            }
-            G.audio.tone(700, 0.05, 0.08, 'triangle');
-            S.car = c.id; G.store.set('settings', S); refresh();
+            const locked = !G.carUnlocked(c.id);
+            G.audio.tone(locked ? 260 : 700, 0.05, 0.08, locked ? 'sawtooth' : 'triangle');
+            // a locked car is only shown, as a hologram: S.car stays on the last car you can drive
+            if (locked) this.previewId = c.id;
+            else { this.previewId = null; S.car = c.id; G.store.set('settings', S); }
+            refresh();
             b.classList.add('busy');
             await G.loadCar(c.id);
             b.classList.remove('busy');
-            if (S.car === c.id) this.setPlayerCar(c.id, S.paint);
+            if ((this.previewId || S.car) !== c.id) return;
+            this.setPlayerCar(c.id, S.paint);
+            if (locked) G.hologram(this.playerModel);
           });
           cars.appendChild(b);
         }
@@ -580,14 +584,30 @@
       if (this.player) this.player.model = m;
     }
 
+    // leave a locked-car preview: back to the car you can drive
+    endPreview() {
+      if (!this.previewId) return;
+      this.previewId = null;
+      const id = this.settings.car;
+      G.loadCar(id).then(() => { if (!this.previewId && this.settings.car === id) this.setPlayerCar(id, this.settings.paint); });
+      if (this.garageRefresh) this.garageRefresh();
+    }
+    // goals met since the last check: unlock those cars and say so
+    checkUnlocks(delay = 2800) {
+      const fresh = G.checkUnlocks();
+      fresh.forEach((id, i) => setTimeout(() => { this.toast('NEW CAR UNLOCKED: ' + G.carInfo(id).name, 3500); G.audio.tone(880, 0.12, 0.1, 'triangle'); }, delay + i * 3800));
+      if (fresh.length && this.garageRefresh) this.garageRefresh();
+    }
+
     backPanel() {
       const cur = document.querySelector('.panel.open');
       if (cur) cur.classList.remove('open');
+      if (cur && cur.id === 'garage') this.endPreview();
       if (cur && cur.id === 'settings' && !$('reload-note').classList.contains('hidden')) { location.reload(); return; }
       const prev = (this.panelStack || []).pop();
       if (prev) $(prev).classList.add('open');
     }
-    closePanels() { document.querySelectorAll('.panel.open').forEach((p) => p.classList.remove('open')); this.panelStack = []; }
+    closePanels() { this.endPreview(); document.querySelectorAll('.panel.open').forEach((p) => p.classList.remove('open')); this.panelStack = []; }
 
     updateBestUI() { $('menu-best').textContent = this.bestLap < 1e8 ? 'Best lap  ' + G.fmtTime(this.bestLap) : ''; }
 
@@ -1063,6 +1083,8 @@
         if (this.net) this.net.tick(1, p, this.progress, this.mpFinishTime, 0, this.mpExtra()); // tell the room right away
         this.mpResults();
         this.hud.message(destroyed ? 'DESTROYED' : 'COURSE COMPLETE', 2500);
+        if (!destroyed) G.progress({ courseDone: true });
+        this.mpProgress();
         setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
         return;
       }
@@ -1078,6 +1100,7 @@
       if (destroyed) $('res-board').textContent = 'Wrecked runs are not ranked.';
       else if (this.customCourse) $('res-board').textContent = this.customCourse.editing ? 'Test run: back to the editor when you are ready.' : `${this.customCourse.name || 'Custom course'}: player courses are not ranked.`;
       else this.submitRun('course');
+      if (!destroyed && !this.customCourse) { G.progress({ courseDone: true }); this.checkUnlocks(); }
       setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
     }
     // N₂ meter cues: one sound as it runs dry, one when it is back to 100%
@@ -1278,6 +1301,11 @@
       return myPlace;
     }
     // results board: finished drivers by time, then those still racing by distance, then drop-outs
+    // a multiplayer race with at least one other person in it counts for the BASTION v2 unlock
+    mpProgress() {
+      if (this.mpGrid && this.mpGrid.length > 1) G.progress({ mpRaced: true });
+      this.checkUnlocks();
+    }
     mpResults() {
       if (this.mode === 'course') return this.mpCourseResults();
       const hex = (c) => '#' + c.toString(16).padStart(6, '0');
@@ -1300,6 +1328,7 @@
       if (window.innerWidth !== this._w || window.innerHeight !== this._h) this.resize();
       let dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
       this.last = now;
+      G.HOLO.uniforms.t.value = now / 1000;
       if (this.state === 'paused') { this.consumeEvents(); this.mpFrame(dt, true); this.render(0); return; }
       if (this.state === 'editor') { this.input.consume(); this.t += dt; this.editor.frame(dt); this.render(0); return; }
       dt *= this.timeScale;
@@ -1451,6 +1480,7 @@
         if (this.net) this.net.tick(1, this.player, this.progress, this.mpFinishTime); // tell the room right away
         const myPlace = this.mpResults();
         this.hud.message(myPlace === 1 ? 'YOU WIN!' : `FINISHED P${myPlace}`, 2500);
+        this.mpProgress();
         setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
         return;
       }
@@ -1464,6 +1494,11 @@
       const myPlace = rows.findIndex((r) => r.me) + 1;
       this.hud.message(myPlace === 1 ? 'YOU WIN!' : `FINISHED P${myPlace}`, 2500);
       this.submitRun('race');
+      // unlock progress: a finished street race on this track, and a win in an official one
+      const pr = G.store.get('progress', {}), tracks = pr.tracks || [];
+      if (!tracks.includes(G.TRACK_ID)) tracks.push(G.TRACK_ID);
+      G.progress({ tracks, officialWin: pr.officialWin || (myPlace === 1 && !G.unofficial('race', this.laps, this.settings).length) });
+      this.checkUnlocks();
       $('res-title').textContent = myPlace === 1 ? 'VICTORY' : `P${myPlace} OF ${rows.length}`;
       $('res-rows').innerHTML = rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${r.me ? '#ff2a3c' : '#' + r.color.toString(16).padStart(6, '0')}"></span><span class="n">${r.name}</span><span class="t">${G.fmtTime(r.time)}</span></div>`).join('');
       $('res-stats').innerHTML = `<div><b>${this.score.toLocaleString()}</b><small>STUNT SCORE</small></div><div><b>${G.fmtTime(Math.min(...this.lapTimes))}</b><small>BEST LAP</small></div><div><b>${G.fmtTime(this.bestLap)}</b><small>ALL-TIME BEST</small></div>`;

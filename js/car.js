@@ -355,6 +355,52 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
   G.carUnlocked = (id) => G.START_CARS.includes(id) || G.store.get('unlockAll', false) || G.store.get('unlockedCars', []).includes(id);
 
+  // ---- unlocks: each locked Garage car has one goal. Progress lives in localStorage rt_progress
+  // ({ tracks: [ids with a finished street race], officialWin, courseDone, mpRaced }); stunt levels count from
+  // rt_chalLvl_<i> (any cleared level, practice included). G.checkUnlocks() moves met goals into rt_unlockedCars.
+  const prog = () => G.store.get('progress', {});
+  G.progress = (patch) => { const p = Object.assign(prog(), patch); G.store.set('progress', p); return p; };
+  G.UNLOCKS = {
+    halo: { goal: 'Finish a Street Race on every track', of: () => [Object.keys(G.TRACKS).filter((t) => (prog().tracks || []).includes(t)).length, Object.keys(G.TRACKS).length] },
+    brick: { goal: 'Win an Official Street Race (2 laps, heavy traffic, 7 rivals, PRO)', of: () => [prog().officialWin ? 1 : 0, 1] },
+    rhino: { goal: 'Clear every Stunt Challenge level', of: () => { const n = (G.CHAL_LEVELS || []).length || 15; let k = 0; for (let i = 0; i < n; i++) if (G.store.get('chalLvl_' + i, 0) > 0) k++; return [k, n]; } },
+    comet2: { goal: 'Complete the Obstacle Course without wrecking', of: () => [prog().courseDone ? 1 : 0, 1] },
+    bastion2: { goal: 'Race a friend in Multiplayer', of: () => [prog().mpRaced ? 1 : 0, 1] },
+  };
+  // "goal (k/n)" for the Garage
+  G.unlockHint = (id) => { const u = G.UNLOCKS[id]; if (!u) return ''; const [k, n] = u.of(); return n > 1 ? `${u.goal} (${k}/${n})` : u.goal; };
+  // newly earned cars (their ids), saved as unlocked
+  G.checkUnlocks = () => {
+    const have = G.store.get('unlockedCars', []), fresh = [];
+    for (const [id, u] of Object.entries(G.UNLOCKS)) { const [k, n] = u.of(); if (k >= n && !have.includes(id)) { have.push(id); fresh.push(id); } }
+    if (fresh.length) G.store.set('unlockedCars', have);
+    return fresh;
+  };
+
+  // a locked car previewed in the Garage: a flickering cyan hologram with scanlines and static (G.HOLO.uniforms.t ticks in the game loop)
+  G.HOLO = new T.ShaderMaterial({
+    uniforms: { t: { value: 0 } },
+    transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide,
+    vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vW;
+      void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mv = viewMatrix * w;
+        vN = normalize(normalMatrix * normal); vV = -mv.xyz; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform float t; varying vec3 vN; varying vec3 vV; varying vec3 vW;
+      float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main() {
+        float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
+        float scan = 0.55 + 0.45 * sin(vW.y * 90.0 - t * 9.0);
+        float band = smoothstep(0.0, 0.08, abs(fract(vW.y * 0.6 - t * 0.35) - 0.5));
+        float stat = h(floor(gl_FragCoord.xy / 2.0) + floor(t * 30.0));
+        float flick = 0.85 + 0.15 * sin(t * 37.0) * sin(t * 13.0);
+        float a = (0.16 + rim * 1.1) * scan * flick * (0.65 + 0.7 * stat) * mix(1.8, 1.0, band);
+        gl_FragColor = vec4(vec3(0.35, 0.85, 1.0) * a, 1.0);
+      }`,
+  });
+  G.hologram = (model) => model.group.traverse((o) => {
+    if (!o.isMesh && !o.isPoints && !o.isSprite) return;
+    if (o.isMesh && o.geometry.attributes.normal) { o.material = G.HOLO; o.castShadow = false; } else o.visible = false;
+  });
+
   const glbCache = {}, glbReady = {};
   // load (once) and prepare a car's GLB; resolves to null for code-built cars or if the file is missing
   G.loadCar = function (id) {

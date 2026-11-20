@@ -1771,6 +1771,7 @@
         setTimeout(() => { g.hud.popup(`ACT ${ROMAN[actOf(this.idx)]} CLEAR`, '+1 LIFE', 'blue'); g.hud.chal(this); }, 1300);
       }
       G.audio.stunt();
+      g.checkUnlocks(1500); // clearing the last level you were missing unlocks RHINO
     }
     next() {
       if (this.idx >= this.last) return this.results_(true);
