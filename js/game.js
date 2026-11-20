@@ -100,6 +100,7 @@
       this.settings = Object.assign({}, DEFAULTS, G.store.get('settings', {}));
       // v2 laps: street races default to 2 laps and courses to 1 (the official lengths); 3 is the long option
       if (!G.CARS.some((c) => c.id === this.settings.car)) this.settings.car = 'thruster';
+      if (!G.GARAGE_CARS) this.settings.car = 'thruster'; // car picking is paused while the new hand-built cars are made
       if (this.settings.lapsV !== 2) { Object.assign(this.settings, { laps: 2, courseLaps: 1, lapsV: 2 }); G.store.set('settings', this.settings); }
       this.Q = QUALITY[this.settings.quality] || QUALITY.high;
       this.state = 'loading';
@@ -507,8 +508,9 @@
         paints.querySelectorAll('[data-hex]').forEach((b) => b.classList.toggle('sel', +b.dataset.hex === S.paint));
         $('g-custom').value = hex(S.paint);
       };
-      if (!cars.childElementCount) {
-        for (const c of G.CARS) {
+      cars.style.display = G.GARAGE_CARS ? '' : 'none';
+      if (!paints.childElementCount) {
+        for (const c of G.GARAGE_CARS ? G.CARS : []) {
           const b = document.createElement('button'); b.dataset.id = c.id; b.textContent = c.name;
           b.addEventListener('click', async () => {
             G.audio.tone(700, 0.05, 0.08, 'triangle');

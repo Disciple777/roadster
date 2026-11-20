@@ -414,7 +414,7 @@
       for (const m of [model, other]) if (m) G.updateRoadsterFX(m, { L: 0, R: 0, B: S.thrust, SL: 0, SR: 0 }, t, false);
       renderer.render(scene, camera);
     });
-    window.SHOWROOM = { scene, camera, controls, get model() { return model; }, S };
+    window.SHOWROOM = { scene, camera, controls, renderer, get model() { return model; }, S };
   </script>
 </body>
 </html>

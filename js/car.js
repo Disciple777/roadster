@@ -300,6 +300,11 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.97, whiteHi: 1.01, satLo: 0.1, satHi: 0.22 }, // no white parts: Meshy baked a bright roof highlight
     },
     {
+      id: 'bastion2', name: 'BASTION v2', desc: 'Hand-built widebody grand tourer: long domed hood, ducktail, four ring tail lights and twin turbines.',
+      glb: 'models/bastion2.glb', v: 1, hand: true, // modelled in Blender by tools/model_bastion2.py, no AI texture
+      kit: { rear: [[-0.3, 0.37, 2.56], [0.3, 0.37, 2.56]], rearW: 1.8, sideX: 1.06, sideY: 0.5, wheelR: 0.42, wheelX: 0.92 },
+    },
+    {
       id: 'pebble', name: 'PEBBLE', desc: 'Bubbly city pod on oversized wheels, with a panoramic canopy and one round tail thruster.', glb: 'models/pebble.glb', v: 1,
       kit: { rear: [[0, 0.9, 2.42]], rearW: 1.1, sideX: 1.55, sideY: 0.8,
         wheelR: 0.684, wheelX: 1.357 },
@@ -312,6 +317,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     { name: 'Venom', hex: 0x5fae2a }, { name: 'Lagoon', hex: 0x0f8c8c }, { name: 'Cobalt', hex: 0x1c4fc4 }, { name: 'Midnight', hex: 0x18213f },
     { name: 'Violet', hex: 0x6a2bb3 }, { name: 'Sakura', hex: 0xe87fa8 }, { name: 'Graphite', hex: 0x3a3d42 }, { name: 'Onyx', hex: 0x0c0d0f },
   ];
+  G.GARAGE_CARS = false; // the Garage shows paint only (THRUSTER) until the hand-built roster is ready; the showroom lists every car
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
 
   const glbCache = {}, glbReady = {};
@@ -423,6 +429,20 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
     const model = G.buildRoadster(paintHex, Object.assign({}, opts, { kit: car.kit }));
     const body = asset.scene.clone(true);
     let paint = null;
+    if (car.hand) {
+      // hand-built in Blender: parts come split by material name; paint, glass and lights get the game's own materials
+      const head = new T.MeshBasicMaterial({ color: new T.Color(1.6, 1.6, 1.75), toneMapped: false });
+      const swap = { paint: model.paint, glass: model.glass, light_head: head, light_tail: model.tail };
+      body.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = opts.shadows !== false; o.receiveShadow = false;
+        const name = (o.material && o.material.name) || '';
+        if (swap[name]) o.material = swap[name];
+      });
+      model.group.add(body);
+      model.carId = id;
+      return model;
+    }
     body.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = opts.shadows !== false; o.receiveShadow = false;
