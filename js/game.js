@@ -13,7 +13,7 @@
   };
 
   const DEFAULTS = {
-    quality: G.isMobile ? 'medium' : 'high', tod: 'night', traffic: 'medium', laps: 2, courseLaps: 1, rivals: 5, difficulty: 'normal', track: 'city',
+    quality: G.isMobile ? 'medium' : 'high', tod: 'auto', traffic: 'medium', laps: 2, courseLaps: 1, rivals: 5, difficulty: 'normal', track: 'city',
     camera: 0, autoAccel: G.isTouch, tilt: false, sens: 1, showFps: false, touchUI: 'auto', vol: 0.7, shake: true,
     thrInvert: true, ghosts: 'on', keyPreset: 1, car: 'thruster', paint: 0xd9dcdf, keysBy: {}, // keysBy: { preset: { action: [code, code] } }, missing = that layout's defaults
   };
@@ -36,7 +36,7 @@
   // ---------------- effects (steam, smoke, sparks) ----------------
   class FX {
     constructor(game) {
-      const Q = game.Q, tod = G.TOD[game.settings.tod];
+      const Q = game.Q, tod = G.todOf(game.settings);
       this.game = game;
       const puff = G.puffTexture();
       this.steam = new G.Particles(game.scene, Q.particles, { texture: puff, color: new T.Color(0.86, 0.9, 0.98).multiplyScalar(tod.steam) });
@@ -98,6 +98,7 @@
   class Game {
     constructor() {
       this.settings = Object.assign({}, DEFAULTS, G.store.get('settings', {}));
+      if (!this.settings.todAuto) { this.settings.tod = 'auto'; this.settings.todAuto = 1; } // once: older saves pinned NIGHT, now each track has its own
       // v2 laps: street races default to 2 laps and courses to 1 (the official lengths); 3 is the long option
       if (!G.GARAGE_CARS.includes(this.settings.car) || !G.carUnlocked(this.settings.car)) this.settings.car = 'thruster';
       if (this.settings.lapsV !== 2) { Object.assign(this.settings, { laps: 2, courseLaps: 1, lapsV: 2 }); G.store.set('settings', this.settings); }
@@ -125,7 +126,7 @@
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pr));
       renderer.setSize(window.innerWidth, window.innerHeight, false);
       renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = G.TOD[S.tod].exposure;
+      renderer.toneMappingExposure = G.todOf(S).exposure;
       renderer.outputColorSpace = T.SRGBColorSpace;
       renderer.shadowMap.enabled = Q.shadows;
       renderer.shadowMap.type = T.PCFSoftShadowMap;
@@ -173,7 +174,7 @@
       this.headlights = []; this.headTargets = [];
       if (Q.lights) {
         for (const sx of [-0.62, 0.62]) {
-          const sl = new T.SpotLight(0xf2f5ff, S.tod === 'night' ? 480 : 220, 140, 0.42, 0.7, 1.6);
+          const sl = new T.SpotLight(0xf2f5ff, G.todOf(S).stars ? 480 : 220, 140, 0.42, 0.7, 1.6);
           sl.position.set(sx, 0.55, -2.2);
           const tg = new T.Object3D(); tg.position.set(sx * 2.5, -1.5, -30);
           sl.target = tg; this.headlights.push(sl); this.headTargets.push(tg);
@@ -369,6 +370,15 @@
       const desc = () => { const el = $('s-trackdesc'), d = (G.TRACKS[S.track] || {}).desc; if (el) { el.textContent = d || ''; el.classList.toggle('hidden', !d); } };
       if ($('s-track')) $('s-track').addEventListener('click', desc);
       desc(); seg('s-mplaps', 'laps', Number); seg('s-ghosts', 'ghosts');
+      // each circuit has its own time of day (AUTO); picking another one overrides it on every track
+      const TODN = { dawn: 'DAWN', day: 'DAY', overcast: 'CLOUDY', sunset: 'SUNSET', dusk: 'DUSK', night: 'NIGHT' };
+      const todHint = () => {
+        const def = TODN[G.todName('auto', S.track)], auto = !G.TOD[S.tod];
+        if ($('s-todhint')) $('s-todhint').textContent = auto ? `AUTO: ${def}, this track's own time of day.` : `This track's own time of day is ${def}. AUTO goes back to it.`;
+        if ($('t-todhint')) $('t-todhint').textContent = auto ? 'AUTO: every track of the tour brings its own time of day.' : `${TODN[S.tod]} on every track of the tour.`;
+      };
+      for (const id of ['s-track', 's-tod', 't-tod']) if ($(id)) $(id).addEventListener('click', todHint);
+      todHint();
       if (!S.mpTraffic) S.mpTraffic = 'medium';
       if (S.mpAI === undefined) S.mpAI = 0;
       seg('s-mptraffic', 'mpTraffic'); seg('s-mpai', 'mpAI', Number);
@@ -492,7 +502,7 @@
 
     // time of day applies live: sky, lights, fog, windows, exposure, headlights, steam tint
     applyTod() {
-      const name = this.settings.tod, tod = G.TOD[name] || G.TOD.night;
+      const name = G.todName(this.settings.tod), tod = G.TOD[name];
       this.city.setTod(name);
       if (this.chalRun) return; // the challenge level has its own sky; the city picks it up on the way out
       this.renderer.toneMappingExposure = tod.exposure;

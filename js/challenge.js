@@ -611,7 +611,7 @@
       this.batches.clear();
       // parked cars
       if (this.carGeo) {
-        const body = new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.45, clearcoat: 0.8, clearcoatRoughness: 0.12 });
+        const body = G.trafficBodyMaterial();
         const lights = new T.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
         this.disposables.push(body, lights);
         const m4 = new T.Matrix4(), q = new T.Quaternion(), s = new T.Vector3(1, 1, 1), p = new T.Vector3(), up = new T.Vector3(0, 1, 0);
@@ -746,7 +746,7 @@
         sc.fog = this.saved.fog; sc.background = this.saved.bg; sc.environment = this.saved.env; sc.environmentIntensity = this.saved.envI;
         g.renderer.toneMappingExposure = this.saved.exp;
       }
-      const tod = G.TOD[g.settings.tod] || G.TOD.night;
+      const tod = G.todOf(g.settings);
       for (const sl of g.headlights || []) sl.intensity = tod.stars ? 480 : 220;
       if (this.fxCol) { g.fx.steam.mat.uniforms.uColor.value.copy(this.fxCol[0]); g.fx.smoke.mat.uniforms.uColor.value.copy(this.fxCol[1]); }
     }

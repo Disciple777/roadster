@@ -4,24 +4,55 @@
   const T = THREE;
   const { mergeGeometries, toCreasedNormals, RoundedBoxGeometry } = ADDONS;
 
+
   const BODY_COLS = [0xc8ccd2, 0x1c1e22, 0x7d1f22, 0x24456e, 0xe9e9e6, 0x5a5f66, 0x2f5a3c, 0xb88a2a, 0x8b8f96, 0x3d2a4f, 0xd9542a];
 
-  function part(list, geo, c, x, y, z, ry = 0) {
+  // Every vertex carries a colour and a finish (the 'paint' attribute): 1 = body paint, which takes the instance colour;
+  // 0 = glossy and fixed (glass, chrome, a white trailer); 2 = matte and fixed (rubber, plastic trim).
+  const BODY = [1, 1, 1], GLASS = [0.035, 0.045, 0.06], BLACK = [0.03, 0.03, 0.035], TYRE = [0.045, 0.045, 0.05],
+    TRIM = [0.075, 0.075, 0.085], CHROME = [0.66, 0.67, 0.7], ALLOY = [0.48, 0.49, 0.52], PLATE = [0.8, 0.8, 0.74],
+    WHITE = [0.9, 0.9, 0.89], STEEL = [0.3, 0.31, 0.33], DOOR = [0.7, 0.71, 0.73];
+  const HEAD = [2.0, 1.95, 1.75], DRL = [1.5, 1.6, 1.7], TAILC = [1.7, 0.05, 0.04], AMBER = [1.7, 0.75, 0.08];
+  const MATTE = new Set([BLACK, TYRE, TRIM, PLATE, STEEL]);
+  const fin = (c) => (c === BODY ? 1 : MATTE.has(c) ? 2 : 0);
+
+  function tag(geo, c) {
+    const n = geo.attributes.position.count, col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) col.set(c, i * 3);
+    geo.setAttribute('color', new T.BufferAttribute(col, 3));
+    geo.setAttribute('paint', new T.BufferAttribute(new Float32Array(n).fill(fin(c)), 1));
+    return geo;
+  }
+  function part(list, geo, c, x, y, z, ry = 0, rx = 0) {
     if (geo.index) geo = geo.toNonIndexed();
     if (geo.attributes.uv) geo.deleteAttribute('uv');
+    if (rx) geo.rotateX(rx);
     if (ry) geo.rotateY(ry);
     geo.translate(x, y, z);
-    const n = geo.attributes.position.count;
-    const col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2]; }
-    geo.setAttribute('color', new T.BufferAttribute(col, 3));
-    list.push(geo);
+    list.push(tag(geo, c));
   }
-  const BODY = [1, 1, 1], GLASS = [0.05, 0.06, 0.08], BLACK = [0.03, 0.03, 0.035], CHROME = [0.55, 0.56, 0.58], PLATE = [0.75, 0.75, 0.7];
-  const HEAD = [2.0, 1.95, 1.75], TAILC = [1.7, 0.05, 0.04];
   const box = (w, h, d) => new T.BoxGeometry(w, h, d);
   const rbox = (w, h, d, r = 0.18) => new RoundedBoxGeometry(w, h, d, 2, r);
-  const wheel = (r, w) => new T.CylinderGeometry(r, r, w, 16).rotateZ(Math.PI / 2);
+  const cylZ = (r, len, seg = 12) => new T.CylinderGeometry(r, r, len, seg).rotateX(Math.PI / 2);
+  // a side profile [[z, y], ...] extruded w wide across the car, centred on x
+  function prism(list, pts, w, c, x = 0) {
+    const g = new T.ExtrudeGeometry(new T.Shape(pts.map(([z, y]) => new T.Vector2(z, y))), { depth: w, bevelEnabled: false });
+    part(list, g.rotateY(-Math.PI / 2), c, x + w / 2, 0, 0);
+  }
+  // a thin strip along a path of points, w wide along the unit vector off, visible from both sides
+  function ribbon(list, path, off, w, c) {
+    const pos = [], h = w / 2;
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i], b = path[i + 1];
+      const A = [a[0] - off[0] * h, a[1] - off[1] * h, a[2] - off[2] * h], B = [a[0] + off[0] * h, a[1] + off[1] * h, a[2] + off[2] * h];
+      const C = [b[0] + off[0] * h, b[1] + off[1] * h, b[2] + off[2] * h], D = [b[0] - off[0] * h, b[1] - off[1] * h, b[2] - off[2] * h];
+      pos.push(...A, ...B, ...C, ...A, ...C, ...D, ...A, ...C, ...B, ...A, ...D, ...C);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    list.push(tag(g, c));
+  }
 
   // Smooth lofted car body. Sections: [z, wLow, yBottom, yBelt, wBelt, yRoof, wRoof] (half widths), front (-Z) first.
   // Side windows sit between belt and roof inside glassZ; steep roof panels become windscreens.
@@ -41,8 +72,8 @@
       }
     }
     S.push(P[P.length - 1]);
-    const pos = [], col = [];
-    const tri = (A, B, C, c) => { pos.push(...A, ...B, ...C); col.push(...c, ...c, ...c); };
+    const pos = [], col = [], pf = [];
+    const tri = (A, B, C, c) => { pos.push(...A, ...B, ...C); col.push(...c, ...c, ...c); const f = fin(c); pf.push(f, f, f); };
     for (let k = 0; k < S.length - 1; k++) {
       const [z0, p0] = S[k], [z1, p1] = S[k + 1];
       const zm = (z0 + z1) / 2;
@@ -57,45 +88,117 @@
         }
       }
     }
-    // end caps (fan from the profile centre)
+    // end caps (fan from the profile centre), all body colour
     for (const [k, front] of [[0, true], [S.length - 1, false]]) {
       const [z, p] = S[k];
       const ctr = [0, (p[0][1] + p[6][1]) / 2, z];
       for (let j = 0; j < 6; j++) for (const sx of [1, -1]) {
         const a = [p[j][0] * sx, p[j][1], z], b = [p[j + 1][0] * sx, p[j + 1][1], z];
-        const c = j === 0 ? BLACK : BODY;
-        if (front === (sx > 0)) tri(ctr, b, a, c); else tri(ctr, a, b, c);
+        if (front === (sx > 0)) tri(ctr, b, a, BODY); else tri(ctr, a, b, BODY);
       }
     }
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    g.setAttribute('paint', new T.Float32BufferAttribute(pf, 1));
     list.push(toCreasedNormals(g, 0.7));
   }
-
-  function wheels(list, wid, r, zs) {
-    for (const z of zs) for (const sx of [-1, 1]) {
-      part(list, wheel(r, 0.26), BLACK, sx * (wid / 2 - 0.12), r, z);
-      part(list, wheel(r * 0.62, 0.275), CHROME, sx * (wid / 2 - 0.12), r, z);
+  // the loft's sections, linearly, at z; and the body side's x at height y there
+  function profAt(secs, z) {
+    let k = 0;
+    while (k < secs.length - 2 && secs[k + 1][0] < z) k++;
+    const a = secs[k], b = secs[k + 1], t = Math.min(1, Math.max(0, (z - a[0]) / (b[0] - a[0])));
+    const v = a.map((x, i) => x + (b[i] - x) * t);
+    return { wl: v[1], yb: v[2], ybt: v[3], wb: v[4], yr: v[5], wr: v[6] };
+  }
+  function sideX(p, y) {
+    const y0 = p.yb + 0.14, ym = (p.yb + p.ybt) / 2;
+    if (y <= y0) return p.wl;
+    if (y <= ym) return p.wl + 0.015 * (y - y0) / (ym - y0);
+    return p.wl + 0.015 + (p.wb - p.wl - 0.015) * Math.min(1, (y - ym) / (p.ybt - ym));
+  }
+  // door shut lines, window pillars, the black seal under the side glass, door handles
+  function shut(list, secs, z, y0, y1) {
+    for (const sx of [1, -1]) {
+      const p = profAt(secs, z), path = [];
+      for (let i = 0; i <= 4; i++) { const y = y0 + (y1 - y0) * i / 4; path.push([sx * (sideX(p, y) + 0.01), y, z]); }
+      ribbon(list, path, [0, 0, 1], 0.014, TRIM);
     }
   }
-  function lights(list, wid, len, yH, yT) {
-    for (const sx of [-1, 1]) {
-      part(list, box(0.34, 0.11, 0.05), HEAD, sx * (wid / 2 - 0.32), yH, -len / 2 - 0.01);
-      part(list, box(0.4, 0.12, 0.05), TAILC, sx * (wid / 2 - 0.3), yT, len / 2 + 0.01);
+  function pillar(list, secs, z, w = 0.09) {
+    const p = profAt(secs, z);
+    for (const sx of [1, -1]) ribbon(list, [[sx * (p.wb + 0.012), p.ybt, z], [sx * (p.wr + 0.012), p.yr - 0.01, z]], [0, 0, 1], w, BLACK);
+  }
+  function seal(list, secs, z0, z1) {
+    for (const sx of [1, -1]) {
+      const path = [];
+      for (let i = 0; i <= 8; i++) { const z = z0 + (z1 - z0) * i / 8, p = profAt(secs, z); path.push([sx * (p.wb + 0.012), p.ybt + 0.012, z]); }
+      ribbon(list, path, [0, 1, 0], 0.035, TRIM);
     }
   }
-  function carDetails(b, wid, len, yMirror, zMirror, yPlate) {
-    for (const sx of [-1, 1]) part(b, box(0.2, 0.12, 0.1), BODY, sx * (wid / 2 + 0.06), yMirror, zMirror);
-    part(b, box(0.5, 0.13, 0.03), PLATE, 0, yPlate, len / 2 + 0.01);
-    part(b, box(0.5, 0.13, 0.03), PLATE, 0, yPlate - 0.05, -len / 2 - 0.01);
+  function handles(list, secs, zs, c = CHROME) {
+    for (const z of zs) for (const sx of [1, -1]) {
+      const p = profAt(secs, z), y = p.ybt - 0.11;
+      part(list, box(0.025, 0.035, 0.15), c, sx * (sideX(p, y) + 0.012), y, z);
+    }
+  }
+  function mirrors(list, x, y, z, c = BODY) {
+    for (const sx of [1, -1]) {
+      part(list, box(0.12, 0.04, 0.06), TRIM, sx * (x - 0.03), y - 0.06, z + 0.04);
+      part(list, rbox(0.17, 0.12, 0.1, 0.035), c, sx * (x + 0.07), y, z);
+      part(list, box(0.14, 0.09, 0.01), GLASS, sx * (x + 0.07), y, z + 0.051);
+    }
+  }
+  // the dark wheel well behind a tyre and its lip, on a body side at x
+  function arch(list, x, r, z, lip = BODY) {
+    for (const sx of [1, -1]) {
+      part(list, new T.CircleGeometry(r + 0.07, 14, 0, Math.PI), BLACK, sx * (x + 0.004), r, z, sx * Math.PI / 2);
+      part(list, new T.TorusGeometry(r + 0.09, 0.03, 4, 14, Math.PI), lip, sx * (x + 0.006), r, z, sx * Math.PI / 2);
+    }
+  }
+  // a tyre with rounded shoulders and a recessed rim (spokes = 0: a truck's steel wheel with lug nuts)
+  function wheelAt(list, x, r, z, w = 0.24, rim = ALLOY, spokes = 5) {
+    const sx = Math.sign(x), fx = x + sx * w / 2;
+    const prof = [[0.62, -0.5], [0.88, -0.5], [0.97, -0.42], [1, -0.22], [1, 0.22], [0.97, 0.42], [0.88, 0.5], [0.62, 0.5]];
+    part(list, new T.LatheGeometry(prof.map(([a, b]) => new T.Vector2(a * r, b * w)), 16).rotateZ(Math.PI / 2), TYRE, x, r, z);
+    part(list, new T.CylinderGeometry(r * 0.62, r * 0.62, 0.02, 14).rotateZ(Math.PI / 2), spokes ? TRIM : rim, fx - sx * 0.07, r, z);
+    part(list, new T.TorusGeometry(r * 0.6, 0.024, 4, 16).rotateY(Math.PI / 2), rim, fx - sx * 0.012, r, z);
+    for (let k = 0; k < spokes; k++) {
+      const sp = new T.BoxGeometry(0.03, r * 0.48, 0.065).translate(0, r * 0.32, 0).rotateX(k / spokes * Math.PI * 2);
+      part(list, sp, rim, fx - sx * 0.03, r, z);
+    }
+    if (!spokes) for (let k = 0; k < 8; k++) {
+      const a = k / 8 * Math.PI * 2;
+      part(list, new T.CylinderGeometry(0.022, 0.022, 0.04, 6).rotateZ(Math.PI / 2), CHROME, fx - sx * 0.06, r + Math.sin(a) * r * 0.3, z + Math.cos(a) * r * 0.3);
+    }
+    part(list, new T.CylinderGeometry(r * 0.13, r * 0.16, 0.05, 8).rotateZ(Math.PI / 2), spokes ? rim : CHROME, fx - sx * (spokes ? 0.03 : 0.07), r, z);
+  }
+  // headlamps swept back round the front corners (front is -Z), with a housing and a running-light strip
+  function headlamps(l, b, x, y, z, w = 0.38, h = 0.11, sweep = 0.24) {
+    for (const sx of [1, -1]) {
+      part(b, box(w + 0.04, h + 0.03, 0.05), BLACK, sx * x, y, z + 0.02, -sx * sweep);
+      part(l, box(w, h, 0.05), HEAD, sx * x, y + 0.01, z, -sx * sweep);
+      part(l, box(w * 0.85, 0.022, 0.05), DRL, sx * x, y - h / 2 - 0.005, z - 0.004, -sx * sweep);
+    }
+  }
+  function taillamps(l, b, x, y, z, w = 0.42, h = 0.13, sweep = 0.24) {
+    for (const sx of [1, -1]) {
+      part(b, box(w + 0.04, h + 0.04, 0.05), BLACK, sx * x, y, z - 0.02, sx * sweep);
+      part(l, box(w, h, 0.05), TAILC, sx * x, y, z, sx * sweep);
+    }
+  }
+  const plate = (list, y, z) => part(list, box(0.52, 0.12, 0.02), PLATE, 0, y, z);
+  function grille(list, w, h, y, z, frame = CHROME, bars = 3) {
+    part(list, box(w + 0.06, h + 0.06, 0.03), frame, 0, y, z + 0.01);
+    part(list, box(w, h, 0.03), BLACK, 0, y, z);
+    for (let i = 1; i <= bars; i++) part(list, box(w, 0.018, 0.02), frame, 0, y - h / 2 + h * i / (bars + 1), z - 0.016);
   }
 
   const TYPES = [
     {
-      id: 'sedan', name: 'CAR', len: 4.6, wid: 1.85, hgt: 1.48, mass: 1500, weight: 40, vmin: 21, vmax: 31, bonus: 300,
+      id: 'sedan', name: 'CAR', len: 4.6, wid: 1.85, hgt: 1.48, mass: 1500, weight: 30, vmin: 21, vmax: 31, bonus: 300,
       build(b, l) {
-        loft(b, [
+        const S = [
           [-2.30, 0.80, 0.30, 0.66, 0.76, 0.70, 0.68],
           [-2.05, 0.90, 0.24, 0.78, 0.88, 0.80, 0.78],
           [-1.05, 0.925, 0.24, 0.86, 0.90, 0.92, 0.82],
@@ -104,17 +207,27 @@
           [1.05, 0.925, 0.24, 0.92, 0.88, 1.38, 0.68],
           [1.65, 0.915, 0.25, 0.95, 0.88, 1.00, 0.80],
           [2.30, 0.86, 0.32, 0.92, 0.82, 0.95, 0.74],
-        ], [-0.7, 1.4]);
-        part(b, box(1.2, 0.14, 0.04), BLACK, 0, 0.5, -2.31);
-        carDetails(b, 1.85, 4.6, 0.95, -0.55, 0.62);
-        wheels(b, 1.85, 0.34, [-1.45, 1.45]);
-        lights(l, 1.85, 4.6, 0.72, 0.84);
+        ];
+        loft(b, S, [-0.7, 1.4]);
+        for (const z of [-1.45, 1.45]) { arch(b, 0.94, 0.34, z); for (const sx of [1, -1]) wheelAt(b, sx * 0.84, 0.34, z, 0.24); }
+        shut(b, S, -0.98, 0.42, 0.86); shut(b, S, 0.34, 0.38, 0.88); shut(b, S, 1.08, 0.78, 0.9);
+        pillar(b, S, 0.34); seal(b, S, -0.55, 1.3); handles(b, S, [-0.12, 0.92]);
+        mirrors(b, 0.9, 0.95, -0.5);
+        grille(b, 0.66, 0.14, 0.52, -2.315);
+        part(b, box(1.15, 0.09, 0.04), BLACK, 0, 0.36, -2.31);
+        plate(b, 0.43, -2.33);
+        headlamps(l, b, 0.56, 0.6, -2.3, 0.36, 0.09);
+        for (const sx of [1, -1]) part(l, box(0.12, 0.04, 0.03), AMBER, sx * 0.62, 0.37, -2.315);
+        taillamps(l, b, 0.58, 0.8, 2.31, 0.42, 0.12);
+        part(b, box(1.5, 0.1, 0.04), BLACK, 0, 0.4, 2.31);
+        plate(b, 0.6, 2.325);
+        part(b, cylZ(0.035, 0.14, 8), CHROME, 0.5, 0.33, 2.3);
       },
     },
     {
-      id: 'suv', name: 'SUV', len: 4.9, wid: 2.0, hgt: 1.85, mass: 2100, weight: 24, vmin: 20, vmax: 29, bonus: 350,
+      id: 'suv', name: 'SUV', len: 4.9, wid: 2.0, hgt: 1.85, mass: 2100, weight: 22, vmin: 20, vmax: 29, bonus: 350,
       build(b, l) {
-        loft(b, [
+        const S = [
           [-2.45, 0.92, 0.40, 0.86, 0.90, 0.92, 0.82],
           [-2.15, 0.98, 0.36, 1.00, 0.97, 1.05, 0.90],
           [-1.30, 1.00, 0.36, 1.08, 0.98, 1.14, 0.92],
@@ -123,76 +236,276 @@
           [1.70, 1.00, 0.36, 1.10, 0.96, 1.80, 0.86],
           [2.25, 0.98, 0.38, 1.10, 0.94, 1.72, 0.84],
           [2.45, 0.95, 0.42, 1.05, 0.90, 1.55, 0.82],
-        ], [-1.0, 2.2]);
-        part(b, box(1.3, 0.3, 0.05), BLACK, 0, 0.72, -2.46);
-        part(b, box(1.6, 0.05, 2.6), BLACK, 0, 1.86, 0.4);
-        carDetails(b, 2.0, 4.9, 1.2, -0.85, 0.8);
-        wheels(b, 2.0, 0.4, [-1.55, 1.55]);
-        lights(l, 2.0, 4.9, 0.96, 1.08);
+        ];
+        loft(b, S, [-1.0, 2.2]);
+        for (const z of [-1.55, 1.55]) { arch(b, 1.015, 0.4, z, TRIM); for (const sx of [1, -1]) wheelAt(b, sx * 0.9, 0.4, z, 0.27, ALLOY, 6); }
+        for (const sx of [1, -1]) part(b, box(0.03, 0.14, 2.0), TRIM, sx * 1.012, 0.47, 0);   // lower cladding
+        shut(b, S, -1.02, 0.56, 1.07); shut(b, S, 0.42, 0.52, 1.08); shut(b, S, 1.28, 0.9, 1.09);
+        pillar(b, S, 0.42); pillar(b, S, 1.62, 0.16); seal(b, S, -0.9, 2.1); handles(b, S, [0.1, 1.15]);
+        mirrors(b, 0.97, 1.2, -0.85);
+        for (const sx of [1, -1]) {   // roof rails
+          part(b, box(0.05, 0.045, 2.6), TRIM, sx * 0.72, 1.9, 0.4);
+          for (const z of [-0.8, 0.4, 1.6]) part(b, box(0.06, 0.07, 0.12), TRIM, sx * 0.72, 1.86, z);
+        }
+        grille(b, 0.92, 0.26, 0.68, -2.465, CHROME, 3);
+        part(b, box(1.75, 0.18, 0.06), TRIM, 0, 0.5, -2.46);
+        part(b, box(0.8, 0.05, 0.05), ALLOY, 0, 0.44, -2.49);
+        plate(b, 0.5, -2.5);
+        headlamps(l, b, 0.68, 0.84, -2.44, 0.38, 0.1);
+        taillamps(l, b, 0.74, 1.12, 2.45, 0.3, 0.16, 0.3);
+        part(b, box(1.8, 0.2, 0.06), TRIM, 0, 0.52, 2.46);
+        plate(b, 0.86, 2.465);
       },
     },
     {
       id: 'van', name: 'VAN', len: 5.4, wid: 2.05, hgt: 2.45, mass: 2800, weight: 12, vmin: 19, vmax: 27, bonus: 450,
       build(b, l) {
-        loft(b, [
+        const S = [
           [-2.70, 0.95, 0.40, 0.98, 0.95, 1.04, 0.90],
           [-2.35, 1.00, 0.36, 1.14, 1.00, 1.26, 0.95],
           [-1.65, 1.02, 0.36, 1.20, 1.00, 2.36, 0.97],
           [0.00, 1.025, 0.36, 1.22, 1.01, 2.40, 0.98],
           [2.60, 1.025, 0.36, 1.25, 1.01, 2.40, 0.98],
           [2.70, 1.00, 0.40, 1.25, 0.99, 2.38, 0.96],
-        ], [-2.4, -1.1]);
-        part(b, box(1.4, 0.32, 0.05), BLACK, 0, 0.75, -2.71);
-        carDetails(b, 2.05, 5.4, 1.45, -1.6, 0.7);
-        wheels(b, 2.05, 0.38, [-1.8, 1.8]);
-        lights(l, 2.05, 5.4, 0.9, 1.0);
+        ];
+        loft(b, S, [-2.4, -1.1]);
+        for (const z of [-1.8, 1.8]) { arch(b, 1.04, 0.38, z, TRIM); for (const sx of [1, -1]) wheelAt(b, sx * 0.93, 0.38, z, 0.25, ALLOY, 5); }
+        pillar(b, S, -1.12, 0.07); seal(b, S, -1.6, -1.12);
+        shut(b, S, -1.35, 0.84, 1.2); shut(b, S, -0.9, 0.55, 2.2); handles(b, S, [-1.0]);
+        // the sliding door on the kerb side (+X): its outline and rail
+        const p = profAt(S, 0.4);
+        ribbon(b, [[sideX(p, 0.6) + 0.01, 0.6, 0.6], [sideX(p, 1.4) + 0.01, 1.4, 0.6], [sideX(p, 2.2) + 0.01, 2.2, 0.6]], [0, 0, 1], 0.014, TRIM);
+        part(b, box(0.03, 0.03, 1.5), TRIM, 1.04, 2.2, -0.15);
+        part(b, box(0.03, 0.035, 0.15), CHROME, 1.04, 1.2, 0.45);
+        mirrors(b, 1.02, 1.45, -1.6, TRIM);
+        grille(b, 1.0, 0.22, 0.8, -2.715, TRIM, 2);
+        part(b, box(1.98, 0.2, 0.09), TRIM, 0, 0.52, -2.7);
+        plate(b, 0.52, -2.75);
+        headlamps(l, b, 0.7, 0.9, -2.69, 0.32, 0.13, 0.2);
+        // rear doors: two windows, the split, handles
+        for (const sx of [1, -1]) part(b, box(0.8, 0.55, 0.02), GLASS, sx * 0.46, 1.85, 2.705);
+        part(b, box(0.016, 1.75, 0.02), TRIM, 0, 1.45, 2.71);
+        part(b, box(0.15, 0.035, 0.03), CHROME, 0.14, 1.35, 2.715);
+        for (const sx of [1, -1]) part(l, box(0.14, 0.5, 0.04), TAILC, sx * 0.88, 1.15, 2.71);
+        part(b, box(2.02, 0.18, 0.12), TRIM, 0, 0.5, 2.7);
+        plate(b, 0.76, 2.715);
+        part(l, box(0.5, 0.04, 0.02), TAILC, 0, 2.33, 2.715);
       },
     },
     {
       id: 'bus', name: 'BUS', len: 12, wid: 2.55, hgt: 3.2, mass: 12000, weight: 6, vmin: 16, vmax: 22, bonus: 800, outer: true,
       build(b, l) {
         part(b, rbox(2.55, 2.75, 12, 0.22), BODY, 0, 1.78, 0);
-        part(b, box(2.58, 0.95, 10.4), GLASS, 0, 2.3, 0.6);
-        part(b, box(2.3, 1.55, 0.06), GLASS, 0, 2.05, -6.01);
-        part(b, box(2.58, 0.18, 12.02), [0.75, 0.12, 0.1], 0, 1.15, 0);
-        part(b, rbox(2.2, 0.3, 6, 0.1), [0.6, 0.6, 0.62], 0, 3.25, 0.8);
-        for (const sx of [-1, 1]) part(b, box(0.08, 0.35, 0.12), BLACK, sx * 1.36, 2.6, -5.8);
-        part(b, box(0.7, 0.2, 0.04), PLATE, 0, 0.7, 6.01);
-        wheels(b, 2.55, 0.5, [-4.0, 3.6]);
-        lights(l, 2.55, 12, 0.9, 1.1);
-        part(l, box(1.6, 0.18, 0.04), [1.6, 1.3, 0.2], 0, 3.0, -6.02);
+        // a band of side windows with black pillars, the seal below it, the livery stripe
+        part(b, box(2.57, 0.95, 10.2), GLASS, 0, 2.3, 0.6);
+        for (let z = -4.5; z <= 5.75; z += 1.275) part(b, box(2.59, 0.97, 0.08), BLACK, 0, 2.3, z);
+        part(b, box(2.585, 0.05, 10.25), TRIM, 0, 1.8, 0.6);
+        part(b, box(2.58, 0.16, 12.02), [0.75, 0.12, 0.1], 0, 1.15, 0);
+        // the front door on the +X side
+        part(b, box(0.03, 2.25, 1.2), TRIM, 1.28, 1.6, -5.15);
+        part(b, box(0.04, 2.1, 1.08), GLASS, 1.285, 1.6, -5.15);
+        part(b, box(0.05, 2.1, 0.03), BLACK, 1.29, 1.6, -5.15);
+        // front: big screen, destination sign, bumper, lamps, mirrors on arms
+        part(b, box(2.35, 1.4, 0.05), GLASS, 0, 2.0, -6.0);
+        part(b, box(2.1, 0.3, 0.05), TRIM, 0, 2.88, -6.0);
+        part(l, box(1.6, 0.14, 0.02), AMBER, 0, 2.88, -6.03);
+        part(b, box(2.52, 0.3, 0.14), TRIM, 0, 0.56, -6.0);
+        plate(b, 0.6, -6.08);
+        for (const sx of [1, -1]) {
+          part(b, box(0.48, 0.2, 0.04), BLACK, sx * 0.9, 0.95, -6.0);
+          part(l, box(0.4, 0.13, 0.03), HEAD, sx * 0.9, 0.96, -6.02);
+          part(l, box(0.12, 0.08, 0.03), AMBER, sx * 1.12, 0.78, -6.01);
+          part(b, box(0.25, 0.04, 0.4), TRIM, sx * 1.36, 2.75, -6.15);
+          part(b, box(0.08, 0.42, 0.2), TRIM, sx * 1.46, 2.45, -6.35);
+        }
+        // rear: window, engine grille, lamp clusters, bumper
+        part(b, box(2.1, 0.7, 0.04), GLASS, 0, 2.55, 6.0);
+        part(b, box(1.8, 0.62, 0.04), TRIM, 0, 1.25, 6.01);
+        for (let i = 0; i < 5; i++) part(b, box(1.7, 0.03, 0.02), STEEL, 0, 1.0 + i * 0.12, 6.03);
+        for (const sx of [1, -1]) part(l, box(0.2, 0.5, 0.04), TAILC, sx * 1.05, 1.15, 6.02);
+        part(b, box(2.52, 0.28, 0.14), TRIM, 0, 0.56, 6.0);
+        plate(b, 0.75, 6.03);
+        part(b, rbox(2.2, 0.3, 4, 0.1), [0.62, 0.62, 0.64], 0, 3.25, 1.2);   // roof air-con pod
+        arch(b, 1.276, 0.5, -4.0, TRIM); arch(b, 1.276, 0.5, 3.6, TRIM);
+        for (const sx of [1, -1]) {
+          wheelAt(b, sx * 1.12, 0.5, -4.0, 0.3, STEEL, 0);
+          wheelAt(b, sx * 1.12, 0.5, 3.6, 0.3, STEEL, 0); wheelAt(b, sx * 0.8, 0.5, 3.6, 0.3, STEEL, 0);
+        }
       },
     },
     {
       id: 'semi', name: 'SEMI', len: 16, wid: 2.55, hgt: 3.9, mass: 20000, weight: 7, vmin: 17, vmax: 23, bonus: 1000, outer: true,
       build(b, l) {
-        part(b, rbox(2.5, 2.3, 2.6, 0.25), BODY, 0, 2.0, -6.6);
-        part(b, rbox(2.45, 0.9, 1.0, 0.18), BODY, 0, 1.0, -7.75);
-        part(b, box(2.3, 0.85, 0.06), GLASS, 0, 2.55, -7.92);
-        part(b, box(1.6, 0.8, 0.05), CHROME, 0, 1.15, -8.27);
-        for (const sx of [-1, 1]) part(b, new T.CylinderGeometry(0.09, 0.09, 1.8, 10), CHROME, sx * 1.15, 3.3, -5.4);
-        part(b, rbox(2.55, 2.95, 12.6, 0.08), [0.92, 0.92, 0.92], 0, 2.42, 1.65);
-        part(b, box(2.2, 0.4, 13), BLACK, 0, 0.72, 0.5);
-        part(b, box(2.4, 0.25, 0.6), BLACK, 0, 0.62, -5.6);
-        wheels(b, 2.5, 0.52, [-6.8, -4.6, 5.0, 6.4]);
-        lights(l, 2.5, 16, 1.0, 1.2);
-        for (let i = -2; i <= 2; i++) part(l, box(0.1, 0.06, 0.04), [1.7, 0.8, 0.1], i * 0.3, 3.2, -7.95);
+        // tractor: frame, long hood, cab, sleeper under a roof fairing
+        part(b, box(1.0, 0.3, 6.7), TRIM, 0, 0.85, -4.6);
+        prism(b, [[-7.75, 0.85], [-7.75, 1.82], [-7.62, 1.96], [-6.25, 2.12], [-6.25, 0.85]], 2.0, BODY);
+        prism(b, [[-6.3, 0.9], [-6.3, 2.15], [-6.06, 2.95], [-5.95, 3.03], [-4.85, 3.03], [-4.85, 0.9]], 2.4, BODY);
+        part(b, rbox(2.4, 2.55, 1.1, 0.08), BODY, 0, 2.25, -4.32);
+        prism(b, [[-5.95, 3.0], [-3.78, 3.0], [-3.78, 3.86], [-4.35, 3.86]], 2.3, BODY);
+        grille(b, 1.15, 0.9, 1.38, -7.78, CHROME, 6);
+        part(b, box(2.45, 0.32, 0.26), CHROME, 0, 0.66, -7.86);
+        plate(b, 0.66, -8.0);
+        headlamps(l, b, 0.84, 1.15, -7.76, 0.3, 0.15, 0.3);
+        part(b, box(2.1, 0.78, 0.04), GLASS, 0, 2.55, -6.2, 0, 0.3);
+        part(b, box(0.06, 0.8, 0.05), BLACK, 0, 2.55, -6.2, 0, 0.3);
+        for (let i = -2; i <= 2; i++) part(l, box(0.1, 0.06, 0.04), AMBER, i * 0.3, 3.08, -5.97);
+        for (const sx of [1, -1]) {
+          // fender over the steer tyre, door window and shut line, tanks, stacks, mirrors, steps
+          part(b, new T.CylinderGeometry(0.64, 0.64, 0.38, 14, 1, true, -0.15, Math.PI + 0.3).rotateZ(Math.PI / 2), BODY, sx * 1.0, 0.52, -7.0);
+          part(b, box(0.04, 0.62, 0.8), GLASS, sx * 1.205, 2.5, -5.6);
+          part(b, box(0.03, 1.9, 0.02), TRIM, sx * 1.21, 1.9, -5.0);
+          part(b, cylZ(0.32, 1.2, 14), CHROME, sx * 1.0, 0.88, -5.4);
+          part(b, box(0.3, 0.06, 0.5), STEEL, sx * 1.2, 0.5, -6.0);
+          part(b, new T.CylinderGeometry(0.075, 0.075, 2.7, 8), CHROME, sx * 1.26, 2.55, -4.95);
+          part(b, box(0.3, 0.03, 0.03), TRIM, sx * 1.33, 2.5, -6.15);
+          part(b, box(0.06, 0.45, 0.16), TRIM, sx * 1.48, 2.5, -6.15);
+          part(b, box(0.45, 0.6, 0.02), TRIM, sx * 1.0, 0.6, -1.25);
+        }
+        for (const z of [-7.0]) for (const sx of [1, -1]) wheelAt(b, sx * 1.02, 0.52, z, 0.3, CHROME, 0);
+        for (const z of [-3.05, -1.85]) for (const sx of [1, -1]) { wheelAt(b, sx * 1.05, 0.52, z, 0.28, CHROME, 0); wheelAt(b, sx * 0.76, 0.52, z, 0.28, STEEL, 0); }
+        // trailer: white box, rails, landing gear, skirts, rear doors, underride bar, tandem axle
+        part(b, rbox(2.55, 2.65, 11.4, 0.06), WHITE, 0, 2.575, 2.3);
+        part(b, box(2.57, 0.12, 11.42), TRIM, 0, 1.29, 2.3);
+        part(b, box(1.0, 0.25, 3.2), TRIM, 0, 1.08, 6.2);
+        for (const sx of [1, -1]) {
+          part(b, box(0.08, 0.95, 0.08), STEEL, sx * 0.8, 0.72, -1.2);
+          part(b, box(0.2, 0.04, 0.2), STEEL, sx * 0.8, 0.25, -1.2);
+          part(b, box(0.03, 0.62, 4.6), STEEL, sx * 1.2, 0.9, 2.0);
+          part(b, box(0.5, 0.6, 0.02), TRIM, sx * 0.95, 0.6, 7.5);
+          for (const z of [-2.5, 0.5, 3.5, 6.5]) part(l, box(0.03, 0.06, 0.1), AMBER, sx * 1.285, 3.8, z);
+          for (const z of [5.6, 6.9]) { wheelAt(b, sx * 1.05, 0.52, z, 0.28, STEEL, 0); wheelAt(b, sx * 0.76, 0.52, z, 0.28, STEEL, 0); }
+          part(b, box(0.03, 2.45, 0.03), CHROME, sx * 0.32, 2.55, 8.02);
+          part(b, box(0.03, 2.45, 0.03), CHROME, sx * 0.95, 2.55, 8.02);
+          part(l, box(0.28, 0.12, 0.04), TAILC, sx * 0.95, 1.0, 8.04);
+          part(l, box(0.08, 0.06, 0.03), TAILC, sx * 1.15, 3.82, 8.02);
+          part(b, box(0.08, 0.6, 0.08), STEEL, sx * 0.7, 0.8, 7.85);
+        }
+        part(b, box(0.02, 2.5, 0.02), TRIM, 0, 2.55, 8.015);
+        part(b, box(2.5, 0.25, 0.1), TRIM, 0, 1.0, 7.97);
+        part(b, box(2.3, 0.12, 0.12), STEEL, 0, 0.55, 7.85);
       },
     },
     {
       id: 'box', name: 'TRUCK', len: 8, wid: 2.4, hgt: 3.4, mass: 7000, weight: 7, vmin: 18, vmax: 25, bonus: 700, outer: true,
       build(b, l) {
-        part(b, rbox(2.3, 2.0, 2.0, 0.22), BODY, 0, 1.5, -3.0);
-        part(b, box(2.1, 0.7, 0.06), GLASS, 0, 1.95, -4.01);
-        part(b, box(1.4, 0.5, 0.04), BLACK, 0, 0.95, -4.02);
-        part(b, rbox(2.4, 2.6, 5.8, 0.06), [0.88, 0.88, 0.88], 0, 2.1, 1.0);
-        part(b, box(2.0, 0.3, 7.6), BLACK, 0, 0.62, 0.1);
-        wheels(b, 2.3, 0.48, [-2.9, 2.6]);
-        lights(l, 2.3, 8, 0.9, 1.05);
+        // cab-over cab
+        prism(b, [[-4.0, 0.75], [-4.0, 1.55], [-3.92, 2.55], [-3.75, 2.7], [-2.2, 2.7], [-2.2, 0.75]], 2.2, BODY);
+        part(b, box(2.0, 0.85, 0.04), GLASS, 0, 2.02, -3.98, 0, 0.08);
+        part(b, box(0.05, 0.85, 0.05), BLACK, 0, 2.02, -3.99, 0, 0.08);
+        grille(b, 1.5, 0.3, 1.3, -4.02, TRIM, 3);
+        part(b, box(2.25, 0.3, 0.16), TRIM, 0, 0.66, -4.05);
+        plate(b, 0.66, -4.14);
+        headlamps(l, b, 0.8, 1.16, -4.02, 0.34, 0.14, 0.15);
+        for (const sx of [1, -1]) {
+          part(l, box(0.12, 0.06, 0.03), AMBER, sx * 0.98, 0.98, -4.02);
+          part(b, box(0.04, 0.72, 0.95), GLASS, sx * 1.105, 2.05, -3.3);
+          part(b, box(0.03, 1.75, 0.02), TRIM, sx * 1.11, 1.65, -2.72);
+          part(b, box(0.03, 0.035, 0.15), CHROME, sx * 1.115, 1.6, -2.9);
+          part(b, box(0.3, 0.05, 0.45), STEEL, sx * 1.0, 0.45, -2.7);
+          part(b, box(0.28, 0.03, 0.03), TRIM, sx * 1.22, 2.25, -3.75);
+          part(b, box(0.06, 0.45, 0.16), TRIM, sx * 1.36, 2.1, -3.75);
+          part(b, box(0.03, 0.08, 3.6), STEEL, sx * 1.12, 0.75, 0.6);   // side guard
+          part(b, cylZ(0.24, 0.9, 12), STEEL, sx * 0.85, 0.75, -1.6);
+        }
+        arch(b, 1.11, 0.48, -3.0, TRIM);
+        // the box: white, a floor sill, a roll-up door, lamps, underride bar
+        part(b, box(1.0, 0.25, 7.6), TRIM, 0, 0.85, 0.1);
+        part(b, rbox(2.4, 2.35, 6.0, 0.05), WHITE, 0, 2.225, 1.0);
+        part(b, box(2.41, 0.1, 6.02), TRIM, 0, 1.06, 1.0);
+        part(b, box(2.15, 2.1, 0.02), DOOR, 0, 2.2, 4.005);
+        for (let y = 1.35; y < 3.2; y += 0.22) part(b, box(2.15, 0.015, 0.02), STEEL, 0, y, 4.015);
+        part(b, box(0.3, 0.04, 0.04), CHROME, 0, 1.25, 4.03);
+        part(b, box(2.4, 0.3, 0.1), TRIM, 0, 0.9, 3.95);
+        part(b, box(2.1, 0.12, 0.12), STEEL, 0, 0.5, 3.92);
+        plate(b, 0.9, 4.01);
+        for (const sx of [1, -1]) {
+          part(l, box(0.24, 0.14, 0.04), TAILC, sx * 0.95, 0.9, 4.01);
+          part(l, box(0.06, 0.06, 0.03), TAILC, sx * 1.12, 3.32, 4.02);
+          part(l, box(0.03, 0.06, 0.06), AMBER, sx * 1.205, 3.32, -1.95);
+          part(b, box(0.08, 0.45, 0.08), STEEL, sx * 0.75, 0.7, 3.9);
+          part(b, box(0.5, 0.5, 0.02), TRIM, sx * 0.9, 0.55, 3.3);
+          wheelAt(b, sx * 1.0, 0.48, -3.0, 0.28, STEEL, 0);
+          wheelAt(b, sx * 1.0, 0.48, 2.6, 0.28, STEEL, 0); wheelAt(b, sx * 0.7, 0.48, 2.6, 0.28, STEEL, 0);
+        }
+      },
+    },
+    {
+      id: 'hatch', name: 'CAR', len: 4.1, wid: 1.78, hgt: 1.48, mass: 1250, weight: 16, vmin: 21, vmax: 30, bonus: 300,
+      build(b, l) {
+        const S = [
+          [-2.05, 0.78, 0.30, 0.68, 0.75, 0.72, 0.68],
+          [-1.85, 0.86, 0.25, 0.78, 0.84, 0.82, 0.76],
+          [-1.05, 0.885, 0.25, 0.86, 0.86, 0.94, 0.78],
+          [-0.45, 0.885, 0.25, 0.88, 0.85, 1.44, 0.68],
+          [0.60, 0.885, 0.25, 0.90, 0.84, 1.47, 0.68],
+          [1.55, 0.88, 0.27, 0.93, 0.82, 1.40, 0.66],
+          [1.95, 0.84, 0.32, 0.92, 0.78, 1.18, 0.66],
+          [2.05, 0.80, 0.36, 0.90, 0.75, 1.10, 0.64],
+        ];
+        loft(b, S, [-0.6, 1.7]);
+        for (const z of [-1.3, 1.3]) { arch(b, 0.9, 0.32, z); for (const sx of [1, -1]) wheelAt(b, sx * 0.79, 0.32, z, 0.23, ALLOY, 4); }
+        shut(b, S, -0.88, 0.42, 0.86); shut(b, S, 0.42, 0.38, 0.89); shut(b, S, 1.12, 0.72, 0.92);
+        pillar(b, S, 0.42); pillar(b, S, 1.45, 0.14); seal(b, S, -0.5, 1.62); handles(b, S, [0.0, 0.95]);
+        mirrors(b, 0.86, 0.95, -0.45);
+        grille(b, 0.6, 0.1, 0.5, -2.065, TRIM, 1);
+        part(b, box(1.1, 0.12, 0.04), BLACK, 0, 0.37, -2.06);
+        plate(b, 0.42, -2.075);
+        headlamps(l, b, 0.55, 0.62, -2.05, 0.34, 0.1, 0.3);
+        taillamps(l, b, 0.62, 0.95, 2.06, 0.26, 0.14, 0.35);
+        part(b, box(1.45, 0.12, 0.04), BLACK, 0, 0.45, 2.06);
+        plate(b, 0.7, 2.065);
+      },
+    },
+    {
+      id: 'pickup', name: 'PICKUP', len: 5.4, wid: 2.0, hgt: 1.9, mass: 2300, weight: 10, vmin: 20, vmax: 28, bonus: 380,
+      build(b, l) {
+        const S = [
+          [-2.70, 0.92, 0.45, 0.95, 0.92, 1.00, 0.85],
+          [-2.45, 1.00, 0.40, 1.10, 0.99, 1.14, 0.94],
+          [-1.25, 1.00, 0.40, 1.16, 0.98, 1.24, 0.94],
+          [-0.75, 1.00, 0.40, 1.18, 0.97, 1.82, 0.86],
+          [0.20, 1.00, 0.40, 1.19, 0.96, 1.86, 0.86],
+          [0.45, 1.00, 0.40, 1.19, 0.96, 1.84, 0.86],
+        ];
+        loft(b, S, [-0.9, 0.42]);
+        part(b, box(1.4, 0.42, 0.02), GLASS, 0, 1.55, 0.455);
+        // the bed: sides, front wall, floor, tailgate
+        for (const sx of [1, -1]) part(b, box(0.08, 0.78, 2.25), BODY, sx * 0.96, 0.8, 1.6);
+        part(b, box(1.92, 0.05, 2.25), TRIM, 0, 0.72, 1.6);
+        part(b, box(1.84, 0.4, 0.05), BODY, 0, 0.98, 0.5);
+        part(b, box(2.0, 0.78, 0.08), BODY, 0, 0.8, 2.68);
+        part(b, box(0.2, 0.04, 0.03), TRIM, 0, 1.05, 2.725);
+        for (const z of [-1.75, 1.85]) { arch(b, 1.015, 0.41, z, TRIM); for (const sx of [1, -1]) wheelAt(b, sx * 0.9, 0.41, z, 0.28, ALLOY, 6); }
+        shut(b, S, -0.95, 0.62, 1.15); shut(b, S, 0.3, 0.55, 1.17); pillar(b, S, -0.1); seal(b, S, -0.75, 0.4);
+        handles(b, S, [-0.35, 0.15]);
+        mirrors(b, 0.97, 1.25, -0.75);
+        grille(b, 1.2, 0.34, 0.78, -2.715, CHROME, 2);
+        part(b, box(1.95, 0.2, 0.14), CHROME, 0, 0.5, -2.72);
+        plate(b, 0.5, -2.8);
+        headlamps(l, b, 0.76, 0.86, -2.69, 0.3, 0.14, 0.25);
+        for (const sx of [1, -1]) part(l, box(0.1, 0.36, 0.04), TAILC, sx * 0.92, 1.0, 2.725);
+        part(b, box(2.0, 0.18, 0.15), CHROME, 0, 0.5, 2.78);
+        plate(b, 0.5, 2.86);
       },
     },
   ];
   G.TRAFFIC_TYPES = TYPES;
+
+  // the body material: only paint takes the instance colour; trim and tyres go matte
+  G.trafficBodyMaterial = () => {
+    const m = new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.45, clearcoat: 0.8, clearcoatRoughness: 0.12 });
+    m.onBeforeCompile = (s) => {
+      s.vertexShader = s.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float paint;\nvarying float vFin;')
+        .replace('#include <color_vertex>', '#include <color_vertex>\nvFin = paint;\n#ifdef USE_INSTANCING_COLOR\nvColor.xyz = color.xyz * mix(vec3(1.0), instanceColor.xyz, step(0.5, paint) * step(paint, 1.5));\n#endif');
+      s.fragmentShader = s.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vFin;')
+        .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nif (vFin > 1.5) { metalnessFactor = 0.0; roughnessFactor = 0.75; }')
+        .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nif (vFin > 1.5) material.clearcoat = 0.0;\n#endif');
+    };
+    m.customProgramCacheKey = () => 'traffic-paint';
+    return m;
+  };
 
   const DENSITY = { off: 0, light: 45, medium: 95, heavy: 165, insane: 260 };
   G.TRAFFIC_DENSITY = DENSITY;
@@ -227,7 +540,7 @@
         const b = [], l = [];
         t.build(b, l);
         const bg = mergeGeometries(b), lg = mergeGeometries(l);
-        const bm = new T.InstancedMesh(bg, new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.45, clearcoat: 0.8, clearcoatRoughness: 0.12 }), counts[ti]);
+        const bm = new T.InstancedMesh(bg, G.trafficBodyMaterial(), counts[ti]);
         const lm = new T.InstancedMesh(lg, new T.MeshBasicMaterial({ vertexColors: true, toneMapped: false }), counts[ti]);
         bm.castShadow = shadows; bm.frustumCulled = false; lm.frustumCulled = false;
         bm.instanceMatrix.setUsage(T.DynamicDrawUsage); lm.instanceMatrix.setUsage(T.DynamicDrawUsage);

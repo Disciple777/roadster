@@ -15,13 +15,40 @@
       sunDir: [0.75, 0.16, -0.62], env: 0.9, litRatio: 0.22, win: 0.9, stars: 0, exposure: 0.9,
       lampPool: 0.35, steam: 1.05,
     },
+    dawn: {
+      zenith: 0x24335e, horizon: 0xf2a08e, glow: 0xffd2a6, fog: 0x8c8aa2, fogDensity: 0.0022,
+      hemiSky: 0xc4c8e6, hemiGround: 0x2e2832, hemi: 0.9, moon: 0xffc9a2, moonI: 2.1,
+      sunDir: [-0.72, 0.13, 0.68], env: 0.75, litRatio: 0.16, win: 0.75, stars: 0, exposure: 0.95,
+      lampPool: 0.25, steam: 1.0,
+    },
+    day: {
+      zenith: 0x3a6fb8, horizon: 0xbfd3e6, glow: 0xe8eef5, fog: 0xa9bccd, fogDensity: 0.0016,
+      hemiSky: 0xcfe3ff, hemiGround: 0x5a5048, hemi: 1.1, moon: 0xfff1dc, moonI: 3.2,
+      sunDir: [0.5, 0.75, 0.35], env: 1.0, litRatio: 0.05, win: 0.15, stars: 0, exposure: 0.85,
+      lampPool: 0.0, steam: 1.1,
+    },
+    overcast: {
+      zenith: 0x5e656d, horizon: 0x8e959b, glow: 0xa2a8ad, fog: 0x7a8187, fogDensity: 0.0036,
+      hemiSky: 0xb8c0c8, hemiGround: 0x34383c, hemi: 1.15, moon: 0xd4dbe2, moonI: 0.45,
+      sunDir: [0.3, 0.85, 0.2], env: 0.7, litRatio: 0.14, win: 0.55, stars: 0, exposure: 0.9,
+      lampPool: 0.12, steam: 1.1,
+    },
+    dusk: {
+      zenith: 0x101a3a, horizon: 0xd06a4a, glow: 0xff9a60, fog: 0x4a4058, fogDensity: 0.0024,
+      hemiSky: 0x9a88b0, hemiGround: 0x201a22, hemi: 0.8, moon: 0xffa070, moonI: 1.6,
+      sunDir: [-0.7, 0.08, -0.7], env: 0.7, litRatio: 0.3, win: 1.1, stars: 0, exposure: 1.0,
+      lampPool: 0.5, steam: 0.95,
+    },
   };
   G.TOD = TOD;
+  // the setting is a preset name, or 'auto' = the circuit's own default (G.TRACKS[id].tod)
+  G.todName = (tod, trackId = G.TRACK_ID) => (TOD[tod] ? tod : (G.TRACKS[trackId] || {}).tod || 'night');
+  G.todOf = (S, trackId) => TOD[G.todName(S.tod, trackId)];
   G.makeBuildingMaterial = (tod, detail) => makeBuildingMaterial(tod, detail);
 
   G.buildCity = function (game) {
     const { scene, track, Q } = game;
-    const tod = TOD[game.settings.tod] || TOD.night;
+    const tod = G.todOf(game.settings);
     const R = G.rng(1234);
     const city = { tod, update: null };
 
@@ -580,7 +607,7 @@
       sun.target.position.copy(focus);
       sun.position.copy(focus).addScaledVector(sunDir, 160);
     };
-    // switch night <-> sunset live: everything that was baked from the TOD table at build time
+    // switch the time of day live: everything that was baked from the TOD table at build time
     city.setTod = (name) => {
       const t = TOD[name] || TOD.night;
       city.tod = t;

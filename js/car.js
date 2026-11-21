@@ -349,8 +349,8 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     },
     {
       id: 'shard', name: 'SHARD', desc: 'Folded-steel armoured truck: flat slab roof, hexagonal arches and a big turbine in the cargo bed.',
-      glb: 'models/shard.glb', v: 1, hand: true,
-      kit: { rear: [[0, 1.28, 2.52]], rearW: 2.2, sideX: 1.0, sideY: 0.62, wheelR: 0.47, wheelX: 0.95 },
+      glb: 'models/shard.glb', v: 2, hand: true,
+      kit: { rear: [[0, 1.38, 2.52]], rearW: 2.2, sideX: 1.0, sideY: 0.72, wheelR: 0.47, wheelX: 0.95 },
     },
   ];
   G.PAINTS = [
