@@ -15,6 +15,7 @@ How the RoadsterThruster cars are made, and the numbers they have to fit.
 | comet2 | COMET v2 | `tools/model_comet2.py` | locked |
 | bastion2 | BASTION v2 | `tools/model_bastion2.py` | locked |
 | atlas | ATLAS | `tools/model_atlas.py` | locked |
+| shard | SHARD | `tools/model_shard.py` | locked |
 | comet, bastion | COMET, BASTION | Meshy + `tools/prep_car.py` | showroom only |
 | pebble | PEBBLE | Tripo + `tools/prep_car.py` | showroom only |
 
@@ -42,6 +43,7 @@ In `js/car.js`:
 | COMET v2 | complete the official Obstacle Course without wrecking (solo or multiplayer) | `finishCourse()` sets `courseDone` |
 | BASTION v2 | finish a multiplayer race with at least one other person | `mpProgress()` sets `mpRaced` |
 | ATLAS | finish the World Tour in P1 | the tour's last race sets `tourWin` |
+| SHARD | win a Street Race on DEVIL'S FJORD (World Tour leg counts) | `finish()` sets `fjordWin` |
 
 `game.checkUnlocks()` runs after each of those (and once at startup, so old progress counts). It moves met goals into
 `rt_unlockedCars` and shows a "NEW CAR UNLOCKED" toast per car. To add a goal: add an `G.UNLOCKS` entry, record its
@@ -82,6 +84,7 @@ Then, in the same chat: "Now the exact same car from a rear three-quarter view, 
 > grey clay, no decals, no text.
 
 Then, in the same chat: "Now the exact same car from a rear three-quarter view, same style, flat matte grey."
+The model gives SHARD a flat roof instead of the concept's peak (the user's call: the peak looked crooked).
 
 ### 2. Model script
 Write `tools/model_<id>.py`. It starts with:

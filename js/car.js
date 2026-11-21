@@ -347,6 +347,11 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       glb: 'models/atlas.glb', v: 1, hand: true,
       kit: { rear: [[0.4, 1.0, 2.56], [-0.4, 1.0, 2.56]], rearW: 2.1, sideX: 1.18, sideY: 0.45, wheelR: 0.42, wheelX: 0.92 },
     },
+    {
+      id: 'shard', name: 'SHARD', desc: 'Folded-steel armoured truck: flat slab roof, hexagonal arches and a big turbine in the cargo bed.',
+      glb: 'models/shard.glb', v: 1, hand: true,
+      kit: { rear: [[0, 1.28, 2.52]], rearW: 2.2, sideX: 1.0, sideY: 0.62, wheelR: 0.47, wheelX: 0.95 },
+    },
   ];
   G.PAINTS = [
     { name: 'Arctic', hex: 0xd9dcdf }, { name: 'Rosso', hex: 0xb3121b }, { name: 'Ember', hex: 0xe0561a }, { name: 'Solar', hex: 0xe8b51c },
@@ -355,13 +360,13 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   ];
   // Garage roster, in display order. START_CARS can be picked from the first run; the rest show locked.
   // The Meshy/Tripo cars (comet, bastion, pebble) stay showroom-only. Ctrl+Shift+U toggles "unlock all" for testing.
-  G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2', 'atlas'];
+  G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2', 'atlas', 'shard'];
   G.START_CARS = ['thruster', 'mantis', 'ridgeback'];
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
   G.carUnlocked = (id) => G.START_CARS.includes(id) || G.store.get('unlockAll', false) || G.store.get('unlockedCars', []).includes(id);
 
   // ---- unlocks: each locked Garage car has one goal. Progress lives in localStorage rt_progress
-  // ({ tracks: [ids with a finished street race], officialWin, courseDone, mpRaced, tourWin }); stunt levels count from
+  // ({ tracks: [ids with a finished street race], officialWin, courseDone, mpRaced, tourWin, fjordWin }); stunt levels count from
   // rt_chalLvl_<i> (any cleared level, practice included). G.checkUnlocks() moves met goals into rt_unlockedCars.
   const prog = () => G.store.get('progress', {});
   G.progress = (patch) => { const p = Object.assign(prog(), patch); G.store.set('progress', p); return p; };
@@ -372,6 +377,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     comet2: { goal: 'Complete the Obstacle Course without wrecking', of: () => [prog().courseDone ? 1 : 0, 1] },
     bastion2: { goal: 'Race a friend in Multiplayer', of: () => [prog().mpRaced ? 1 : 0, 1] },
     atlas: { goal: 'Win the World Tour', of: () => [prog().tourWin ? 1 : 0, 1] },
+    shard: { goal: "Win a Street Race on DEVIL'S FJORD", of: () => [prog().fjordWin ? 1 : 0, 1] },
   };
   // "goal (k/n)" for the Garage
   G.unlockHint = (id) => { const u = G.UNLOCKS[id]; if (!u) return ''; const [k, n] = u.of(); return n > 1 ? `${u.goal} (${k}/${n})` : u.goal; };
