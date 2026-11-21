@@ -34,6 +34,12 @@
   // what keeps a run off the leaderboard, in words (empty: it's official)
   G.unofficial = (mode, laps, S) => {
     const miss = [];
+    if (mode === 'tour') { // a WORLD TOUR: every race in heavy traffic against pro rivals
+      const O = G.OFFICIAL_RACE;
+      if (S.traffic !== O.traffic) miss.push(O.traffic.toUpperCase() + ' traffic');
+      if (S.difficulty !== O.difficulty) miss.push(O.difficulty.toUpperCase() + ' rivals');
+      return miss;
+    }
     if (laps !== G.OFFICIAL_LAPS[mode]) miss.push(`${G.OFFICIAL_LAPS[mode]} lap${G.OFFICIAL_LAPS[mode] > 1 ? 's' : ''}`);
     if (mode === 'race') {
       const O = G.OFFICIAL_RACE;

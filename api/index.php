@@ -14,7 +14,8 @@
  *   POST {a:"admin_check" | "official_save" | "shared_delete", key, ...}   race control (passkey)
  *
  * Only official runs count: a 2-lap street race in heavy traffic against 7 pro rivals, or 1 lap of the
- * obstacle course.
+ * obstacle course. A WORLD TOUR (track "world", mode "tour") counts when every race ran in heavy traffic
+ * against pro rivals: laps = races in the tour, score = tour points, time_ms = every race's time added up.
  */
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
@@ -23,8 +24,8 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 
-const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps', 'isle', 'fjord', 'stunt', 'stunt15', 'stunt1', 'stunt2', 'stunt3']; // stunt*: STUNT CHALLENGE runs (their own levels)
-const MODES = ['race', 'course', 'chal'];
+const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps', 'isle', 'fjord', 'stunt', 'stunt15', 'stunt1', 'stunt2', 'stunt3', 'world']; // stunt*: STUNT CHALLENGE runs (their own levels); world: the WORLD TOUR
+const MODES = ['race', 'course', 'chal', 'tour'];  // tour: a whole WORLD TOUR, score = points, time = all races added up
 const COURSES = ['street'];
 const OFFICIAL_LAPS = ['race' => 2, 'course' => 1, 'chal' => 15]; // chal: levels in the run (see CHAL_LAPS)
 const CHAL_LAPS = ['stunt' => 5, 'stunt15' => 15, 'stunt1' => 5, 'stunt2' => 5, 'stunt3' => 5]; // levels per stunt challenge run
@@ -95,14 +96,22 @@ function submit(): void {
     $name = rd_name(rd_in('name', ''));
     $track = rd_pick('track', TRACKS);
     $mode = rd_pick('mode', MODES);
-    $official = $mode === 'chal' ? (CHAL_LAPS[(string) rd_in('track', '')] ?? -1) : OFFICIAL_LAPS[$mode];
-    if ((int) rd_in('laps', 0) !== $official) rd_fail(400, 'not_official', 'Only official-length runs are ranked.');
+    if (($mode === 'tour') !== ($track === 'world')) rd_fail(400, 'bad_track');
+    $laps = (int) rd_in('laps', 0);
+    if ($mode === 'tour') {
+        if ($laps < 5 || $laps > 40) rd_fail(400, 'not_official', 'Only a whole World Tour is ranked.');
+        if ((string) rd_in('traffic', '') !== OFFICIAL_RACE['traffic'] || (string) rd_in('difficulty', '') !== OFFICIAL_RACE['difficulty'])
+            rd_fail(400, 'not_official', 'Ranked tours use heavy traffic and pro rivals.');
+    } else {
+        $official = $mode === 'chal' ? (CHAL_LAPS[(string) rd_in('track', '')] ?? -1) : OFFICIAL_LAPS[$mode];
+        if ($laps !== $official) rd_fail(400, 'not_official', 'Only official-length runs are ranked.');
+    }
     if ($mode === 'race' && ((string) rd_in('traffic', '') !== OFFICIAL_RACE['traffic'] || (int) rd_in('rivals', 0) !== OFFICIAL_RACE['rivals']
         || (string) rd_in('difficulty', '') !== OFFICIAL_RACE['difficulty'])) rd_fail(400, 'not_official', 'Ranked street races use heavy traffic and 7 pro rivals.');
     $time = (int) rd_in('time_ms', 0);
     $score = (int) rd_in('score', 0);
-    if ($time < 15000 || $time > 3600000) rd_fail(400, 'bad_time');
-    if ($score < 0 || $score > 20000000) rd_fail(400, 'bad_score');
+    if ($time < 15000 || $time > ($mode === 'tour' ? 4 * 3600000 : 3600000)) rd_fail(400, 'bad_time');
+    if ($score < 0 || $score > ($mode === 'tour' ? 10 * $laps : 20000000)) rd_fail(400, 'bad_score');
 
     $db = rd_db(); $p = rd_prefix(); $now = time();
     $st = $db->prepare("SELECT id, time_ms, score FROM {$p}scores WHERE pid = ? AND track = ? AND mode = ?");

@@ -640,22 +640,22 @@
       click('btn-board', () => { this.board.track = G.TRACK_ID; this.showPanel('board'); this.loadBoard(); });
       // from the results: the board for the circuit and mode just driven (BACK returns to the results)
       click('btn-rboard', () => {
-        this.board.track = G.TRACK_ID; this.board.mode = this.mode === 'challenge' ? 'chal' : this.mode === 'course' ? 'course' : 'race';
+        this.board.track = G.TRACK_ID; this.board.mode = this.tourAgain ? 'tour' : this.mode === 'challenge' ? 'chal' : this.mode === 'course' ? 'course' : 'race';
         this.showPanel('board'); this.loadBoard();
       });
       for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) {
         $(id).addEventListener('click', (e) => {
           const b = e.target.closest('button[data-v]');
           if (b) { this.board[key] = b.dataset.v; this.loadBoard(); }
-          if (b && key === 'track' && this.board.mode === 'chal') { this.board.mode = 'race'; this.loadBoard(); }
+          if (b && key === 'track' && (this.board.mode === 'chal' || this.board.mode === 'tour')) { this.board.mode = 'race'; this.loadBoard(); }
         });
       }
     }
     async loadBoard() {
       const B = this.board, req = ++B.req, rowsEl = $('b-rows'), mineEl = $('b-mine');
-      const chal = B.mode === 'chal';
-      if (chal) B.track = G.CHAL_RUN.courses[0].track; else if (/^stunt/.test(B.track)) B.track = G.TRACK_ID;
-      $('b-track').classList.toggle('hidden', chal);
+      const chal = B.mode === 'chal', tour = B.mode === 'tour';
+      if (chal) B.track = G.CHAL_RUN.courses[0].track; else if (tour) B.track = 'world'; else if (/^stunt|^world$/.test(B.track)) B.track = G.TRACK_ID;
+      $('b-track').classList.toggle('hidden', chal || tour);
       for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === B[key]));
       rowsEl.innerHTML = '<div class="empty">Loading…</div>'; mineEl.textContent = '';
       if (this.submitP) await this.submitP; // a run still being sent: show the board with it on
@@ -666,13 +666,19 @@
       const race = B.mode === 'race', esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
       rowsEl.innerHTML = res.rows.length
         ? res.rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''}"><span class="p">${i + 1}</span><span class="n">${esc(r.name)}</span>` +
-            (race ? `<span class="t">${G.fmtTime(r.time_ms / 1000)}</span>` : `<span class="when">${G.fmtTime(r.time_ms / 1000)}</span><span class="t">${r.score.toLocaleString()}</span>`) + '</div>').join('')
-        : `<div class="empty">${chal ? 'No Stunt Challenge runs yet. Be the first!' : `No official ${race ? '2-lap races' : 'course runs'} on this track yet. Be the first!`}</div>`;
+            (race ? `<span class="t">${G.fmtTime(r.time_ms / 1000)}</span>` : `<span class="when">${G.fmtTime(r.time_ms / 1000)}</span><span class="t">${r.score.toLocaleString()}${tour ? ' PTS' : ''}</span>`) + '</div>').join('')
+        : `<div class="empty">${chal ? 'No Stunt Challenge runs yet. Be the first!' : tour ? 'No ranked World Tours yet (heavy traffic, pro rivals). Be the first!' : `No official ${race ? '2-lap races' : 'course runs'} on this track yet. Be the first!`}</div>`;
       const m = res.mine;
-      mineEl.textContent = m ? `Your best: #${m.rank} of ${res.total} · ${race ? G.fmtTime(m.time_ms / 1000) : m.score.toLocaleString() + ' pts'}` : `${res.total} driver${res.total === 1 ? '' : 's'} ranked`;
+      mineEl.textContent = m ? `Your best: #${m.rank} of ${res.total} · ${race ? G.fmtTime(m.time_ms / 1000) : m.score.toLocaleString() + ' pts' + (tour ? ' in ' + G.fmtTime(m.time_ms / 1000) : '')}` : `${res.total} driver${res.total === 1 ? '' : 's'} ranked`;
     }
     // setup panel: say whether this setup will be ranked
     updateOfficial() {
+      const te = $('t-official'), tm = G.unofficial('tour', 0, this.settings), tt = G.tourState();
+      if (te) {
+        te.classList.toggle('ok', !tm.length && !(tt && tt.ranked === false));
+        te.textContent = tm.length ? `Practice tour. Ranked tours need ${tm.join(' and ')} in every race.`
+          : tt && tt.ranked === false ? 'This tour had a practice race in it: it stays off the leaderboard.' : '★ Official setup: this tour goes on the WORLD TOUR leaderboard.';
+      }
       const el = $('s-official'), mode = this.pendingMode;
       if (!el || (mode !== 'race' && mode !== 'course')) return;
       const miss = G.unofficial(mode, mode === 'race' ? this.settings.laps : this.settings.courseLaps, this.settings);
@@ -1556,6 +1562,8 @@
     tourFinish(rows) {
       const t = G.tourState();
       if (!t || t.order[t.i] !== G.TRACK_ID) return;
+      t.time = (t.time || 0) + this.raceTime; // the whole tour's driving time: the leaderboard's tie-break
+      t.ranked = t.ranked !== false && !G.unofficial('tour', 0, this.settings).length; // every race on the official setup
       G.tourScore(t, rows);
       const last = t.races[t.races.length - 1], n = t.order.length, done = t.i >= n;
       const st = G.tourStandings(t), myPos = st.findIndex((r) => r.me) + 1, me = st[myPos - 1];
@@ -1569,6 +1577,7 @@
         $('res-rows').innerHTML = G.tourChartHTML(t);
         $('res-stats').innerHTML = `<div><b>${me.pts}</b><small>TOUR POINTS</small></div><div><b>${me.wins}</b><small>RACE WINS</small></div><div><b>P${myPos}</b><small>FINAL STANDING</small></div>`;
         $('res-board').textContent = myPos === 1 ? 'Champion of the world. Nobody can take this one off you.' : `${st[0].name} takes the tour. Run it again?`;
+        this.submitTour(t, me);
         this.tourLabel('NEW TOUR');
         this.tour = null;
       } else {
@@ -1579,6 +1588,19 @@
         $('res-board').textContent = `Next up: ${(G.TRACKS[t.order[t.i]] || {}).name}${t.i === n - 1 ? ', the final round' : ''}.`;
         this.tourLabel('NEXT RACE');
       }
+    }
+    // a finished tour on the official setup goes on the WORLD TOUR board: points, then the total time
+    submitTour(t, me) {
+      const el = $('res-board'), said = el.textContent;
+      if (t.ranked === false) { el.textContent = said + ' Practice tour: ranked tours need HEAVY traffic and PRO rivals in every race.'; return; }
+      el.textContent = said + ' Sending to the leaderboard…';
+      this.submitP = G.api.submit({
+        name: this.settings.mpName, track: 'world', mode: 'tour', laps: t.order.length,
+        traffic: this.settings.traffic, difficulty: this.settings.difficulty, rivals: G.TOUR.rivals,
+        time_ms: Math.round((t.time || 0) * 1000), score: me.pts,
+      }).then((r) => {
+        el.innerHTML = `${r.best ? 'NEW PERSONAL BEST · ' : ''}<b>#${r.rank}</b> of ${r.total} on the WORLD TOUR leaderboard`;
+      }).catch(() => { el.textContent = said + ' Leaderboard offline: this tour was not saved.'; }).finally(() => { this.submitP = null; });
     }
     // the tour panel: stops, standings so far, and whether this starts or continues one
     buildTourPanel() {
@@ -1591,6 +1613,7 @@
       $('tour-last').textContent = !t && lt ? (lt.pos === 1 ? `Last tour: WORLD CHAMPION with ${lt.pts} points.` : `Last tour: P${lt.pos} of ${lt.of} with ${lt.pts} points.`) : '';
       $('btn-tgo').textContent = going ? `RACE ${t.i + 1}: ${(G.TRACKS[t.order[t.i]] || {}).name}` : 'START TOUR';
       $('btn-tquit').classList.toggle('hidden', !going);
+      this.updateOfficial();
     }
 
     updateStunts(dt) {

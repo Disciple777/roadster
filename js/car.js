@@ -343,8 +343,8 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       kit: { rear: [[-0.46, 1.95, 2.44], [0.46, 1.95, 2.44]], rearW: 2.1, sideX: 1.1, sideY: 0.85, wheelR: 0.52, wheelX: 1.10 },
     },
     {
-      id: 'atlas', name: 'ATLAS', desc: 'The World Tour champion GT: bubble canopy, two big deck turbines and a hoop wing orbiting the tail.',
-      glb: 'models/atlas.glb', v: 1, hand: true,
+      id: 'atlas', name: 'ATLAS', desc: 'The World Tour champion GT: bubble canopy, two big deck turbines and a swept arch over the tail.',
+      glb: 'models/atlas.glb', v: 2, hand: true,
       kit: { rear: [[0.4, 1.0, 2.56], [-0.4, 1.0, 2.56]], rearW: 2.1, sideX: 1.18, sideY: 0.45, wheelR: 0.42, wheelX: 0.92 },
     },
     {

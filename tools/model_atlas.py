@@ -1,4 +1,4 @@
-# ATLAS: long grand-tourer with a bubble canopy, twin deck turbines and a hoop wing orbiting over the tail.
+# ATLAS: long grand-tourer with a bubble canopy, twin deck turbines and a swept arch over the tail.
 # The prize for winning the World Tour. Hand-modelled from models/source/atlas_{front,rear}.png.
 # blender -b -P tools/model_atlas.py -- models/atlas.glb [--renders DIR] [--blend models/source/atlas.blend]
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -103,35 +103,32 @@ for sx in (1, -1):
     lathe('lip', [(0.386, TEXIT + 0.04), (0.398, TEXIT + 0.02), (0.398, TEXIT), (TR, TEXIT - 0.005)], (x, 0, TZ), m='metal')
     fan(x, TEXIT + 0.12, TZ, TR, -1)
 
-# ---------------- hoop wing: a flat band orbiting over the tail on two swept pylons ----------------
-RY, RA, RB, RZ = -1.62, 0.98, 1.0, 1.46
-def ring_at(t):
-    s, c = math.sin(t), math.cos(t)
-    return Vector((RA * c, RY + RB * s, RZ - 0.14 * s))
+# ---------------- tail arch: two swept legs rise from the haunches beside the turbines, bow outwards and meet in a
+# flattened crown over the canopy, the whole arch leaning back over the tail (models/source/atlas_tail_ref.png) ----------------
+AZB, YB, LEAN = 0.98, -1.3, 0.75          # leg foot height and position, metres back per metre up
+XF, XW, ZW, ZTOP = 0.88, 1.12, 1.7, 2.02   # foot / widest half-width, height of the widest point, crown height
+leg = []
+for k in range(25):                       # cubic: foot -> bowing out -> vertical at the widest point
+    t = k / 24; P = [(XF, AZB - 0.16), (XF + 0.04, AZB + 0.3), (XW, ZW - 0.36), (XW, ZW)]
+    leg.append(tuple(sum(c * p[i] for c, p in zip(((1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3), P)) for i in (0, 1)))
+crown = [(XW * math.cos(f), ZW + (ZTOP - ZW) * math.sin(f)) for f in np.linspace(0, math.pi, 49)]
+c2 = [(-x, z) for x, z in leg] + list(reversed(crown))[1:-1] + list(reversed(leg))   # left foot -> crown -> right foot
+c2 = np.array(c2); seg = np.r_[0, np.cumsum(np.linalg.norm(np.diff(c2, axis=0), axis=1))]
+S = np.linspace(0, seg[-1], 161)
+xs, zs = np.interp(S, seg, c2[:, 0]), np.interp(S, seg, c2[:, 1])
+path = [Vector((x, YB - LEAN * (z - AZB), z)) for x, z in zip(xs, zs)]
+prof = [(0.5, 0.0), (0.38, 0.38), (0.15, 0.5), (-0.2, 0.46), (-0.5, 0.12), (-0.5, -0.12), (-0.2, -0.46), (0.15, -0.5), (0.38, -0.38)]
 secs = []
-N = 120
-for i in range(N + 1):
-    t = 2 * math.pi * i / N
-    p = ring_at(t)
-    d = ring_at(t + 1e-3) - ring_at(t - 1e-3)
-    n = Vector((d.y, -d.x, 0)).normalized()            # outward, horizontal
-    if n.dot(Vector((p.x, p.y - RY, 0))) < 0: n = -n
-    back = max(0.0, -math.sin(t))
-    ch = 0.24 + 0.18 * back ** 2                       # the band widens over the tail
-    th = 0.085 + 0.03 * back
-    prof = [(-0.5, 0.0), (-0.25, 0.55), (0.25, 0.45), (0.5, 0.0), (0.25, -0.4), (-0.25, -0.45)]
-    secs.append([tuple(p + n * (u * ch) + Vector((0, 0, w * th))) for u, w in prof])
-add(section_loft('hoop', secs, ['paint'], closed_ends=False))
-
-# pylons: blades rising from the haunches into each side of the band
-for sx in (1, -1):
-    path = bezier_pts([(sx * 0.9, -1.05, 0.85), (sx * 0.96, -1.3, 1.12), (sx * 0.98, -1.55, 1.44)], 8)
-    secs = []
-    for k, (x, y, z) in enumerate(path):
-        f = k / (len(path) - 1)
-        ch, th = 0.6 - 0.36 * f, 0.07 - 0.02 * f
-        prof = [(0.5, 0.0), (0.2, 0.5), (-0.3, 0.4), (-0.5, 0.0), (-0.3, -0.4), (0.2, -0.5)]
-        secs.append([(x + w * th, y + u * ch, z) for u, w in prof])
-    add(section_loft('pylon', secs, ['paint']))
+for i, p in enumerate(path):
+    T = path[min(i + 1, len(path) - 1)] - path[max(i - 1, 0)]
+    Cd = Vector((0, 1, 0))                                   # chord always fore-aft and level: fins in the legs, a wing in the crown
+    Wd = Vector((-T.z, 0, T.x)).normalized()                 # thickness across the arch, in its own plane
+    d = min(S[i], S[-1] - S[i]) / S[-1]                      # 0 at a foot, 0.5 at the crown
+    foot = max(0.0, 1 - d / 0.16) ** 2                       # a smooth fillet into the haunch
+    ch = 0.28 + 0.36 * foot + 0.06 * max(0.0, 1 - abs(d - 0.5) / 0.15)   # broad fins at the feet, a wider crown
+    th = 0.09 + 0.06 * foot
+    c0 = p + Cd * (0.5 * (ch - 0.28))                        # the foot grows forwards: the trailing edge stays one clean line
+    secs.append([tuple(c0 + Cd * (u * ch) + Wd * (w * th)) for u, w in prof])
+add(section_loft('arch', secs, ['paint']))
 
 finish(body, 'atlas', WR, WX, wheel_w=0.36, rear=[(TX, TEXIT, TZ), (-TX, TEXIT, TZ)], side=(1.18, 0.45))
