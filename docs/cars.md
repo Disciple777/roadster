@@ -71,6 +71,18 @@ Keep each car's prompt here, so it can be re-run or tweaked.
 
 Then, in the same chat: "Now the exact same car from a rear three-quarter view, same style, flat matte grey."
 
+**SHARD** (a faceted armoured street truck, loosely inspired by angular electric pickups, not a copy):
+> Concept art of a futuristic armoured sport truck for an arcade racing game, front three-quarter view from slightly
+> above, on a plain light grey studio background. Built entirely from big flat faceted panels with sharp creases, like a
+> folded steel origami wedge: a low, wide two-door body whose roofline rises from a sharp nose to a single peak over
+> the cabin, then breaks into a second, steeper facet that drops to a short covered cargo deck. A thin full-width light
+> bar across the nose, a black angular windscreen band, hexagonal wheel arches cut sharply into the slab sides, chunky
+> armoured skid plates, and a big boxy rocket thruster sitting in the open cargo deck between two angled fins. Simple dark
+> off-road wheels. Clean hard-surface design with simple readable shapes, easy to model in 3D. The whole car is flat matte
+> grey clay, no decals, no text.
+
+Then, in the same chat: "Now the exact same car from a rear three-quarter view, same style, flat matte grey."
+
 ### 2. Model script
 Write `tools/model_<id>.py`. It starts with:
 ```python
