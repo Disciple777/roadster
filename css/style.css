@@ -440,3 +440,21 @@ body.editing #hud, body.editing #touch, body.editing .ibtns { display: none !imp
 .g-paints input { background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
 .g-paints input::-webkit-color-swatch-wrapper { padding: 0; opacity: 0; }
 @media (max-width: 700px) { .panel.garage { right: 50%; top: auto; bottom: calc(12px + var(--sa-b)); transform: translateX(50%); max-height: 55dvh; padding: 14px 18px; } }
+
+/* WORLD TOUR: the stops, and the final standings chart */
+.tour-stops { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 10px 0 4px; }
+.tour-stops .stop { position: relative; display: flex; flex-direction: column; padding: 8px 10px 8px 34px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); }
+.tour-stops .stop .k { position: absolute; left: 10px; top: 9px; font-family: 'Orbitron'; font-size: 13px; color: var(--dim); }
+.tour-stops .stop b { font-size: 13px; letter-spacing: 0.08em; }
+.tour-stops .stop small { font-family: 'Rajdhani', sans-serif; font-size: 12px; color: var(--dim); }
+.tour-stops .stop .st { font-family: 'Orbitron'; font-size: 10px; letter-spacing: 0.1em; color: #ffd36a; margin-top: 2px; min-height: 12px; }
+.tour-stops .stop.done { opacity: 0.7; }
+.tour-stops .stop.next { border-color: rgba(255, 170, 40, 0.7); background: linear-gradient(135deg, rgba(255, 120, 30, 0.16), rgba(255, 42, 60, 0.08)); }
+.res-rows .row.tbar { gap: 10px; }
+.res-rows .row.tbar .n { flex: 0 0 72px; font-size: 14px; }
+.res-rows .row.tbar .bar { flex: 1; display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: rgba(255, 255, 255, 0.05); }
+.res-rows .row.tbar .bar i { display: block; height: 100%; box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.45); }
+.res-rows .row.tbar .t { width: 34px; text-align: right; }
+.tkey { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 4px 0; font-size: 12px; letter-spacing: 0.08em; color: var(--dim); }
+.tkey span { display: inline-flex; align-items: center; gap: 5px; }
+.tkey i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

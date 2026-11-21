@@ -870,6 +870,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
           if (vel.y > 0) { const vn = vel.y; vel.y = -vn * 0.3; vel.x *= 0.9; vel.z *= 0.9; this.onWallHit(pos, vn, this.speed); }
         }
         for (const b of tr.bridges) {
+          if (b.wall && this.r) continue; // the AI doesn't time the geysers: they let it through
           if (pos.y + 1.2 < b.y0 || pos.y > b.y1 - 0.3) continue; // body spans pos.y+0.2 .. +1.2: on top is fine
           const dx = pos.x - b.x, dz = pos.z - b.z, along = dx * b.tx + dz * b.tz;
           const reach = b.hl + 2.2;

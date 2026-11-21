@@ -23,9 +23,9 @@
 
   G.buildWild = function (game) {
     const { scene, track: tr, Q } = game;
-    const D = G.TRACK, theme = D.theme, alps = theme === 'alps';
+    const D = G.TRACK, theme = D.theme, alps = theme === 'alps', isle = theme === 'isle';
     const N = tr.N, ds = tr.ds, WO = G.WALK_OUT;
-    const R = G.rng(alps ? 777 : 555);
+    const R = G.rng(alps ? 777 : isle ? 999 : 555);
     const W = { update: null, setTod: null };
     const anim = []; // per-frame movers: (dt, t) => void
 
@@ -87,7 +87,7 @@
 
     // distant buttes / peaks scattered off the road
     const buttes = [];
-    for (let k = 0; k < (alps ? 0 : 46); k++) {
+    for (let k = 0; k < (alps || isle ? 0 : 46); k++) {
       const bx = tr.minX - 900 + R() * (tr.maxX - tr.minX + 1800), bz = tr.minZ - 900 + R() * (tr.maxZ - tr.minZ + 1800);
       const gx = Math.round((bx - x0) / cell), gz = Math.round((bz - z0) / cell);
       const r0 = 28 + R() * 110;
@@ -95,11 +95,37 @@
       buttes.push({ x: bx, z: bz, r: r0, h: 22 + R() * (r0 < 60 ? 110 : 70) });
     }
 
+    // VOLCANO ISLAND: the cone stands inside the loop, nudged towards the high road so it looms over the caldera leap;
+    // sea stacks stand off the coast
+    const VX = (tr.minX + tr.maxX) / 2 + 80, VZ = (tr.minZ + tr.maxZ) / 2 + 120, VH = 470, VR = 820, CRATER = VH * 0.62;
+    W.volcano = { x: VX, z: VZ, y: CRATER };
+    const stacks = [];
+    if (isle) for (let k = 0; k < 60 && stacks.length < 18; k++) {
+      const bx = tr.minX - 600 + R() * (tr.maxX - tr.minX + 1200), bz = tr.minZ - 600 + R() * (tr.maxZ - tr.minZ + 1200);
+      const gx = Math.round((bx - x0) / cell), gz = Math.round((bz - z0) / cell), r0 = 14 + R() * 34;
+      if (inside[gz * nx + gx] || dist[gz * nx + gx] < r0 + 130) continue;
+      stacks.push({ x: bx, z: bz, r: r0, h: 24 + R() * 60 });
+    }
     for (let gz = 0; gz < nz; gz++) for (let gx = 0; gx < nx; gx++) {
       const k = gz * nx + gx, x = x0 + gx * cell, z = z0 + gz * cell, d = dist[k], i = near[k];
       const rh = tr.py[i];
       let h;
-      if (!alps) {
+      if (isle) {
+        if (inside[k]) {
+          // jungle hills rising to the volcano, a crater at its top
+          const dc = Math.hypot(x - VX, z - VZ);
+          let cone = VH * Math.pow(Math.max(0, 1 - dc / VR), 1.6) + 22 * ridge(x / 240, z / 240) * (1 - sstep(VR * 0.3, VR, dc));
+          if (dc < 140) cone += (CRATER - cone) * (1 - sstep(70, 140, dc));
+          h = Math.max(rh * (1 - sstep(30, 240, d)), cone * sstep(10, 140, d)) + 16 * fbm(x / 150, z / 150, 3) * sstep(15, 160, d);
+        } else {
+          // beach, then the sea floor; where the road runs high it's a cliff coast
+          h = rh * (1 - sstep(25, 180, d)) - 18 * sstep(30, 300, d) + 2.5 * fbm(x / 60, z / 60, 3);
+          for (const b of stacks) {
+            const bd = Math.hypot(x - b.x, z - b.z), rr = b.r * (0.8 + 0.4 * fbm(x / 30 + b.x, z / 30, 2));
+            if (bd < rr + 14) h = Math.max(h, b.h * (1 - sstep(rr, rr + 12, bd)) - 18 * sstep(rr, rr + 12, bd));
+          }
+        }
+      } else if (!alps) {
         // desert floor, mesas wherever the road climbs high, buttes in the distance
         h = 2.6 * fbm(x / 170, z / 170) + 1.1 * fbm(x / 35, z / 35, 2);
         if (rh > 4 && !tr.hole[i]) {
@@ -121,7 +147,7 @@
       if (isTunnel(i) && d < 110 && !notch) h = Math.max(h, (rh + tr.roof[i] + 28 + 10 * fbm(x / 40, z / 40, 2)) * (1 - sstep(60, 110, d)) + h * sstep(60, 110, d));
       // the road corridor: flat under the road, then a cut or a fill out to the natural ground
       if (!isTunnel(i) || notch) {
-        const w = 1 - sstep(WO + cell * 0.8, WO + cell * 0.8 + (alps ? 30 : 42), d);
+        const w = 1 - sstep(WO + cell * 0.8, WO + cell * 0.8 + (alps ? 30 : isle ? 36 : 42), d);
         h = h + (rh - 0.35 - h) * w;
       }
       H[k] = h;
@@ -139,10 +165,12 @@
         const k = gz * nx + gx, x = x0 + gx * cell - c.x, z = z0 + gz * cell - c.z;
         const along = x * c.tx + z * c.tz, u = x * c.rx + z * c.rz;
         if (Math.abs(u) > 650) continue;
+        const fl = g.floor + (isle ? Math.max(0, Math.abs(u) - 180) * 0.5 : 0);
+        if (isle && fl >= H[k]) continue;
         // never cut into another stretch of the circuit
         if (dist[k] < WO + 30 && Math.abs(tr.sd(near[k] * ds, g.s0 + g.len / 2)) > g.len / 2 + 80) continue;
         const hw = g.hw(u), f = 1 - sstep(hw - cell * 1.15, hw, Math.abs(along - g.meander(u)));
-        if (f > 0) H[k] = H[k] + (g.floor + 1.5 * fbm(x / 20, z / 20, 2) - H[k]) * f;
+        if (f > 0) H[k] = H[k] + (fl + 1.5 * fbm(x / 20, z / 20, 2) - H[k]) * f;
       }
     }
     const hAt = (x, z) => {
@@ -187,15 +215,28 @@
       g.setAttribute('position', new T.BufferAttribute(pos, 3));
       g.setIndex(new T.BufferAttribute(idx.subarray(0, q), 1));
       g.computeVertexNormals();
-      const ground = new T.Mesh(g, (W.landMat = landMaterial(alps)));
+      const ground = new T.Mesh(g, (W.landMat = landMaterial(theme)));
       ground.receiveShadow = Q.shadows; ground.frustumCulled = false;
       scene.add(ground);
+    }
+    if (isle) {
+      // the ocean: one big sheet, see-through enough that the turquoise shallows show
+      const waveTex = G.canvasTexture(256, 256, (ctx, Wd, Ht) => {
+        const r = G.rng(23); ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, Wd, Ht);
+        for (let k = 0; k < 400; k++) { const g = 100 + r() * 120 | 0; ctx.strokeStyle = `rgba(${g},${g},${g},0.5)`; ctx.lineWidth = 1 + r() * 2; ctx.beginPath(); const x = r() * Wd, y = r() * Ht; ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 10, y - 4, x + 20 + r() * 20, y); ctx.stroke(); }
+      }, { repeat: true });
+      waveTex.repeat.set(400, 400);
+      const seaMat = new T.MeshStandardMaterial({ color: 0x1b86a8, roughness: 0.18, metalness: 0.35, transparent: true, opacity: 0.84, bumpMap: waveTex, bumpScale: 0.6, depthWrite: false });
+      const sea = new T.Mesh(new T.PlaneGeometry(20000, 20000), seaMat);
+      sea.rotation.x = -Math.PI / 2; sea.position.set((tr.minX + tr.maxX) / 2, -1.6, (tr.minZ + tr.maxZ) / 2); sea.renderOrder = 1;
+      scene.add(sea);
+      anim.push((dt) => { waveTex.offset.x += dt * 0.004; waveTex.offset.y += dt * 0.0025; });
     }
 
     // ================= rock / snow / wood / steel materials =================
     const rockMat = W.landMat; // the land shader also reads well on instanced rock (strata by world height)
-    const steel = new T.MeshStandardMaterial({ color: alps ? 0x3a3f46 : 0x5a3a28, roughness: 0.6, metalness: 0.6 });
-    const conc = new T.MeshStandardMaterial({ color: alps ? 0x8c8f94 : 0xa08470, roughness: 0.9 });
+    const steel = new T.MeshStandardMaterial({ color: alps ? 0x3a3f46 : isle ? 0x3a2e28 : 0x5a3a28, roughness: 0.6, metalness: 0.6 });
+    const conc = new T.MeshStandardMaterial({ color: alps ? 0x8c8f94 : isle ? 0x5e5652 : 0xa08470, roughness: 0.9 });
     const dark = new T.MeshStandardMaterial({ color: 0x1b1c1f, roughness: 0.9 });
     const m4 = new T.Matrix4(), qq = new T.Quaternion(), ps = new T.Vector3(), sc = new T.Vector3(), up = new T.Vector3(0, 1, 0), eu = new T.Euler();
     const yawOf = (p) => Math.atan2(-p.tx, -p.tz); // local -Z down the road, local +X to its right
@@ -218,7 +259,7 @@
 
     // ================= tunnels & galleries =================
     const tileTex = G.canvasTexture(256, 256, (ctx, Wd, Ht) => {
-      ctx.fillStyle = alps ? '#b9bcbf' : '#c2a68e'; ctx.fillRect(0, 0, Wd, Ht);
+      ctx.fillStyle = alps ? '#b9bcbf' : isle ? '#4a3c36' : '#c2a68e'; ctx.fillRect(0, 0, Wd, Ht);
       const r = G.rng(13);
       for (let i = 0; i < 3000; i++) { const g = r() * 40 | 0; ctx.fillStyle = `rgba(${g},${g},${g},0.25)`; ctx.fillRect(r() * Wd, r() * Ht, 2, 2); }
       ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
@@ -230,8 +271,8 @@
     const wallMat = new T.MeshStandardMaterial({ map: tileTex, color: 0x9a9a9a, roughness: 0.6, metalness: 0.05, side: T.DoubleSide });
     const ceilMat = new T.MeshStandardMaterial({ color: 0x25272b, roughness: 0.95, side: T.DoubleSide });
     const dashTex = G.canvasTexture(16, 128, (ctx, Wd, Ht) => { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, Wd, Ht); ctx.fillStyle = '#fff'; ctx.fillRect(0, 8, Wd, Ht * 0.55); }, { repeat: true, srgb: false });
-    const tubeLight = new T.MeshBasicMaterial({ map: dashTex, color: alps ? new T.Color(3.2, 2.9, 2.4) : new T.Color(4, 1.9, 0.55), toneMapped: false, side: T.DoubleSide });
-    const poolMat = new T.MeshBasicMaterial({ map: G.softSprite(), color: alps ? new T.Color(0.45, 0.43, 0.38) : new T.Color(0.6, 0.34, 0.12), blending: T.AdditiveBlending, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const tubeLight = new T.MeshBasicMaterial({ map: dashTex, color: alps ? new T.Color(3.2, 2.9, 2.4) : isle ? new T.Color(4.5, 1.1, 0.2) : new T.Color(4, 1.9, 0.55), toneMapped: false, side: T.DoubleSide });
+    const poolMat = new T.MeshBasicMaterial({ map: G.softSprite(), color: alps ? new T.Color(0.45, 0.43, 0.38) : isle ? new T.Color(0.75, 0.2, 0.05) : new T.Color(0.6, 0.34, 0.12), blending: T.AdditiveBlending, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     const pools = [];
     for (const t of tr.tunnels) {
       const i0 = idxOf(t.s0), i1 = i0 + Math.round((t.s1 - t.s0) / ds), h = t.h, side = t.side || 0;
@@ -367,6 +408,7 @@
       }
       if (g.broken) buildBrokenBridge(g);
       if (g.water) buildWater(g);
+      if (g.lava) buildLava(g);
       // warning signs ahead of it (on the roadside, or hung from the roof in a tunnel)
       for (const back of [300, 170]) {
         const s = g.s0 - (g.kick ? g.kick.len : 0) - back, p = tr.sample(s, {}), y = tr.heightAt(s), roof = tr.roofAt(s);
@@ -451,6 +493,35 @@
       const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
       const water = new T.Mesh(geo, new T.MeshStandardMaterial({ color: alps ? 0x7fa8bd : 0x3a8c96, roughness: alps ? 0.3 : 0.12, metalness: 0.1, emissive: alps ? 0x0c1820 : 0x082226, side: T.DoubleSide }));
       scene.add(water);
+    }
+
+    // a lava river along the bottom of the chasm (only where the chasm was carved: never hanging over the sea)
+    function lavaMaterial(k = 1) {
+      const tex = G.canvasTexture(256, 256, (ctx, Wd, Ht) => {
+        const r = G.rng(71);
+        ctx.fillStyle = '#ff5a10'; ctx.fillRect(0, 0, Wd, Ht);
+        for (let i = 0; i < 90; i++) { ctx.fillStyle = `rgba(255,${200 + r() * 55 | 0},${60 + r() * 80 | 0},${0.35 + r() * 0.4})`; ctx.beginPath(); ctx.ellipse(r() * Wd, r() * Ht, 6 + r() * 20, 3 + r() * 8, r() * 3, 0, 7); ctx.fill(); }
+        // dark crust plates drifting on it
+        for (let i = 0; i < 70; i++) { ctx.fillStyle = `rgba(${30 + r() * 30 | 0},${8 + r() * 8 | 0},4,${0.55 + r() * 0.4})`; ctx.beginPath(); const x = r() * Wd, y = r() * Ht; ctx.moveTo(x, y); for (let j = 0; j < 6; j++) ctx.lineTo(x + (r() - 0.5) * 34, y + (r() - 0.5) * 34); ctx.fill(); }
+      }, { repeat: true });
+      const m = new T.MeshBasicMaterial({ map: tex, color: new T.Color(2.4 * k, 1.1 * k, 0.5 * k), toneMapped: false, side: T.DoubleSide });
+      anim.push((dt) => { tex.offset.y -= dt * 0.035; });
+      return m;
+    }
+    function buildLava(g) {
+      const c = tr.sample(g.s0 + g.len / 2, {}), y = g.floor + 2.4, S = 96, E = 420, pos = [], uv = [], idx = [];
+      const ok = [];
+      for (let k = 0; k <= S; k++) {
+        const u = -E + (2 * E * k) / S, a = g.meander(u), hw = g.hw(u) * 0.8;
+        for (const sg of [-1, 1]) { pos.push(c.x + c.rx * u + c.tx * (a + sg * hw), y, c.z + c.rz * u + c.tz * (a + sg * hw)); uv.push(sg < 0 ? 0 : hw / 12, u / 24); }
+        ok.push(hAt(c.x + c.rx * u + c.tx * a, c.z + c.rz * u + c.tz * a) < y + 1 && hAt(c.x + c.rx * u + c.tx * a, c.z + c.rz * u + c.tz * a) > g.floor - 4);
+      }
+      for (let k = 0; k < S; k++) if (ok[k] || ok[k + 1]) { const q = k * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+      const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
+      scene.add(new T.Mesh(geo, W.lavaMat || (W.lavaMat = lavaMaterial())));
+      // the heat haze: a soft glow hanging over the river
+      const glow = new T.Sprite(new T.SpriteMaterial({ map: G.softSprite(), color: new T.Color(1, 0.35, 0.08), blending: T.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.7 }));
+      glow.position.set(c.x, y + 6, c.z); glow.scale.set(g.len * 2.2, 26, 1); scene.add(glow);
     }
 
     // ================= spans over the road =================
@@ -538,6 +609,76 @@
           return [c, cg];
         });
         anim.push(() => { for (const [c, cg] of cabs) { cg.position.set(c.x, c.y0, c.z); cg.rotation.y = yawOf(sp); } });
+      } else if (sp.kind === 'rope') {
+        // a sagging plank bridge strung across the gorge, a few planks gone, rope handrails, timber posts on each rim
+        const wood = new T.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.95 }), rope = new T.MeshStandardMaterial({ color: 0xb89a66, roughness: 1 });
+        const U = 32, yAt = (u) => sp.y0 + 0.6 + 3 * (u / U) * (u / U), planks = [];
+        for (let u = -U + 0.6; u < U; u += 0.9) if (R() > 0.12) planks.push(u);
+        const pm = new T.InstancedMesh(new T.BoxGeometry(0.7, 0.18, 2.6), wood, planks.length);
+        planks.forEach((u, k) => { m4.compose(ps.set(u, yAt(u), 0), qq.setFromEuler(eu.set((R() - 0.5) * 0.12, 0, Math.atan(6 * u / (U * U)))), sc.set(1, 1, 1)); pm.setMatrixAt(k, m4); });
+        g.add(pm);
+        for (const z of [-1.4, 1.4]) for (const dy of [0.15, 1.1]) {
+          const pts = []; for (let k = 0; k <= 24; k++) { const u = -U + (2 * U * k) / 24; pts.push(new T.Vector3(u, yAt(u) + dy, z)); }
+          g.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 40, 0.07, 5), rope));
+        }
+        for (const sg of [-1, 1]) for (const z of [-1.5, 1.5]) {
+          const fy = Math.min(groundAt(sg * (U + 1)), yAt(U) - 1), hgt = yAt(U) + 2 - fy;
+          const post = new T.Mesh(new T.CylinderGeometry(0.22, 0.28, hgt, 6), wood); post.position.set(sg * (U + 1), fy + hgt / 2, z); g.add(post);
+        }
+      } else if (sp.kind === 'geyser') {
+        // two lava fountains out of the caldera, taking turns: bubbles and a glow first, then a column you must not touch
+        const gp = tr.gapAt(sp.s), ly = gp ? gp.floor + 2.4 : sp.base - 40;
+        const colMat = new T.MeshBasicMaterial({ map: (W.lavaMat || (W.lavaMat = lavaMaterial())).map, color: new T.Color(3, 1.2, 0.35), toneMapped: false });
+        const cols = sp.cols.map((c) => {
+          const col = new T.Mesh(new T.CylinderGeometry(2.0, 2.8, 1, 12, 1, true).translate(0, 0.5, 0), colMat); col.position.set(c.lat, ly, 0); g.add(col);
+          const crown = new T.Mesh(new T.SphereGeometry(3.2, 10, 6), colMat); g.add(crown);
+          const glow = new T.Sprite(new T.SpriteMaterial({ map: G.softSprite(), color: new T.Color(1, 0.4, 0.1), blending: T.AdditiveBlending, transparent: true, depthWrite: false }));
+          glow.scale.set(16, 16, 1); g.add(glow);
+          const ring = new T.Mesh(new T.RingGeometry(1.4, 3.4, 20), new T.MeshBasicMaterial({ color: new T.Color(4, 1.4, 0.3), toneMapped: false, transparent: true, side: T.DoubleSide, depthWrite: false }));
+          ring.rotation.x = -Math.PI / 2; ring.position.set(c.lat, ly + 0.2, 0); g.add(ring);
+          return { c, col, crown, glow, ring };
+        });
+        anim.push((dt, t) => {
+          for (const o of cols) {
+            const c = o.c, on = c.h > 0.01, top = c.y1;
+            o.col.visible = o.crown.visible = on;
+            if (on) { o.col.scale.y = Math.max(0.1, top - ly); o.crown.position.set(c.lat, top, 0); o.crown.scale.set(1 + 0.15 * Math.sin(t * 20), 0.55, 1 + 0.15 * Math.cos(t * 17)); }
+            o.glow.position.set(c.lat, on ? top : ly + 3, 0);
+            o.glow.material.opacity = on ? 1 : c.warn * (0.6 + 0.4 * Math.sin(t * 30));
+            o.ring.material.opacity = c.warn ? 0.4 + 0.6 * c.warn : on ? 0.8 : 0;
+            o.ring.scale.setScalar(1 + (c.warn ? 0.4 * Math.sin(t * 25) : 0));
+          }
+        });
+      } else if (sp.kind === 'ship') {
+        // an old galleon wedged across the gorge, keel up high: you fly underneath it
+        const wood = new T.MeshStandardMaterial({ color: 0x4a3322, roughness: 0.95 }), dk = new T.MeshStandardMaterial({ color: 0x2a1d14, roughness: 1 });
+        const L = 38, Bm = 10, Hh = 7, shp = new T.Shape();
+        // the hull's side profile in local X (along the ship) / Y: a flat keel, the bow and stern swept up
+        shp.moveTo(-L / 2 + 6, 0); shp.lineTo(L / 2 - 7, 0); shp.quadraticCurveTo(L / 2 - 1, 0.5, L / 2 + 2, Hh + 2.5);
+        shp.lineTo(L / 2 - 4, Hh + 1); shp.lineTo(-L / 2 + 4, Hh + 1); shp.lineTo(-L / 2 + 1, Hh + 4.5); shp.lineTo(-L / 2 - 1, Hh + 4.5); shp.quadraticCurveTo(-L / 2, 1, -L / 2 + 6, 0);
+        const hg = new T.ExtrudeGeometry(shp, { depth: Bm - 4, bevelEnabled: true, bevelSize: 1.2, bevelThickness: 2, bevelSegments: 3, curveSegments: 6 });
+        hg.translate(0, 0, -(Bm - 4) / 2);
+        // round the bottom: pull the low vertices in so the hull reads as a hull, not a box
+        const pa = hg.attributes.position;
+        for (let v = 0; v < pa.count; v++) { const y = pa.getY(v), k = 1 - Math.min(1, Math.max(0, y) / (Hh * 0.8)); pa.setZ(v, pa.getZ(v) * (1 - 0.55 * k * k)); }
+        hg.computeVertexNormals();
+        const hull = new T.Mesh(hg, wood); hull.position.y = sp.y0; g.add(hull);
+        const band = new T.Mesh(new T.BoxGeometry(L - 12, 0.5, Bm + 0.4), dk); band.position.set(0, sp.y0 + Hh * 0.7, 0); g.add(band);
+        // broken masts leaning off it, torn sails
+        const sail = new T.MeshStandardMaterial({ color: 0xcfc2a0, roughness: 1, side: T.DoubleSide });
+        [[-8, 14, 0.25], [4, 22, -0.18], [13, 10, 0.5]].forEach(([u, hgt, lean]) => {
+          const m = new T.Mesh(new T.CylinderGeometry(0.35, 0.5, hgt, 7).translate(0, hgt / 2, 0), wood); m.position.set(u, sp.y0 + Hh, 0); m.rotation.z = lean; m.rotation.x = lean * 0.6; g.add(m);
+          const sg = new T.PlaneGeometry(hgt * 0.55, hgt * 0.4, 4, 3), sa = sg.attributes.position;
+          for (let v = 0; v < sa.count; v++) { sa.setZ(v, Math.sin(sa.getX(v) * 0.7) * 0.8); if (sa.getY(v) < -hgt * 0.1 && R() < 0.4) sa.setY(v, sa.getY(v) + R() * 2); }
+          sg.computeVertexNormals();
+          const sl = new T.Mesh(sg, sail); sl.rotation.y = Math.PI / 2; sl.position.y = hgt * 0.62; m.add(sl);
+        });
+        // hawsers down to the rims holding it
+        for (const sg of [-1, 1]) {
+          const ax = sg * (L / 2 - 2), ay = sp.y0 + Hh, bx = sg * (L / 2 + 10), by = groundAt(bx);
+          const rr = new T.Mesh(new T.CylinderGeometry(0.1, 0.1, 1, 4).translate(0, 0.5, 0), dk);
+          rr.position.set(ax, ay, 0); rr.scale.y = Math.hypot(bx - ax, by - ay); rr.rotation.z = Math.atan2(-(bx - ax), by - ay); g.add(rr);
+        }
       }
       g.traverse((o) => { if (o.isMesh) { o.castShadow = o.castShadow || Q.shadows; o.receiveShadow = true; } });
       scene.add(g);
@@ -584,7 +725,76 @@
     const dens = Q.cityDensity;
     const offRoad = (d, pad) => d > WO + pad;
     const notChasm = (x, z) => !tr.gaps.some((g) => { const c = tr.sample(g.s0 + g.len / 2, {}); return Math.hypot(x - c.x, z - c.z) < g.len + 40; });
-    if (!alps) {
+    if (isle) {
+      // palms: a bent trunk and a crown of drooping fronds (alpha-cut leaflets)
+      const frondTex = G.canvasTexture(128, 256, (ctx, Wd, Ht) => {
+        ctx.clearRect(0, 0, Wd, Ht); const r = G.rng(31);
+        ctx.strokeStyle = '#5a7a2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(Wd / 2, 0); ctx.lineTo(Wd / 2, Ht); ctx.stroke();
+        for (let y = 6; y < Ht - 4; y += 5) {
+          const w = (Wd / 2 - 4) * Math.sin((y / Ht) * Math.PI * 0.9 + 0.2), g = 90 + r() * 70 | 0;
+          ctx.strokeStyle = `rgb(${g * 0.35 | 0},${g},${g * 0.3 | 0})`; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(Wd / 2, y); ctx.lineTo(Wd / 2 - w, y + 14); ctx.moveTo(Wd / 2, y); ctx.lineTo(Wd / 2 + w, y + 14); ctx.stroke();
+        }
+      });
+      const frondMat = new T.MeshStandardMaterial({ map: frondTex, alphaTest: 0.5, side: T.DoubleSide, roughness: 0.8 });
+      const trunkMat = new T.MeshStandardMaterial({ color: 0x7a6248, roughness: 1 });
+      const TH = 11, bend = (y) => 1.6 * (y / TH) * (y / TH);
+      const trunkG = new T.CylinderGeometry(0.22, 0.34, TH, 7, 8).translate(0, TH / 2, 0);
+      { const pa = trunkG.attributes.position; for (let v = 0; v < pa.count; v++) pa.setX(v, pa.getX(v) + bend(pa.getY(v))); trunkG.computeVertexNormals(); }
+      const fronds = [];
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 9) * Math.PI * 2, fg = new T.PlaneGeometry(1.6, 5.5, 1, 6).translate(0, -2.75, 0), pa = fg.attributes.position;
+        for (let v = 0; v < pa.count; v++) { const l = -pa.getY(v); pa.setXYZ(v, pa.getX(v), 0.6 - 0.09 * l * l, l); } // arch out and droop
+        fg.rotateY(a); fg.translate(bend(TH), TH, 0); fronds.push(fg);
+      }
+      const crownG = ADDONS.mergeGeometries(fronds); crownG.computeVertexNormals();
+      const palms = placeScatter(Math.round(900 * dens), (x, z, d, y) => offRoad(d, 4) && d < 420 && y > -0.6 && y < 60 && slopeAt(x, z) < 0.5 && notChasm(x, z));
+      const placeP = (c, m) => { const k = 0.8 + c[3] * 0.6; m.compose(ps.set(c[0], c[1] - 0.3, c[2]), qq.setFromAxisAngle(up, c[3] * 47), sc.set(k, k * (0.85 + c[3] * 0.4), k)); };
+      instance(trunkG, trunkMat, palms, placeP);
+      instance(crownG, frondMat, palms, placeP);
+      // the jungle: broadleaf canopy trees and bushes up the volcano's flanks
+      const leaf = new T.MeshStandardMaterial({ color: 0x2f6a2a, roughness: 0.9, flatShading: true });
+      const jungle = placeScatter(Math.round(1400 * dens), (x, z, d, y) => offRoad(d, 5) && d < 650 && y > 3 && y < 120 && slopeAt(x, z) < 0.8 && notChasm(x, z));
+      const jm = instance(new T.IcosahedronGeometry(1, 1), leaf, jungle, (c, m) => { const k = 2.5 + c[3] * 5; m.compose(ps.set(c[0], c[1] + k * 0.55, c[2]), qq.setFromAxisAngle(up, c[3] * 13), sc.set(k * 1.2, k * 0.8, k * 1.1)); });
+      const tc = new T.Color();
+      jungle.forEach((c, j) => jm.setColorAt(j, tc.setRGB(0.7 + G.wrap(c[3] * 17, 1) * 0.5, 0.8 + G.wrap(c[3] * 29, 1) * 0.4, 0.6 + G.wrap(c[3] * 7, 1) * 0.4)));
+      jm.instanceColor.needsUpdate = true;
+      instance(new T.CylinderGeometry(0.3, 0.45, 1, 5).translate(0, 0.5, 0), trunkMat, jungle.filter((c) => c[3] > 0.5), (c, m) => { const k = 2.5 + c[3] * 5; m.compose(ps.set(c[0], c[1] - 0.3, c[2]), qq.identity(), sc.set(1, k * 0.7, 1)); });
+      // basalt boulders and lava rocks
+      const rocks = placeScatter(Math.round(360 * dens), (x, z, d, y) => offRoad(d, 3) && d < 600 && y > -4);
+      instance(new T.DodecahedronGeometry(1, 0), rockMat, rocks, (c, m) => {
+        const k = 0.8 + c[3] * c[3] * 4.5; m.compose(ps.set(c[0], c[1] + k * 0.25, c[2]), qq.setFromEuler(eu.set(c[3] * 3, c[3] * 9, c[3] * 5)), sc.set(k * 1.3, k, k * 1.1));
+      });
+      // a beach village of stilt huts round the start / finish
+      const huts = [];
+      for (let k = 0; k < 400 && huts.length < Math.round(22 * dens); k++) {
+        const s = G.wrap(-400 + R() * 900, tr.length), sg = R() < 0.5 ? -1 : 1, lat = sg * (WO + 10 + R() * 70), p = tr.sample(s, {});
+        const x = p.x + p.rx * lat, z = p.z + p.rz * lat;
+        if (distAt(x, z) < WO + 8 || slopeAt(x, z) > 0.3 || !notChasm(x, z) || huts.some((c) => Math.hypot(c[0] - x, c[2] - z) < 14)) continue;
+        huts.push([x, Math.max(hAt(x, z), -1.6), z, R(), yawOf(p)]);
+      }
+      const hutWood = new T.MeshStandardMaterial({ color: 0x8a6a44, roughness: 0.95 }), thatch = new T.MeshStandardMaterial({ color: 0xb89a5a, roughness: 1 });
+      instance(new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), hutWood, huts, (c, m) => m.compose(ps.set(c[0], c[1] + 2.2, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(6 + c[3] * 2, 3.2, 5 + c[3] * 2)));
+      instance(new T.ConeGeometry(1, 1, 4).rotateY(Math.PI / 4).translate(0, 0.5, 0), thatch, huts, (c, m) => m.compose(ps.set(c[0], c[1] + 5.3, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(6.2 + c[3] * 2, 4.5, 5.6 + c[3] * 2)));
+      instance(new T.CylinderGeometry(0.2, 0.2, 1, 5).translate(0, 0.5, 0), hutWood, huts, (c, m) => m.compose(ps.set(c[0], c[1] - 1, c[2]), qq.identity(), sc.set(6, 3.3, 6)));
+      // the crater: a lava lake, its glow and a smoke plume you can see from all round the island
+      const V = W.volcano;
+      const lakeMat = lavaMaterial(1.3); lakeMat.map.repeat.set(6, 6);
+      const lake = new T.Mesh(new T.CircleGeometry(78, 32), lakeMat); lake.rotation.x = -Math.PI / 2; lake.position.set(V.x, V.y + 4, V.z); scene.add(lake);
+      const cg = new T.Sprite(new T.SpriteMaterial({ map: G.softSprite(), color: new T.Color(1, 0.35, 0.08), blending: T.AdditiveBlending, transparent: true, depthWrite: false }));
+      cg.position.set(V.x, V.y + 30, V.z); cg.scale.set(320, 120, 1); scene.add(cg);
+      const smokeMat = new T.SpriteMaterial({ map: G.softSprite(), color: 0x5a5450, transparent: true, depthWrite: false, opacity: 0.5 });
+      const puffs = [];
+      for (let k = 0; k < 26; k++) { const sp1 = new T.Sprite(smokeMat.clone()); scene.add(sp1); puffs.push([sp1, k / 26, R()]); }
+      anim.push((dt, t) => {
+        cg.material.opacity = 0.75 + 0.25 * Math.sin(t * 1.7);
+        for (const [p1, ph, rr] of puffs) {
+          const u = G.wrap(t / 40 + ph, 1), sz = 60 + u * 340;
+          p1.position.set(V.x + u * 520 + Math.sin(rr * 9 + u * 4) * 40 * u, V.y + 20 + u * 700, V.z - u * 260 + Math.cos(rr * 7) * 30 * u);
+          p1.scale.set(sz, sz, 1); p1.material.opacity = 0.55 * Math.min(1, u * 8) * (1 - u);
+        }
+      });
+    } else if (!alps) {
       // saguaros
       const sag = [new T.CylinderGeometry(0.38, 0.45, 6.5, 8).translate(0, 3.25, 0), new T.SphereGeometry(0.38, 8, 5).translate(0, 6.5, 0)];
       for (const [sx, y0, h] of [[1, 2.6, 2.2], [-1, 3.4, 1.6]]) {
@@ -784,7 +994,8 @@
 
   // the land: sandstone strata by height on steep faces and sand on the flats (RED ROCK), or snow on the flats and
   // grey rock on the steep (ALPINE). Works on instanced rock too, so boulders and spires match the cliffs
-  function landMaterial(alps) {
+  function landMaterial(theme) {
+    const alps = theme === 'alps', isle = theme === 'isle';
     const m = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0, side: T.DoubleSide });
     m.onBeforeCompile = (sh) => {
       sh.vertexShader = 'varying vec3 vLWP; varying vec3 vLWN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -801,7 +1012,20 @@
         {
           vec3 n = normalize(vLWN); float fl = abs(n.y), y = vLWP.y;
           float gn = ln(vLWP.xz * 0.07) * 0.6 + ln(vLWP.xz * 0.6) * 0.4;
-          ${alps ? `
+          ${isle ? `
+          // sea floor turquoise sand, a white beach, jungle green climbing to black ash, steep faces basalt
+          vec3 sea = mix(vec3(0.55, 0.78, 0.7), vec3(0.85, 0.82, 0.62), smoothstep(-6.0, -1.8, y));
+          vec3 sand = vec3(0.9, 0.82, 0.62) * (0.9 + 0.1 * gn);
+          vec3 green = mix(vec3(0.12, 0.3, 0.08), vec3(0.24, 0.42, 0.12), gn);
+          green = mix(green, vec3(0.32, 0.36, 0.14), smoothstep(0.72, 0.85, ln(vLWP.xz * 0.2)) * 0.5);
+          vec3 ash = mix(vec3(0.09, 0.08, 0.08), vec3(0.26, 0.15, 0.11), ln(vLWP.xz * 0.03));
+          vec3 basalt = mix(vec3(0.07, 0.065, 0.07), vec3(0.18, 0.15, 0.14), ln(vec2(y * 0.5, vLWP.x * 0.07 + vLWP.z * 0.07)));
+          float yy = y + (gn - 0.5) * 10.0;
+          vec3 c = mix(sand, green, smoothstep(1.0, 3.5, yy));
+          c = mix(c, ash, smoothstep(90.0, 140.0, yy));
+          c = mix(sea, c, smoothstep(-2.4, -1.2, y));
+          diffuseColor.rgb = mix(basalt, c, smoothstep(0.55, 0.75, fl));
+          ` : alps ? `
           vec3 snow = vec3(0.86, 0.9, 0.96) * (0.92 + 0.08 * gn);
           vec3 rock = mix(vec3(0.12, 0.12, 0.13), vec3(0.24, 0.23, 0.22), ln(vec2(y * 0.4, vLWP.x * 0.05 + vLWP.z * 0.05)));
           float s = smoothstep(0.62, 0.8, fl + gn * 0.12);

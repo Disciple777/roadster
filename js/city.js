@@ -555,7 +555,7 @@
       const segs = 96, pos = [], idx = [];
       for (let i = 0; i <= segs; i++) {
         const a = (i / segs) * Math.PI * 2, rr = 2200;
-        const hgt = (60 + 90 * Math.abs(Math.sin(a * 3.0 + 1.0)) + 50 * Math.abs(Math.sin(a * 7.3)) + R() * 20) * (G.TRACK.theme === 'alps' ? 2.6 : 1);
+        const hgt = (60 + 90 * Math.abs(Math.sin(a * 3.0 + 1.0)) + 50 * Math.abs(Math.sin(a * 7.3)) + R() * 20) * (G.TRACK.theme === 'alps' ? 2.6 : G.TRACK.theme === 'isle' ? 0 : 1); // isle: open ocean to the horizon
         pos.push(Math.cos(a) * rr, -10, Math.sin(a) * rr, Math.cos(a) * rr, hgt, Math.sin(a) * rr);
         if (i < segs) { const k = i * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
       }

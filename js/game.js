@@ -228,6 +228,7 @@
       let auto = null;
       try { auto = sessionStorage.getItem('rt-autostart'); sessionStorage.removeItem('rt-autostart'); } catch (e) { /* ignore */ }
       if (auto === 'race' || auto === 'free' || auto === 'course') this.startRace(auto);
+      else if (auto === 'tour') this.tourGo();
       // a course opened on the other circuit reloads the page and lands here (editor.js)
       let cAuto = null;
       try { cAuto = JSON.parse(sessionStorage.getItem('rt-course') || 'null'); sessionStorage.removeItem('rt-course'); } catch (e) { /* ignore */ }
@@ -299,6 +300,9 @@
       const click = (id, fn) => $(id).addEventListener('click', (e) => { G.audio.init(); G.audio.tone(700, 0.05, 0.08, 'triangle'); fn(e); });
       click('btn-play', () => this.showPanel('play'));
       click('btn-chal', () => { this.buildChalPanel(); this.showPanel('chal'); });
+      click('btn-tour', () => { this.buildTourPanel(); this.showPanel('tour'); });
+      click('btn-tgo', () => this.tourGo());
+      click('btn-tquit', () => { if (!window.confirm('Abandon this World Tour? Its points are lost.')) return; G.tourEnd(); this.buildTourPanel(); });
             click('btn-race', () => this.showPanel('setup', 'race'));
       click('btn-free', () => this.showPanel('setup', 'free'));
       click('btn-course', () => this.showPanel('setup', 'course'));
@@ -313,11 +317,11 @@
       });
       click('btn-pause', () => this.pause(true));
       click('btn-resume', () => this.pause(false));
-      click('btn-restart', () => { this.pause(false, true); this.startRace(this.mode, this.mode === 'challenge' ? this.chalOpt : {}); });
+      click('btn-restart', () => { this.pause(false, true); this.startRace(this.mode, this.mode === 'challenge' ? this.chalOpt : { tour: !!this.tour }); });
       click('btn-quit', () => { this.pause(false, true); if (this.mpGrid) this.mpLeave(); else this.toMenu(); });
       click('btn-psettings', () => this.showPanel('settings'));
       click('btn-pcontrols', () => this.showPanel('controls'));
-      click('btn-again', () => (this.net ? this.mpEnter() : this.mpGrid ? this.mpLeave() : this.startRace(this.mode, this.mode === 'challenge' ? this.chalOpt : {})));
+      click('btn-again', () => (this.net ? this.mpEnter() : this.mpGrid ? this.mpLeave() : this.tourAgain ? this.tourGo() : this.startRace(this.mode, this.mode === 'challenge' ? this.chalOpt : {})));
       click('btn-rmenu', () => (this.mpGrid ? this.mpLeave() : this.toMenu()));
       click('btn-pedit', () => { this.pause(false, true); this.editor.back(); });
       click('btn-redit', () => this.editor.back());
@@ -360,7 +364,7 @@
       const segSets = {};
       seg('s-traffic', 'traffic'); seg('s-laps', 'laps', Number); seg('s-claps', 'courseLaps', Number); seg('s-rivals', 'rivals', Number); seg('s-diff', 'difficulty'); seg('s-tod', 'tod'); seg('s-track', 'track');
       seg('s-quality', 'quality'); seg('s-camera', 'camera', Number); seg('s-touch', 'touchUI');
-      seg('s-mptrack', 'track');
+      seg('s-mptrack', 'track'); seg('t-diff', 'difficulty'); seg('t-traffic', 'traffic'); seg('t-tod', 'tod');
       // the wild circuits say what's waiting on them
       const desc = () => { const el = $('s-trackdesc'), d = (G.TRACKS[S.track] || {}).desc; if (el) { el.textContent = d || ''; el.classList.toggle('hidden', !d); } };
       if ($('s-track')) $('s-track').addEventListener('click', desc);
@@ -689,6 +693,7 @@
 
     toMenu() {
       this.exitChallenge();
+      this.tour = null; this.tourLabel(false);
       this.state = 'menu';
       this.introHold = false; $('keyhelp').classList.remove('open');
       this.customCourse = null;
@@ -718,6 +723,8 @@
       const custom = mode === 'course' && !this.net ? this.customCourse : null;
       document.body.classList.toggle('testing', !!(custom && custom.editing));
       this.mode = mode;
+      this.tour = mode === 'race' && opt.tour && !this.net ? G.tourState() : null; // WORLD TOUR: 1 lap, 7 rivals, points carried over
+      this.tourLabel(false);
       this.closePanels();
       $('results').classList.remove('open');
       G.audio.init();
@@ -745,9 +752,9 @@
       this.courseKey = custom ? 'courseBest_c_' + (custom.id || 'x') : 'courseBest_' + G.TRACK_ID; this.courseBest = G.store.get(this.courseKey, 0);
       this.player.health = 100; this.destroyed = false;
       if (this.rivals) { this.rivals.dispose(); this.rivals = null; }
-      const nR = mode === 'race' && !mp ? S.rivals : mp && this.net.isHost ? mpo.ai.length : 0;
+      const nR = this.tour ? G.TOUR.rivals : mode === 'race' && !mp ? S.rivals : mp && this.net.isHost ? mpo.ai.length : 0;
       this.racers = mp ? mp.length + mpo.ai.length : nR + 1;
-      this.laps = mp ? this.mpLaps : mode === 'race' ? S.laps : mode === 'course' ? S.courseLaps : 0;
+      this.laps = mp ? this.mpLaps : this.tour ? G.TOUR.laps : mode === 'race' ? S.laps : mode === 'course' ? S.courseLaps : 0;
       const slots = [];
       for (let k = 0; k < this.racers; k++) slots.push({ ds: -12 - Math.floor(k / 2) * 10 - (k % 2) * 4, lat: G.TRACK.grid[k % 2] });
       const pSlot = mp ? Math.max(0, mp.findIndex((q) => q.id === this.net.myId)) : mode === 'race' ? Math.min(this.racers - 1, Math.floor(this.racers / 2)) : 0;
@@ -776,6 +783,7 @@
       // (not in multiplayer, where the start is shared, and not for editor test runs)
       this.introHold = false;
       if (!G.store.get('seenKeys', false) && !this.net && !(custom && custom.editing)) this.showKeyHelp();
+      if (this.tour) this.hud.message(`${G.TOUR.name} · RACE ${this.tour.i + 1} OF ${this.tour.order.length} · ${G.TRACK.name}`, 3200);
     }
 
     // ---------------- stunt challenge ----------------
@@ -1493,7 +1501,7 @@
       rows.sort((a, b) => a.time - b.time);
       const myPlace = rows.findIndex((r) => r.me) + 1;
       this.hud.message(myPlace === 1 ? 'YOU WIN!' : `FINISHED P${myPlace}`, 2500);
-      this.submitRun('race');
+      if (!this.tour) this.submitRun('race'); // tour races are 1 lap: never ranked
       // unlock progress: a finished street race on this track, and a win in an official one
       const pr = G.store.get('progress', {}), tracks = pr.tracks || [];
       if (!tracks.includes(G.TRACK_ID)) tracks.push(G.TRACK_ID);
@@ -1502,7 +1510,70 @@
       $('res-title').textContent = myPlace === 1 ? 'VICTORY' : `P${myPlace} OF ${rows.length}`;
       $('res-rows').innerHTML = rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${r.me ? '#ff2a3c' : '#' + r.color.toString(16).padStart(6, '0')}"></span><span class="n">${r.name}</span><span class="t">${G.fmtTime(r.time)}</span></div>`).join('');
       $('res-stats').innerHTML = `<div><b>${this.score.toLocaleString()}</b><small>STUNT SCORE</small></div><div><b>${G.fmtTime(Math.min(...this.lapTimes))}</b><small>BEST LAP</small></div><div><b>${G.fmtTime(this.bestLap)}</b><small>ALL-TIME BEST</small></div>`;
+      if (this.tour) this.tourFinish(rows);
       setTimeout(() => { if (this.state === 'finished') { $('results').classList.add('open'); document.body.classList.remove('playing'); } }, 2600);
+    }
+
+    // ---------------- world tour ----------------
+    // start (or carry on with) the tour: its next circuit, reloading into it when the world has to be rebuilt
+    tourGo() {
+      const S = this.settings;
+      let t = G.tourState();
+      if (!t) { t = G.tourNew(); G.tourSave(t); }
+      const id = t.order[t.i];
+      if (!G.TRACKS[id]) { G.tourEnd(); this.toMenu(); return; } // a circuit that no longer exists
+      if (id !== G.TRACK_ID) {
+        S.track = id; this.saveSettings('track');
+        try { sessionStorage.setItem('rt-autostart', 'tour'); } catch (e) { /* ignore */ }
+        location.reload(); return;
+      }
+      this.startRace('race', { tour: true });
+    }
+    // the results button reads NEXT RACE / NEW TOUR during a tour
+    tourLabel(text) {
+      this.tourAgain = !!text;
+      if (text) { $('btn-again').textContent = text; this._tourLbl = true; }
+      else if (this._tourLbl) { $('btn-again').textContent = 'RACE AGAIN'; this._tourLbl = false; }
+    }
+    // a tour race is over: points in, standings (or the final chart) on the results card
+    tourFinish(rows) {
+      const t = G.tourState();
+      if (!t || t.order[t.i] !== G.TRACK_ID) return;
+      G.tourScore(t, rows);
+      const last = t.races[t.races.length - 1], n = t.order.length, done = t.i >= n;
+      const st = G.tourStandings(t), myPos = st.findIndex((r) => r.me) + 1, me = st[myPos - 1];
+      const myRace = last.rows.find((r) => r.me);
+      if (done) {
+        G.store.set('tourLast', { pos: myPos, pts: me.pts, of: st.length, when: Date.now() });
+        G.tourEnd();
+        if (myPos === 1) G.progress({ tourWin: true });
+        this.checkUnlocks(3200);
+        $('res-title').textContent = myPos === 1 ? 'WORLD CHAMPION' : `P${myPos} IN THE WORLD TOUR`;
+        $('res-rows').innerHTML = G.tourChartHTML(t);
+        $('res-stats').innerHTML = `<div><b>${me.pts}</b><small>TOUR POINTS</small></div><div><b>${me.wins}</b><small>RACE WINS</small></div><div><b>P${myPos}</b><small>FINAL STANDING</small></div>`;
+        $('res-board').textContent = myPos === 1 ? 'Champion of the world. Nobody can take this one off you.' : `${st[0].name} takes the tour. Run it again?`;
+        this.tourLabel('NEW TOUR');
+        this.tour = null;
+      } else {
+        G.tourSave(t);
+        $('res-title').textContent = `RACE ${t.i} OF ${n} · ${myRace.place === 1 ? 'VICTORY' : 'P' + myRace.place}`;
+        $('res-rows').innerHTML = G.tourRowsHTML(t, last);
+        $('res-stats').innerHTML = `<div><b>+${myRace.pts}</b><small>THIS RACE</small></div><div><b>${me.pts}</b><small>TOUR POINTS</small></div><div><b>P${myPos}</b><small>STANDING</small></div>`;
+        $('res-board').textContent = `Next up: ${(G.TRACKS[t.order[t.i]] || {}).name}${t.i === n - 1 ? ', the final round' : ''}.`;
+        this.tourLabel('NEXT RACE');
+      }
+    }
+    // the tour panel: stops, standings so far, and whether this starts or continues one
+    buildTourPanel() {
+      const t = G.tourState();
+      $('tour-stops').innerHTML = G.tourStopsHTML(t);
+      const going = t && t.races.length;
+      $('tour-stand-wrap').classList.toggle('hidden', !going);
+      $('tour-stand').innerHTML = going ? G.tourRowsHTML(t, null) : '';
+      const lt = G.store.get('tourLast', null);
+      $('tour-last').textContent = !t && lt ? (lt.pos === 1 ? `Last tour: WORLD CHAMPION with ${lt.pts} points.` : `Last tour: P${lt.pos} of ${lt.of} with ${lt.pts} points.`) : '';
+      $('btn-tgo').textContent = going ? `RACE ${t.i + 1}: ${(G.TRACKS[t.order[t.i]] || {}).name}` : 'START TOUR';
+      $('btn-tquit').classList.toggle('hidden', !going);
     }
 
     updateStunts(dt) {

@@ -93,6 +93,38 @@
       ],
       ramps: [0.22, 0.73, 0.88],
     },
+    // a volcanic island: the beach, the jungle, then up the volcano's flank and through its lava tube to the caldera,
+    // and back down to the sea. The sea is everywhere the land dips under it (wild.js), so a gap without lava is water.
+    // lava: a glowing river at the bottom; geyser: lava columns that erupt across the jump in turn (the middle is safe)
+    isle: {
+      name: 'VOLCANO ISLAND', tag: 'tropical volcano', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.2,
+      elev: true, wild: true, theme: 'isle', trees: false, noCourse: true, xings: false, lampEvery: 65, fogK: 0.45,
+      desc: 'A live volcano in the middle of the ocean. Jump the lagoon through a sea arch, thrust over the jungle gorge under a rope bridge, hop the magma pit in the lava tube, leap the caldera between erupting geysers, fly under a shipwreck and clear the lava channels.',
+      ctrl: [
+        [-500, -700], [-100, -720], [300, -690], [600, -620], [820, -470], [900, -250], [870, -40], [940, 160], [1000, 380],
+        [880, 560], [640, 620], [440, 570], [260, 600], [40, 680], [-220, 640], [-450, 580], [-660, 580], [-850, 480],
+        [-930, 240], [-890, 0], [-890, -260], [-780, -520],
+      ],
+      prof: [[0, 0], [1000, 0], [1400, 4], [1900, 14], [2250, 14], [2350, 22], [2560, 40], [2680, 42], [2780, 48], [2950, 56], [3060, 56],
+        [3200, 40, -0.1], [3450, 26], [3560, 22], [3625, 20], [4000, 14], [4600, 10], [5000, 10], [5300, 2], [5550, 0]],
+      gaps: [
+        { s0: 560, s1: 632, kick: { len: 30, h: 4.5 }, floor: -6, v: 50, back: 300, name: 'LAGOON JUMP', warn: 'LAGOON AHEAD · FULL SPEED' },
+        { s0: 2070, s1: 2130, floor: -8, v: 48, back: 220, name: 'JUNGLE GORGE', warn: 'NO BRIDGE · HOLD THRUST' },
+        { s0: 2600, s1: 2624, floor: 24, v: 44, back: 160, name: 'MAGMA PIT', warn: 'LAVA PIT · HOP IT', inTunnel: true },
+        { s0: 3060, s1: 3200, kick: { len: 32, h: 6 }, floor: 8, lava: true, v: 56, back: 280, name: 'CALDERA LEAP', warn: 'CALDERA · FLAT OUT · STAY CENTRE', big: true },
+        { s0: 3560, s1: 3625, floor: -10, v: 48, back: 220, name: 'SHIPWRECK GORGE', warn: 'GORGE · HOLD THRUST' },
+        { s0: 4690, s1: 4724, kick: { len: 16, h: 2.6 }, floor: 0, lava: true, v: 40, back: 260, name: 'LAVA CHANNELS', warn: 'TWIN LAVA CHANNELS' },
+        { s0: 4890, s1: 4928, kick: { len: 16, h: 2.6 }, floor: 0, lava: true, v: 40, back: 120, name: 'LAVA CHANNEL 2' },
+      ],
+      tunnels: [{ s0: 2350, s1: 2780, h: 7.5, name: 'LAVA TUBE' }],
+      spans: [
+        { s: 596, y0: 9, kind: 'arch', bonus: 'THROUGH THE SEA ARCH' },
+        { s: 2100, y0: 7.5, kind: 'rope', bonus: 'UNDER THE ROPE BRIDGE' },
+        { s: 3130, y0: 16, kind: 'geyser', bonus: 'THROUGH THE GEYSERS' },
+        { s: 3592, y0: 9, kind: 'ship', bonus: 'UNDER THE SHIPWRECK' },
+      ],
+      ramps: [0.15, 0.3, 0.7, 0.92],
+    },
   };
   G.setTrack = function (id) {
     const t = G.TRACKS[id] || G.TRACKS.city;
@@ -350,9 +382,16 @@
     addSpan(sp) {
       const s = G.wrap(sp.s, this.length), g = this.gapAt(s), p = this.sample(s, {});
       const base = g ? g.hLip : this.heightAt(s), y0 = base + sp.y0;
-      const th = { arch: 7, trestle: 3, viaduct: 4 }[sp.kind] || 2.8, hl = { arch: 3.5, trestle: 2.4, viaduct: 3.2 }[sp.kind] || 1.3;
+      const th = { arch: 7, trestle: 3, viaduct: 4, rope: 1.2, ship: 7 }[sp.kind] || 2.8, hl = { arch: 3.5, trestle: 2.4, viaduct: 3.2, rope: 1.6, ship: 5 }[sp.kind] || 1.3;
       const span = Object.assign({}, sp, { s, base, x: p.x, z: p.z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, hl, hw: G.WALK_OUT + 4, y0, y1: y0 + th });
       (this.spans = this.spans || []).push(span);
+      if (sp.kind === 'geyser') {
+        // two lava columns either side of the middle, erupting in turn (wall: they knock a car back, never a deck/ceiling)
+        span.cols = [-4.6, 4.6].map((lat, k) => ({ s, x: p.x + p.rx * lat, z: p.z + p.rz * lat, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, hl: 2.2, hw: 2.2, lat, y0: base - 8, y1: base - 8, top: y0 + 4, ph: k * 0.5, h: 0, wall: true }));
+        for (const c of span.cols) this.bridges.push(c);
+        this.updateSpans(0);
+        return span;
+      }
       if (sp.kind !== 'gondola') { this.bridges.push(span); return span; }
       span.E = 230; span.cabins = [];
       for (let k = 0; k < 6; k++) {
@@ -364,6 +403,16 @@
     }
     updateSpans(t) {
       for (const sp of this.spans || []) {
+        if (sp.cols) {
+          // a 4 s cycle per column, half a cycle apart: 0.9 s of warning bubbles, a 1.6 s eruption, then quiet
+          for (const c of sp.cols) {
+            const u = G.wrap(t / 4 + c.ph, 1) * 4;
+            c.warn = u < 0.9 ? u / 0.9 : 0;
+            c.h = u < 0.9 ? 0 : u < 1.15 ? (u - 0.9) / 0.25 : u < 2.3 ? 1 : u < 2.6 ? 1 - (u - 2.3) / 0.3 : 0;
+            c.y1 = c.y0 + (c.top - c.y0) * c.h;
+          }
+          continue;
+        }
         if (!sp.cabins) continue;
         for (const c of sp.cabins) {
           c.u = G.wrap(c.u0 + t * 6 * c.dir, 2 * sp.E) - sp.E;
@@ -416,6 +465,7 @@
       }
       // footbridges: their top is ground for anything landing on them, their underside a ceiling
       for (const q of this.bridges) {
+        if (q.wall) continue; // a lava column: a wall to bump into (car.js), nothing to stand on or under
         const dx = x - q.x, dz = z - q.z;
         if (Math.abs(dx * q.tx + dz * q.tz) > q.hl || Math.abs(dx * q.rx + dz * q.rz) > q.hw) continue;
         if (q.y1 > yRef + 0.6) { if (q.y0 < out.ceil) out.ceil = q.y0; } else if (q.y1 > out.h) { out.h = q.y1; best = -1; }

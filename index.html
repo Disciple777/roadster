@@ -116,7 +116,8 @@
     <div class="scroll">
     <div class="modes">
       <button id="btn-race" class="mode"><b>STREET RACE</b><small>Race rivals through traffic on the city circuits</small></button>
-      <button id="btn-chal" class="mode new"><b>STUNT CHALLENGE</b><small>15 stunt levels in three acts: rooftop gaps, fire rings, loops, beams, crushers. Five lives</small><i>NEW</i></button>
+      <button id="btn-tour" class="mode new"><b>WORLD TOUR</b><small>Every circuit back to back, one lap each. Points add up race to race: be champion at the end</small><i>NEW</i></button>
+      <button id="btn-chal" class="mode"><b>STUNT CHALLENGE</b><small>15 stunt levels in three acts: rooftop gaps, fire rings, loops, beams, crushers. Five lives</small></button>
       <button id="btn-course" class="mode"><b>OBSTACLE COURSE</b><small>Smash, dodge and fly a set-piece course for points</small></button>
       <button id="btn-free" class="mode"><b>FREE RIDE</b><small>No clock, no rules, unlimited N₂</small></button>
       <button id="btn-mp" class="mode"><b>MULTIPLAYER</b><small>Race friends on the same network</small></button>
@@ -124,6 +125,24 @@
     </div>
     </div>
     <div class="actions"><button data-back class="primary">BACK</button></div>
+  </div>
+
+  <!-- WORLD TOUR: every circuit, one lap each, points carried over -->
+  <div id="tour" class="panel card">
+    <h2>WORLD TOUR</h2>
+    <div class="scroll">
+    <p class="hint">Every street circuit back to back, <b>one lap each</b>, against the same seven rivals. Points per race: 10 · 8 · 6 · 5 · 4 · 3 · 2 · 1. Most points at the end takes the tour. You can quit between races and pick it up later.</p>
+    <div id="tour-stops" class="tour-stops"></div>
+    <div id="tour-stand-wrap"><label>STANDINGS</label><div id="tour-stand" class="res-rows"></div></div>
+    <p id="tour-last" class="hint"></p>
+    <label>RIVAL SKILL</label>
+    <div class="seg" id="t-diff"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="pro">PRO</button></div>
+    <label>TRAFFIC</label>
+    <div class="seg" id="t-traffic"><button data-v="off">OFF</button><button data-v="light">LIGHT</button><button data-v="medium">MEDIUM</button><button data-v="heavy">HEAVY</button><button data-v="insane">INSANE</button></div>
+    <label>TIME OF DAY</label>
+    <div class="seg" id="t-tod"><button data-v="night">NIGHT</button><button data-v="sunset">SUNSET</button></div>
+    </div>
+    <div class="actions"><button data-back>BACK</button><button id="btn-tquit" class="hidden">ABANDON</button><button id="btn-tgo" class="primary">START TOUR</button></div>
   </div>
 
   <!-- STUNT CHALLENGE -->
@@ -152,7 +171,7 @@
     </div>
     <div class="race-opt">
       <label>LAPS</label>
-      <div class="seg race-laps" id="s-laps"><button data-v="2">2 · OFFICIAL</button><button data-v="3">3</button></div>
+      <div class="seg race-laps" id="s-laps"><button data-v="1">1</button><button data-v="2">2 · OFFICIAL</button><button data-v="3">3</button></div>
       <div class="seg course-laps" id="s-claps"><button data-v="1">1 · OFFICIAL</button><button data-v="3">3</button></div>
       <p class="hint official" id="s-official">Only official runs go on the leaderboard.</p>
       <label>DRIVER NAME</label>
@@ -393,7 +412,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry, GLTFLoader };
     const BUILD = Date.now();
-    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'ghost', 'course', 'editor', 'challenge', 'game'];
+    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'tour', 'ghost', 'course', 'editor', 'challenge', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }
