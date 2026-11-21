@@ -14,6 +14,7 @@ How the RoadsterThruster cars are made, and the numbers they have to fit.
 | rhino | RHINO | `tools/model_rhino.py` | locked |
 | comet2 | COMET v2 | `tools/model_comet2.py` | locked |
 | bastion2 | BASTION v2 | `tools/model_bastion2.py` | locked |
+| atlas | ATLAS | `tools/model_atlas.py` | locked |
 | comet, bastion | COMET, BASTION | Meshy + `tools/prep_car.py` | showroom only |
 | pebble | PEBBLE | Tripo + `tools/prep_car.py` | showroom only |
 
@@ -40,6 +41,7 @@ In `js/car.js`:
 | RHINO | clear every Stunt Challenge level (practice counts) | `rt_chalLvl_<i>`, written by `challenge.js complete()` |
 | COMET v2 | complete the official Obstacle Course without wrecking (solo or multiplayer) | `finishCourse()` sets `courseDone` |
 | BASTION v2 | finish a multiplayer race with at least one other person | `mpProgress()` sets `mpRaced` |
+| ATLAS | finish the World Tour in P1 | the tour's last race sets `tourWin` |
 
 `game.checkUnlocks()` runs after each of those (and once at startup, so old progress counts). It moves met goals into
 `rt_unlockedCars` and shows a "NEW CAR UNLOCKED" toast per car. To add a goal: add an `G.UNLOCKS` entry, record its
