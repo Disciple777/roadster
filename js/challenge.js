@@ -1811,9 +1811,9 @@
       this.submitted = true;
       if (el) el.textContent = 'Sending to the leaderboard…';
       const g = this.game, c = this.course;
-      G.api.submit({ name: g.settings.mpName, track: c.track, mode: 'chal', laps: c.laps, time_ms: Math.round(this.runTime * 1000), score: Math.round(this.total) })
+      g.submitP = G.api.submit({ name: g.settings.mpName, track: c.track, mode: 'chal', laps: c.laps, time_ms: Math.round(this.runTime * 1000), score: Math.round(this.total) })
         .then((r) => { if (el) el.innerHTML = `${r.best ? 'NEW PERSONAL BEST · ' : ''}<b>#${r.rank}</b> of ${r.total} on the Stunt Challenge leaderboard`; })
-        .catch(() => { if (el) el.textContent = 'Leaderboard offline: this run was not saved.'; });
+        .catch(() => { if (el) el.textContent = 'Leaderboard offline: this run was not saved.'; }).finally(() => { g.submitP = null; });
     }
 
     // camera: stay under ceilings (the garage) and above surfaces

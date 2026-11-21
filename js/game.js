@@ -628,6 +628,11 @@
     wireBoard(click) {
       this.board = { track: G.TRACK_ID, mode: 'race', req: 0 };
       click('btn-board', () => { this.board.track = G.TRACK_ID; this.showPanel('board'); this.loadBoard(); });
+      // from the results: the board for the circuit and mode just driven (BACK returns to the results)
+      click('btn-rboard', () => {
+        this.board.track = G.TRACK_ID; this.board.mode = this.mode === 'challenge' ? 'chal' : this.mode === 'course' ? 'course' : 'race';
+        this.showPanel('board'); this.loadBoard();
+      });
       for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) {
         $(id).addEventListener('click', (e) => {
           const b = e.target.closest('button[data-v]');
@@ -643,6 +648,8 @@
       $('b-track').classList.toggle('hidden', chal);
       for (const [id, key] of [['b-track', 'track'], ['b-mode', 'mode']]) $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.v === B[key]));
       rowsEl.innerHTML = '<div class="empty">Loading…</div>'; mineEl.textContent = '';
+      if (this.submitP) await this.submitP; // a run still being sent: show the board with it on
+      if (req !== B.req) return;
       let res;
       try { res = await G.api.top(B.track, B.mode); } catch (e) { if (req === B.req) rowsEl.innerHTML = '<div class="empty">Leaderboard is offline right now.</div>'; return; }
       if (req !== B.req) return;
@@ -669,14 +676,14 @@
       if (miss.length) { el.textContent = `Practice run: ranked runs need ${miss.join(', ')}.`; return; }
       el.textContent = 'Sending to the leaderboard…';
       const where = G.TRACK.name + (mode === 'race' ? ' street race' : ' obstacle course');
-      G.api.submit({
+      this.submitP = G.api.submit({
         name: this.settings.mpName, track: G.TRACK_ID, mode, laps: this.laps,
         traffic: this.settings.traffic, rivals: this.settings.rivals, difficulty: this.settings.difficulty,
         time_ms: Math.round(this.raceTime * 1000), score: Math.round(this.score),
         ghost: mode === 'course' ? this.ghostRec.data : undefined,
       }).then((r) => {
         el.innerHTML = `${r.best ? 'NEW PERSONAL BEST · ' : ''}<b>#${r.rank}</b> of ${r.total} on the ${where} leaderboard`;
-      }).catch(() => { el.textContent = 'Leaderboard offline: this run was not saved.'; });
+      }).catch(() => { el.textContent = 'Leaderboard offline: this run was not saved.'; }).finally(() => { this.submitP = null; });
     }
 
     // the official course can be edited from race control: fetch this circuit's layout, keep a copy for offline
