@@ -23,9 +23,9 @@
 
   G.buildWild = function (game) {
     const { scene, track: tr, Q } = game;
-    const D = G.TRACK, theme = D.theme, alps = theme === 'alps', isle = theme === 'isle';
+    const D = G.TRACK, theme = D.theme, alps = theme === 'alps', isle = theme === 'isle', fjord = theme === 'fjord', sea = isle || fjord;
     const N = tr.N, ds = tr.ds, WO = G.WALK_OUT;
-    const R = G.rng(alps ? 777 : isle ? 999 : 555);
+    const R = G.rng(alps ? 777 : isle ? 999 : fjord ? 888 : 555);
     const W = { update: null, setTod: null };
     const anim = []; // per-frame movers: (dt, t) => void
 
@@ -87,7 +87,7 @@
 
     // distant buttes / peaks scattered off the road
     const buttes = [];
-    for (let k = 0; k < (alps || isle ? 0 : 46); k++) {
+    for (let k = 0; k < (alps || sea ? 0 : 46); k++) {
       const bx = tr.minX - 900 + R() * (tr.maxX - tr.minX + 1800), bz = tr.minZ - 900 + R() * (tr.maxZ - tr.minZ + 1800);
       const gx = Math.round((bx - x0) / cell), gz = Math.round((bz - z0) / cell);
       const r0 = 28 + R() * 110;
@@ -125,6 +125,14 @@
             if (bd < rr + 14) h = Math.max(h, b.h * (1 - sstep(rr, rr + 12, bd)) - 18 * sstep(rr, rr + 12, bd));
           }
         }
+      } else if (fjord) {
+        if (inside[k]) {
+          // the massif the road is cut into: it rises straight off the inside of the road
+          h = rh + sstep(20, 300, d) * (60 + 380 * ridge(x / 600, z / 600)) + 6 * fbm(x / 90, z / 90, 3);
+        } else {
+          // a sheer wall down from the road into deep water, the fjord, then the far wall of the fjord
+          h = (rh + 2) * (1 - sstep(WO + 6, WO + 70, d)) - 40 * sstep(WO + 20, WO + 140, d) + sstep(420, 800, d) * (180 + 520 * ridge(x / 700, z / 700)) + 4 * fbm(x / 50, z / 50, 3);
+        }
       } else if (!alps) {
         // desert floor, mesas wherever the road climbs high, buttes in the distance
         h = 2.6 * fbm(x / 170, z / 170) + 1.1 * fbm(x / 35, z / 35, 2);
@@ -147,7 +155,7 @@
       if (isTunnel(i) && d < 110 && !notch) h = Math.max(h, (rh + tr.roof[i] + 28 + 10 * fbm(x / 40, z / 40, 2)) * (1 - sstep(60, 110, d)) + h * sstep(60, 110, d));
       // the road corridor: flat under the road, then a cut or a fill out to the natural ground
       if (!isTunnel(i) || notch) {
-        const w = 1 - sstep(WO + cell * 0.8, WO + cell * 0.8 + (alps ? 30 : isle ? 36 : 42), d);
+        const w = 1 - sstep(WO + cell * 0.8, WO + cell * 0.8 + (alps ? 30 : isle ? 36 : fjord ? 14 : 42), d);
         h = h + (rh - 0.35 - h) * w;
       }
       H[k] = h;
@@ -165,8 +173,8 @@
         const k = gz * nx + gx, x = x0 + gx * cell - c.x, z = z0 + gz * cell - c.z;
         const along = x * c.tx + z * c.tz, u = x * c.rx + z * c.rz;
         if (Math.abs(u) > 650) continue;
-        const fl = g.floor + (isle ? Math.max(0, Math.abs(u) - 180) * 0.5 : 0);
-        if (isle && fl >= H[k]) continue;
+        const fl = g.floor + (sea ? Math.max(0, Math.abs(u) - 180) * 0.5 : 0);
+        if (sea && fl >= H[k]) continue;
         // never cut into another stretch of the circuit
         if (dist[k] < WO + 30 && Math.abs(tr.sd(near[k] * ds, g.s0 + g.len / 2)) > g.len / 2 + 80) continue;
         const hw = g.hw(u), f = 1 - sstep(hw - cell * 1.15, hw, Math.abs(along - g.meander(u)));
@@ -219,14 +227,14 @@
       ground.receiveShadow = Q.shadows; ground.frustumCulled = false;
       scene.add(ground);
     }
-    if (isle) {
+    if (sea) {
       // the ocean: one big sheet, see-through enough that the turquoise shallows show
       const waveTex = G.canvasTexture(256, 256, (ctx, Wd, Ht) => {
         const r = G.rng(23); ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, Wd, Ht);
         for (let k = 0; k < 400; k++) { const g = 100 + r() * 120 | 0; ctx.strokeStyle = `rgba(${g},${g},${g},0.5)`; ctx.lineWidth = 1 + r() * 2; ctx.beginPath(); const x = r() * Wd, y = r() * Ht; ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 10, y - 4, x + 20 + r() * 20, y); ctx.stroke(); }
       }, { repeat: true });
       waveTex.repeat.set(400, 400);
-      const seaMat = new T.MeshStandardMaterial({ color: 0x1b86a8, roughness: 0.18, metalness: 0.35, transparent: true, opacity: 0.84, bumpMap: waveTex, bumpScale: 0.6, depthWrite: false });
+      const seaMat = new T.MeshStandardMaterial({ color: fjord ? 0x163f4c : 0x1b86a8, roughness: fjord ? 0.12 : 0.18, metalness: 0.35, transparent: true, opacity: fjord ? 0.94 : 0.84, bumpMap: waveTex, bumpScale: 0.6, depthWrite: false });
       const sea = new T.Mesh(new T.PlaneGeometry(20000, 20000), seaMat);
       sea.rotation.x = -Math.PI / 2; sea.position.set((tr.minX + tr.maxX) / 2, -1.6, (tr.minZ + tr.maxZ) / 2); sea.renderOrder = 1;
       scene.add(sea);
@@ -235,8 +243,8 @@
 
     // ================= rock / snow / wood / steel materials =================
     const rockMat = W.landMat; // the land shader also reads well on instanced rock (strata by world height)
-    const steel = new T.MeshStandardMaterial({ color: alps ? 0x3a3f46 : isle ? 0x3a2e28 : 0x5a3a28, roughness: 0.6, metalness: 0.6 });
-    const conc = new T.MeshStandardMaterial({ color: alps ? 0x8c8f94 : isle ? 0x5e5652 : 0xa08470, roughness: 0.9 });
+    const steel = new T.MeshStandardMaterial({ color: alps || fjord ? 0x3a3f46 : isle ? 0x3a2e28 : 0x5a3a28, roughness: 0.6, metalness: 0.6 });
+    const conc = new T.MeshStandardMaterial({ color: alps || fjord ? 0x8c8f94 : isle ? 0x5e5652 : 0xa08470, roughness: 0.9 });
     const dark = new T.MeshStandardMaterial({ color: 0x1b1c1f, roughness: 0.9 });
     const m4 = new T.Matrix4(), qq = new T.Quaternion(), ps = new T.Vector3(), sc = new T.Vector3(), up = new T.Vector3(0, 1, 0), eu = new T.Euler();
     const yawOf = (p) => Math.atan2(-p.tx, -p.tz); // local -Z down the road, local +X to its right
@@ -259,7 +267,7 @@
 
     // ================= tunnels & galleries =================
     const tileTex = G.canvasTexture(256, 256, (ctx, Wd, Ht) => {
-      ctx.fillStyle = alps ? '#b9bcbf' : isle ? '#4a3c36' : '#c2a68e'; ctx.fillRect(0, 0, Wd, Ht);
+      ctx.fillStyle = alps || fjord ? '#b9bcbf' : isle ? '#4a3c36' : '#c2a68e'; ctx.fillRect(0, 0, Wd, Ht);
       const r = G.rng(13);
       for (let i = 0; i < 3000; i++) { const g = r() * 40 | 0; ctx.fillStyle = `rgba(${g},${g},${g},0.25)`; ctx.fillRect(r() * Wd, r() * Ht, 2, 2); }
       ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
@@ -271,8 +279,8 @@
     const wallMat = new T.MeshStandardMaterial({ map: tileTex, color: 0x9a9a9a, roughness: 0.6, metalness: 0.05, side: T.DoubleSide });
     const ceilMat = new T.MeshStandardMaterial({ color: 0x25272b, roughness: 0.95, side: T.DoubleSide });
     const dashTex = G.canvasTexture(16, 128, (ctx, Wd, Ht) => { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, Wd, Ht); ctx.fillStyle = '#fff'; ctx.fillRect(0, 8, Wd, Ht * 0.55); }, { repeat: true, srgb: false });
-    const tubeLight = new T.MeshBasicMaterial({ map: dashTex, color: alps ? new T.Color(3.2, 2.9, 2.4) : isle ? new T.Color(4.5, 1.1, 0.2) : new T.Color(4, 1.9, 0.55), toneMapped: false, side: T.DoubleSide });
-    const poolMat = new T.MeshBasicMaterial({ map: G.softSprite(), color: alps ? new T.Color(0.45, 0.43, 0.38) : isle ? new T.Color(0.75, 0.2, 0.05) : new T.Color(0.6, 0.34, 0.12), blending: T.AdditiveBlending, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const tubeLight = new T.MeshBasicMaterial({ map: dashTex, color: alps ? new T.Color(3.2, 2.9, 2.4) : fjord ? new T.Color(1.6, 2.8, 4) : isle ? new T.Color(4.5, 1.1, 0.2) : new T.Color(4, 1.9, 0.55), toneMapped: false, side: T.DoubleSide });
+    const poolMat = new T.MeshBasicMaterial({ map: G.softSprite(), color: alps ? new T.Color(0.45, 0.43, 0.38) : fjord ? new T.Color(0.2, 0.34, 0.48) : isle ? new T.Color(0.75, 0.2, 0.05) : new T.Color(0.6, 0.34, 0.12), blending: T.AdditiveBlending, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     const pools = [];
     for (const t of tr.tunnels) {
       const i0 = idxOf(t.s0), i1 = i0 + Math.round((t.s1 - t.s0) / ds), h = t.h, side = t.side || 0;
@@ -403,7 +411,7 @@
         const i0 = idxOf(g.s0), i1 = idxOf(g.s1);
         const rel = g.floor - tr.heightAt(g.s0);
         for (const sg of [-1, 1]) scene.add(new T.Mesh(strip(i0, i1, sg * WO, 0, sg * WO, rel, 6), dark));
-        const glow = new T.Mesh(strip(i0, i1, -WO, rel + 0.5, WO, rel + 0.5, 6), new T.MeshBasicMaterial({ color: new T.Color(1.6, 0.25, 0.05), toneMapped: false }));
+        const glow = new T.Mesh(strip(i0, i1, -WO, rel + 0.5, WO, rel + 0.5, 6), new T.MeshBasicMaterial({ color: fjord ? new T.Color(0.2, 0.9, 1.8) : new T.Color(1.6, 0.25, 0.05), toneMapped: false }));
         scene.add(glow);
       }
       if (g.broken) buildBrokenBridge(g);
@@ -649,6 +657,41 @@
             o.ring.scale.setScalar(1 + (c.warn ? 0.4 * Math.sin(t * 25) : 0));
           }
         });
+      } else if (sp.kind === 'falls') {
+        // a rock lip juts out of the mountain over the jump, and a river pours off its whole edge down to the fjord:
+        // you fly under the lip and straight through the curtain
+        const xa = -(WO + 14), xb = WO + 90, top = sp.y0 + 4, lw = xb - xa;
+        const lipMat = new T.MeshStandardMaterial({ color: 0x3b3e42, roughness: 0.92, flatShading: true });
+        for (let k = 0; k < 9; k++) {
+          const f = k / 8, x = xa + 6 + f * (lw - 12), kk = 7 + 5 * f + R() * 3;
+          const rk = new T.Mesh(new T.DodecahedronGeometry(1, 0), lipMat);
+          rk.position.set(x, top + kk * 0.35, (R() - 0.5) * 4); rk.scale.set(kk * 1.4, kk * 0.6, 9 + R() * 4); rk.rotation.set(R() * 0.4, R() * 3, R() * 0.4); g.add(rk);
+        }
+        const streak = G.canvasTexture(128, 256, (ctx, Wd, Ht) => {
+          const r = G.rng(43); ctx.clearRect(0, 0, Wd, Ht);
+          for (let k = 0; k < 260; k++) {
+            const x = r() * Wd, a = 0.15 + r() * 0.5, w = 1 + r() * 4, y = r() * Ht, l = 30 + r() * 140;
+            ctx.fillStyle = `rgba(235,245,255,${a})`; ctx.fillRect(x, y, w, l); if (y + l > Ht) ctx.fillRect(x, y - Ht, w, l);
+          }
+        }, { repeat: true });
+        const hgt = top + 1.6;
+        streak.repeat.set(lw / 14, hgt / 30);
+        const wm = new T.MeshBasicMaterial({ map: streak, color: new T.Color(0.9, 0.97, 1.05), transparent: true, opacity: 0.85, depthWrite: false, side: T.DoubleSide });
+        const sheets = [];
+        for (const [dz, sc0, sp0] of [[0, 1, 1], [1.5, 1.3, 0.8], [-1.2, 0.8, 1.25]]) {
+          const tx = streak.clone(); tx.needsUpdate = true; tx.repeat.set(lw / 14 * sc0, hgt / 30 * sc0);
+          const m = wm.clone(); m.map = tx; m.opacity = dz ? 0.45 : 0.8;
+          const sh = new T.Mesh(new T.PlaneGeometry(lw, hgt), m); sh.position.set((xa + xb) / 2, top - hgt / 2, dz); g.add(sh);
+          sheets.push([tx, sp0]);
+        }
+        anim.push((dt) => { for (const [tx, v] of sheets) tx.offset.y += dt * 1.1 * v; });
+        // spray where it hits the water, and a veil of mist half way down
+        const mist = new T.SpriteMaterial({ map: G.softSprite(), color: 0xe8f2f8, transparent: true, depthWrite: false, opacity: 0.55 });
+        for (let k = 0; k < 10; k++) {
+          const ms = new T.Sprite(mist); const sz = 30 + R() * 40;
+          ms.position.set(xa + R() * lw, k < 7 ? 2 + R() * 10 : top * (0.3 + R() * 0.4), (R() - 0.5) * 16); ms.scale.set(sz, sz * 0.6, 1); g.add(ms);
+        }
+        g.userData.noShadow = true;
       } else if (sp.kind === 'ship') {
         // an old galleon wedged across the gorge, keel up high: you fly underneath it
         const wood = new T.MeshStandardMaterial({ color: 0x4a3322, roughness: 0.95 }), dk = new T.MeshStandardMaterial({ color: 0x2a1d14, roughness: 1 });
@@ -680,7 +723,7 @@
           rr.position.set(ax, ay, 0); rr.scale.y = Math.hypot(bx - ax, by - ay); rr.rotation.z = Math.atan2(-(bx - ax), by - ay); g.add(rr);
         }
       }
-      g.traverse((o) => { if (o.isMesh) { o.castShadow = o.castShadow || Q.shadows; o.receiveShadow = true; } });
+      g.traverse((o) => { if (o.isMesh && !(g.userData.noShadow && o.material.transparent)) { o.castShadow = o.castShadow || Q.shadows; o.receiveShadow = true; } });
       scene.add(g);
     }
 
@@ -794,7 +837,7 @@
           p1.scale.set(sz, sz, 1); p1.material.opacity = 0.55 * Math.min(1, u * 8) * (1 - u);
         }
       });
-    } else if (!alps) {
+    } else if (!alps && !fjord) {
       // saguaros
       const sag = [new T.CylinderGeometry(0.38, 0.45, 6.5, 8).translate(0, 3.25, 0), new T.SphereGeometry(0.38, 8, 5).translate(0, 6.5, 0)];
       for (const [sx, y0, h] of [[1, 2.6, 2.2], [-1, 3.4, 1.6]]) {
@@ -878,7 +921,7 @@
         };
         return mat;
       };
-      const needleMat = snowy(new T.MeshStandardMaterial({ map: needleTex, alphaTest: 0.5, side: T.DoubleSide, roughness: 0.95, metalness: 0 }), 0.92);
+      const needleMat = snowy(new T.MeshStandardMaterial({ map: needleTex, alphaTest: 0.5, side: T.DoubleSide, roughness: 0.95, metalness: 0 }), fjord ? 0.3 : 0.92);
       const barkMat = new T.MeshStandardMaterial({ map: barkTex, roughness: 1, metalness: 0 });
       // one tier: a cone of branches whose rim is a ring of drooping tips (every other vertex pulled in and lifted)
       const tier = (y0, R, Hh, phase, rr) => {
@@ -929,7 +972,7 @@
         const trunk = new T.CylinderGeometry(0.07 * sp.R, 0.13 * sp.R, sp.Ht * 0.92, 7, 1).translate(0, sp.Ht * 0.46 - 0.3, 0);
         return { fol, trunk };
       });
-      const pines = placeScatter(Math.round(1900 * dens), (x, z, d, y) => offRoad(d, 4) && d < 700 && y < 260 && y > -2 && slopeAt(x, z) < 0.75 && notChasm(x, z));
+      const pines = placeScatter(Math.round(1900 * dens), (x, z, d, y) => offRoad(d, 4) && d < 700 && y < (fjord ? 220 : 260) && y > (fjord ? 0.5 : -2) && slopeAt(x, z) < 0.75 && notChasm(x, z));
       // groves: thin out the trees that ended up alone in open snow, keep the clumps
       const groves = []; for (let k = 0; k < 90; k++) groves.push([tr.minX - 700 + R() * (tr.maxX - tr.minX + 1400), tr.minZ - 700 + R() * (tr.maxZ - tr.minZ + 1400), 60 + R() * 140]);
       const kept = pines.filter((c) => c[3] < 0.12 || groves.some(([gx, gz, gr]) => Math.hypot(c[0] - gx, c[2] - gz) < gr) || distAt(c[0], c[2]) < 60);
@@ -954,18 +997,18 @@
       for (let k = 0; k < 400 && ch.length < Math.round(34 * dens); k++) {
         const s = G.wrap(-500 + R() * 1200, tr.length), sg = R() < 0.5 ? -1 : 1, lat = sg * (WO + 9 + R() * 90), p = tr.sample(s, {});
         const x = p.x + p.rx * lat, z = p.z + p.rz * lat;
-        if (distAt(x, z) < WO + 7 || slopeAt(x, z) > 0.2 || !notChasm(x, z) || ch.some((c) => Math.hypot(c[0] - x, c[2] - z) < 16)) continue;
+        if (distAt(x, z) < WO + 7 || slopeAt(x, z) > 0.2 || (fjord && hAt(x, z) < 0.3) || !notChasm(x, z) || ch.some((c) => Math.hypot(c[0] - x, c[2] - z) < 16)) continue;
         ch.push([x, hAt(x, z), z, R(), yawOf(p)]);
       }
       const walls = new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
       const roofG = new T.CylinderGeometry(0.62, 0.62, 1, 3, 1).rotateZ(Math.PI / 2).rotateX(Math.PI / 6 + Math.PI); roofG.scale(1, 0.62, 1.15);
       const sizes = ch.map((c) => [9 + c[3] * 6, 5 + c[3] * 3, 8 + c[3] * 4]);
-      instance(walls, new T.MeshStandardMaterial({ color: 0x7a4e2e, roughness: 0.85 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] - 0.6, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w, h + 0.6, d2)); });
-      instance(roofG, new T.MeshStandardMaterial({ color: 0xf2f5f8, roughness: 0.8 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] + h - 0.1, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w * 1.18, w * 0.62, d2 * 1.2)); });
+      instance(walls, new T.MeshStandardMaterial({ color: fjord ? 0x9a2620 : 0x7a4e2e, roughness: 0.85 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] - 0.6, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w, h + 0.6, d2)); });
+      instance(roofG, new T.MeshStandardMaterial({ color: fjord ? 0x2b2d30 : 0xf2f5f8, roughness: 0.8 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] + h - 0.1, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w * 1.18, w * 0.62, d2 * 1.2)); });
       // warm windows
       const winM = new T.MeshBasicMaterial({ color: new T.Color(3.2, 1.9, 0.8), toneMapped: false });
       W.chaletWin = instance(new T.BoxGeometry(1, 1, 1), winM, ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] + h * 0.45, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w * 0.7, 1.1, d2 + 0.08)); });
-      const rocks = placeScatter(Math.round(260 * dens), (x, z, d, y) => offRoad(d, 3) && d < 500);
+      const rocks = placeScatter(Math.round(260 * dens), (x, z, d, y) => offRoad(d, 3) && d < 500 && (!fjord || y > -1));
       instance(new T.DodecahedronGeometry(1, 0), rockMat, rocks, (c, m) => {
         const k = 1 + c[3] * c[3] * 5; m.compose(ps.set(c[0], c[1] + k * 0.2, c[2]), qq.setFromEuler(eu.set(c[3] * 3, c[3] * 9, c[3] * 5)), sc.set(k * 1.3, k, k * 1.1));
       });
@@ -995,7 +1038,7 @@
   // the land: sandstone strata by height on steep faces and sand on the flats (RED ROCK), or snow on the flats and
   // grey rock on the steep (ALPINE). Works on instanced rock too, so boulders and spires match the cliffs
   function landMaterial(theme) {
-    const alps = theme === 'alps', isle = theme === 'isle';
+    const alps = theme === 'alps', isle = theme === 'isle', fjord = theme === 'fjord';
     const m = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0, side: T.DoubleSide });
     m.onBeforeCompile = (sh) => {
       sh.vertexShader = 'varying vec3 vLWP; varying vec3 vLWN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -1025,6 +1068,18 @@
           c = mix(c, ash, smoothstep(90.0, 140.0, yy));
           c = mix(sea, c, smoothstep(-2.4, -1.2, y));
           diffuseColor.rgb = mix(basalt, c, smoothstep(0.55, 0.75, fl));
+          ` : fjord ? `
+          // black wet rock at the waterline, moss and heather on anything flat, snow on the high flats, grey granite walls
+          vec3 snow = vec3(0.86, 0.9, 0.96) * (0.92 + 0.08 * gn);
+          vec3 moss = mix(vec3(0.13, 0.2, 0.08), vec3(0.27, 0.32, 0.15), gn);
+          moss = mix(moss, vec3(0.3, 0.22, 0.2), smoothstep(0.74, 0.86, ln(vLWP.xz * 0.15)) * 0.5);
+          vec3 rock = mix(vec3(0.14, 0.145, 0.155), vec3(0.32, 0.31, 0.3), ln(vec2(y * 0.3, vLWP.x * 0.04 + vLWP.z * 0.04)));
+          rock = mix(rock, vec3(0.08, 0.09, 0.1), smoothstep(0.75, 0.95, ln(vec2(vLWP.x * 0.02 + vLWP.z * 0.02, y * 0.08))) * 0.6); // streaks
+          float yy = y + (gn - 0.5) * 40.0;
+          vec3 top = mix(moss, snow, smoothstep(200.0, 280.0, yy));
+          vec3 c = mix(rock, top, smoothstep(0.62, 0.8, fl + gn * 0.12));
+          c = mix(vec3(0.04, 0.045, 0.05), c, smoothstep(-0.5, 3.0, y));
+          diffuseColor.rgb = mix(vec3(0.07, 0.14, 0.15), c, smoothstep(-3.0, -1.4, y));
           ` : alps ? `
           vec3 snow = vec3(0.86, 0.9, 0.96) * (0.92 + 0.08 * gn);
           vec3 rock = mix(vec3(0.12, 0.12, 0.13), vec3(0.24, 0.23, 0.22), ln(vec2(y * 0.4, vLWP.x * 0.05 + vLWP.z * 0.05)));

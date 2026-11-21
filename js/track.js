@@ -125,6 +125,40 @@
       ],
       ramps: [0.15, 0.3, 0.7, 0.92],
     },
+    // a Norwegian cliff road: out of a fishing harbour and up the wall of a fjord, a sheer drop to the sea on one side
+    // the whole way. The sea fills everything below its level (wild.js), so every gap here ends in deep water.
+    // falls: a waterfall pouring off the cliff across a jump (not solid: you punch through it)
+    fjord: {
+      name: "DEVIL'S FJORD", tag: 'norwegian cliff road', fwd: [-5.4, -1.8, 1.8, 5.4], onc: [], road: 8, walk: 9.8, wall: 9.5, grid: [-1.9, 1.9], traffic: 1.15,
+      elev: true, wild: true, theme: 'fjord', trees: false, noCourse: true, xings: false, lampEvery: 65, fogK: 0.5,
+      desc: 'A road bolted to the wall of a Norwegian fjord. Jump the troll gorge under a rope bridge, hop the shaft in the mountain, take the cliff gallery, then launch off the Pulpit: 180 m through a waterfall, 50 m above the sea. Then a collapsed bridge and the Troll Steps.',
+      ctrl: [
+        [-600, -650], [-200, -700], [200, -720], [560, -660], [820, -500], [940, -260], [960, 20], [900, 300], [760, 520],
+        [520, 640], [240, 620], [0, 700], [-260, 720], [-520, 640], [-760, 520], [-900, 300], [-960, 40], [-920, -240], [-800, -480],
+      ],
+      prof: [[0, 2], [300, 2], [620, 14], [880, 30], [950, 30], [1300, 52], [1650, 80], [1900, 92], [1926, 93], [2150, 105], [2350, 112],
+        [2600, 124], [2850, 158], [3000, 165], [3180, 118, -0.3], [3400, 96], [3700, 82], [3780, 78], [4000, 66], [4280, 50], [4320, 42],
+        [4420, 42], [4460, 34], [4560, 34], [4600, 26], [4900, 14], [5300, 2]],
+      gaps: [
+        { s0: 880, s1: 950, kick: { len: 30, h: 4.5 }, floor: -30, v: 50, back: 300, name: 'TROLL GORGE', warn: 'GORGE AHEAD · FULL SPEED' },
+        { s0: 1900, s1: 1926, floor: 60, v: 46, back: 160, name: 'THE SHAFT', warn: 'NO FLOOR · HOP IT', inTunnel: true },
+        { s0: 3000, s1: 3180, kick: { len: 34, h: 7 }, floor: -30, v: 56, back: 300, name: 'THE PULPIT', warn: 'PULPIT ROCK · FLAT OUT · DO NOT LIFT', big: true },
+        { s0: 3700, s1: 3780, floor: -30, v: 50, back: 260, name: 'BROKEN BRIDGE', warn: 'BRIDGE COLLAPSED · HOLD THRUST', broken: true },
+        { s0: 4280, s1: 4320, kick: { len: 16, h: 2.6 }, floor: -30, v: 42, back: 280, name: 'TROLL STEPS', warn: 'THREE STEPS DOWN · KEEP IT PINNED' },
+        { s0: 4420, s1: 4460, kick: { len: 16, h: 2.6 }, floor: -30, v: 42, back: 100, name: 'TROLL STEP 2' },
+        { s0: 4560, s1: 4600, kick: { len: 16, h: 2.6 }, floor: -30, v: 42, back: 100, name: 'TROLL STEP 3' },
+      ],
+      tunnels: [
+        { s0: 1650, s1: 2150, h: 7.5, name: 'TROLL TUNNEL' },
+        { s0: 2350, s1: 2600, h: 7.5, side: -1, name: 'CLIFF GALLERY' },
+      ],
+      spans: [
+        { s: 560, y0: 12.5, kind: 'viaduct', bonus: 'UNDER THE FJORD RAILWAY' },
+        { s: 915, y0: 7.5, kind: 'rope', bonus: 'UNDER THE ROPE BRIDGE' },
+        { s: 3080, y0: 40, kind: 'falls', bonus: 'THROUGH THE WATERFALL' },
+      ],
+      ramps: [0.12, 0.62, 0.92],
+    },
   };
   G.setTrack = function (id) {
     const t = G.TRACKS[id] || G.TRACKS.city;
@@ -392,6 +426,7 @@
         this.updateSpans(0);
         return span;
       }
+      if (sp.kind === 'falls') return span; // water: you fly straight through it
       if (sp.kind !== 'gondola') { this.bridges.push(span); return span; }
       span.E = 230; span.cabins = [];
       for (let k = 0; k < 6; k++) {

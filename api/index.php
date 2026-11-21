@@ -23,7 +23,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 
-const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps', 'isle', 'stunt', 'stunt15', 'stunt1', 'stunt2', 'stunt3']; // stunt*: STUNT CHALLENGE runs (their own levels)
+const TRACKS = ['city', 'highway', 'skyway', 'canyon', 'alps', 'isle', 'fjord', 'stunt', 'stunt15', 'stunt1', 'stunt2', 'stunt3']; // stunt*: STUNT CHALLENGE runs (their own levels)
 const MODES = ['race', 'course', 'chal'];
 const COURSES = ['street'];
 const OFFICIAL_LAPS = ['race' => 2, 'course' => 1, 'chal' => 15]; // chal: levels in the run (see CHAL_LAPS)
