@@ -159,6 +159,42 @@
       ],
       ramps: [0.12, 0.62, 0.92],
     },
+    // Guatemala: the highway ring around Lago de Atitlán. The lake fills the inside of the loop (right), the highlands and the
+    // three volcanoes (San Pedro, Tolimán, Atitlán) rise outside it. Two-way traffic with tuk-tuks, motos and camionetas.
+    // kite: a giant Sumpango barrilete standing across the road (solid, go under it); rocks: boulders rolling across the road
+    // off the hillside (solid, moving); bumps: túmulos (speed humps), full-width mini kickers.
+    atitlan: {
+      name: 'LAGO DE ATITLÁN', tod: 'day', tag: 'guatemalan lake highway', fwd: [1.8, 5.4], onc: [-1.8, -5.4], road: 8, walk: 9.8, wall: 9.5, grid: [1.9, 5.5], traffic: 1.15,
+      trafficMix: { sedan: 12, suv: 8, hatch: 10, pickup: 18, van: 6, box: 4, semi: 2, bus: 0, tuktuk: 22, moto: 26, chicken: 14 },
+      elev: true, wild: true, theme: 'atitlan', trees: false, noCourse: true, xings: false, lampEvery: 70, fogK: 0.45,
+      desc: 'The ring road around Lake Atitlán, under three volcanoes. Two-way traffic full of tuk-tuks, motos and chicken buses. Jump the Panajachel river, cross a landslide, launch off the Mirador under a giant barrilete, dodge falling rocks, hit the túmulos, and drop down Los Tres Saltos.',
+      ctrl: [
+        [-560, -660], [-300, -690], [-20, -700], [260, -690], [540, -630], [760, -500], [880, -300], [930, -60], [950, 180], [960, 420],
+        [870, 600], [640, 700], [360, 720], [80, 700], [-200, 730], [-480, 700], [-720, 580], [-890, 380], [-950, 140], [-950, -100],
+        [-900, -330], [-780, -520],
+      ],
+      prof: [[0, 3], [440, 3], [500, 3], [650, 4], [1150, 42], [1180, 42], [1240, 38], [1500, 58], [1960, 92], [2150, 52, -0.25], [2450, 20],
+        [2600, 4], [2800, 4], [2990, 22], [3060, 18], [3300, 4], [3700, 4], [4200, 60], [4700, 100], [4790, 95], [4980, 86], [5020, 79],
+        [5120, 72], [5160, 65], [5260, 58], [5300, 51], [5600, 4]],
+      gaps: [
+        { s0: 440, s1: 500, kick: { len: 30, h: 4.5 }, floor: -10, v: 48, back: 260, name: 'RÍO PANAJACHEL', warn: 'PUENTE CERRADO · SALTE EL RÍO' },
+        { s0: 1180, s1: 1240, floor: -30, v: 48, back: 220, name: 'DERRUMBE', warn: 'DERRUMBE · MANTENGA EL EMPUJE' },
+        { s0: 1960, s1: 2115, kick: { len: 34, h: 7 }, floor: -30, v: 56, back: 300, name: 'MIRADOR LEAP', warn: 'MIRADOR · A FONDO · OJO CON EL BARRILETE', big: true },
+        { s0: 2990, s1: 3060, floor: -20, v: 48, back: 220, name: 'PUENTE CAÍDO', warn: 'PUENTE CAÍDO · HOLD THRUST', broken: true },
+        { s0: 4700, s1: 4790, kick: { len: 36, h: 4 }, floor: -30, v: 50, back: 280, name: 'NARIZ DEL INDIO', warn: 'NARIZ DEL INDIO · FULL SPEED' },
+        { s0: 4980, s1: 5020, kick: { len: 16, h: 2.6 }, floor: -30, v: 42, back: 280, name: 'LOS TRES SALTOS', warn: 'TRES SALTOS · KEEP IT PINNED' },
+        { s0: 5120, s1: 5160, kick: { len: 16, h: 2.6 }, floor: -30, v: 42, back: 100, name: 'SEGUNDO SALTO' },
+        { s0: 5260, s1: 5300, kick: { len: 16, h: 2.6 }, floor: -30, v: 42, back: 100, name: 'TERCER SALTO' },
+      ],
+      spans: [
+        { s: 470, y0: 7.5, kind: 'rope', bonus: 'UNDER THE HAMMOCK BRIDGE' },
+        { s: 1500, y0: 0, kind: 'rocks' },
+        { s: 2040, y0: 24, kind: 'kite', bonus: 'UNDER THE BARRILETE' },
+        { s: 4300, y0: 0, kind: 'rocks' },
+      ],
+      bumps: [2650, 2700, 2750, 3480, 3530],
+      ramps: [0.12, 0.6, 0.9],
+    },
   };
   G.setTrack = function (id) {
     const t = G.TRACKS[id] || G.TRACKS.city;
@@ -260,6 +296,11 @@
         if (g.kick) this.addRamp(g.s0 - g.kick.len / 2, 0, g.kick.len, 2 * G.ROAD_HALF + 0.4, g.kick.h, true);
         this.gaps.push(gp);
         this.zones.push({ s0: gp.z0 - 25, s1: g.s1 + 25 });
+      }
+      // túmulos: speed humps right across the road. At racing speed they're little kickers
+      for (const s of D.bumps || []) {
+        this.addRamp(s, 0, 4, 2 * G.ROAD_HALF + 0.4, 0.55, true);
+        this.zones.push({ s0: s - 20, s1: s + 20 });
       }
     }
     // signed distance a - b along the lap, in -L/2 .. L/2
@@ -416,7 +457,7 @@
     addSpan(sp) {
       const s = G.wrap(sp.s, this.length), g = this.gapAt(s), p = this.sample(s, {});
       const base = g ? g.hLip : this.heightAt(s), y0 = base + sp.y0;
-      const th = { arch: 7, trestle: 3, viaduct: 4, rope: 1.2, ship: 7 }[sp.kind] || 2.8, hl = { arch: 3.5, trestle: 2.4, viaduct: 3.2, rope: 1.6, ship: 5 }[sp.kind] || 1.3;
+      const th = { arch: 7, trestle: 3, viaduct: 4, rope: 1.2, ship: 7, kite: 22 }[sp.kind] || 2.8, hl = { arch: 3.5, trestle: 2.4, viaduct: 3.2, rope: 1.6, ship: 5, kite: 1.2 }[sp.kind] || 1.3;
       const span = Object.assign({}, sp, { s, base, x: p.x, z: p.z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, hl, hw: G.WALK_OUT + 4, y0, y1: y0 + th });
       (this.spans = this.spans || []).push(span);
       if (sp.kind === 'geyser') {
@@ -427,6 +468,18 @@
         return span;
       }
       if (sp.kind === 'falls') return span; // water: you fly straight through it
+      if (sp.kind === 'rocks') {
+        // boulders rolling off the hillside (left) across the road and down to the lake (right): moving walls that knock
+        // a car back. The AI doesn't dodge them (wall), so they let it through
+        span.E = 55; span.rocks = [];
+        const y = this.heightAt(s);
+        for (let k = 0; k < 4; k++) {
+          const c = { s, x: p.x, z: p.z, tx: p.tx, tz: p.tz, rx: p.rx, rz: p.rz, hl: 2.1, hw: 2.1, y0: y - 0.5, y1: y + 4.2, off: [-7, 2, -2, 7][k], u0: k * (2 * span.E / 4) + k * 7, u: 0, r: 2.1 + (k % 2) * 0.5, wall: true, rock: true };
+          span.rocks.push(c); this.bridges.push(c);
+        }
+        this.updateSpans(0);
+        return span;
+      }
       if (sp.kind !== 'gondola') { this.bridges.push(span); return span; }
       span.E = 230; span.cabins = [];
       for (let k = 0; k < 6; k++) {
@@ -445,6 +498,13 @@
             c.warn = u < 0.9 ? u / 0.9 : 0;
             c.h = u < 0.9 ? 0 : u < 1.15 ? (u - 0.9) / 0.25 : u < 2.3 ? 1 : u < 2.6 ? 1 - (u - 2.3) / 0.3 : 0;
             c.y1 = c.y0 + (c.top - c.y0) * c.h;
+          }
+          continue;
+        }
+        if (sp.rocks) {
+          for (const c of sp.rocks) {
+            c.u = G.wrap(c.u0 + t * 10, 2 * sp.E) - sp.E;
+            c.x = sp.x + sp.rx * c.u + sp.tx * c.off; c.z = sp.z + sp.rz * c.u + sp.tz * c.off;
           }
           continue;
         }

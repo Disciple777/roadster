@@ -173,6 +173,13 @@
     }
     part(list, new T.CylinderGeometry(r * 0.13, r * 0.16, 0.05, 8).rotateZ(Math.PI / 2), spokes ? rim : CHROME, fx - sx * (spokes ? 0.03 : 0.07), r, z);
   }
+  // a thin centred wheel (motorbike, a tuk-tuk's front wheel): tyre ring, spokes, hub
+  function spokeWheel(list, r, z, w) {
+    part(list, new T.TorusGeometry(r - w * 0.6, w * 0.6, 8, 18).rotateY(Math.PI / 2), TYRE, 0, r, z);
+    part(list, new T.TorusGeometry(r * 0.62, 0.02, 4, 16).rotateY(Math.PI / 2), ALLOY, 0, r, z);
+    for (let k = 0; k < 6; k++) part(list, new T.BoxGeometry(0.02, r * 1.2, 0.03).rotateX(k / 6 * Math.PI), ALLOY, 0, r, z);
+    part(list, new T.CylinderGeometry(0.06, 0.06, w + 0.06, 8).rotateZ(Math.PI / 2), CHROME, 0, r, z);
+  }
   // headlamps swept back round the front corners (front is -Z), with a housing and a running-light strip
   function headlamps(l, b, x, y, z, w = 0.38, h = 0.11, sweep = 0.24) {
     for (const sx of [1, -1]) {
@@ -488,6 +495,130 @@
         plate(b, 0.5, 2.86);
       },
     },
+    // ---- the ones below only turn up where a track's trafficMix asks for them (weight 0 everywhere else) ----
+    {
+      id: 'moto', name: 'MOTO', len: 2.1, wid: 0.8, hgt: 1.65, mass: 220, weight: 0, vmin: 17, vmax: 27, bonus: 250,
+      build(b, l) {
+        for (const z of [-0.72, 0.7]) spokeWheel(b, 0.33, z, 0.08);
+        part(b, box(0.12, 0.12, 1.15), TRIM, 0, 0.55, 0);
+        part(b, rbox(0.3, 0.3, 0.42, 0.06), STEEL, 0, 0.45, -0.05);
+        part(b, cylZ(0.05, 0.7, 8), CHROME, 0.17, 0.42, 0.42);
+        part(b, rbox(0.36, 0.26, 0.52, 0.09), BODY, 0, 0.86, -0.25);
+        part(b, rbox(0.3, 0.1, 0.6, 0.04), BLACK, 0, 0.9, 0.25);
+        part(b, rbox(0.26, 0.14, 0.42, 0.05), BODY, 0, 0.9, 0.62);
+        part(b, rbox(0.2, 0.06, 0.5, 0.03), BODY, 0, 0.7, 0.75, 0, 0.35);
+        for (const sx of [1, -1]) part(b, box(0.05, 0.72, 0.05), CHROME, sx * 0.1, 0.66, -0.6, 0, 0.35);
+        part(b, rbox(0.18, 0.05, 0.4, 0.02), BODY, 0, 0.6, -0.78);
+        part(b, box(0.72, 0.04, 0.04), BLACK, 0, 1.05, -0.5);
+        part(b, rbox(0.24, 0.22, 0.12, 0.05), BLACK, 0, 0.95, -0.7);
+        part(l, cylZ(0.085, 0.04, 10), HEAD, 0, 0.95, -0.77);
+        part(l, box(0.16, 0.06, 0.03), TAILC, 0, 0.92, 0.84);
+        // the rider: jeans, a jacket, gloves on the bars, a helmet with a dark visor
+        const JEANS = [0.12, 0.17, 0.3], JACKET = [0.1, 0.1, 0.12];
+        MATTE.add(JEANS); MATTE.add(JACKET);
+        for (const sx of [1, -1]) {
+          part(b, box(0.13, 0.13, 0.46), JEANS, sx * 0.17, 1.0, 0.0, 0, 0.12);
+          part(b, box(0.12, 0.42, 0.13), JEANS, sx * 0.2, 0.72, -0.2, 0, -0.35);
+          part(b, box(0.1, 0.1, 0.5), JACKET, sx * 0.2, 1.3, -0.3, 0, 0.5);
+        }
+        part(b, rbox(0.42, 0.55, 0.28, 0.08), JACKET, 0, 1.3, 0.08, 0, -0.35);
+        part(b, new T.SphereGeometry(0.155, 12, 9), BODY, 0, 1.68, -0.05);
+        part(b, box(0.22, 0.09, 0.1), GLASS, 0, 1.68, -0.17);
+      },
+    },
+    {
+      id: 'tuktuk', name: 'TUK-TUK', len: 2.8, wid: 1.35, hgt: 1.85, mass: 450, weight: 0, vmin: 11, vmax: 16, bonus: 300, outer: true,
+      build(b, l) {
+        spokeWheel(b, 0.22, -1.02, 0.12);
+        for (const sx of [1, -1]) wheelAt(b, sx * 0.6, 0.24, 0.85, 0.16, STEEL, 0);
+        // the front cowl over the single wheel, the cab floor, the passenger tub at the back
+        prism(b, [[-1.38, 0.32], [-1.42, 0.78], [-1.26, 1.02], [-0.82, 1.02], [-0.72, 0.32]], 0.95, BODY);
+        part(b, rbox(0.4, 0.12, 0.6, 0.05), BODY, 0, 0.48, -1.0);
+        part(b, box(1.1, 0.12, 0.9), TRIM, 0, 0.3, -0.3);
+        part(b, rbox(1.32, 0.62, 1.45, 0.08), BODY, 0, 0.66, 0.62);
+        for (const sx of [1, -1]) part(b, box(0.02, 0.05, 2.2), CHROME, sx * 0.665, 0.62, 0.25);
+        part(b, box(1.2, 0.16, 0.55), BLACK, 0, 1.03, 0.82);
+        part(b, box(1.2, 0.55, 0.12), BLACK, 0, 1.3, 1.25);
+        // windscreen, canopy roof on four posts
+        part(b, box(1.0, 0.55, 0.03), GLASS, 0, 1.3, -0.95, 0, 0.18);
+        part(b, rbox(1.36, 0.1, 2.25, 0.04), BODY, 0, 1.82, 0.25);
+        part(b, box(1.38, 0.08, 2.27), BLACK, 0, 1.75, 0.25);
+        for (const sx of [1, -1]) for (const z of [-0.95, 1.32]) part(b, box(0.05, 0.9, 0.05), BLACK, sx * 0.62, 1.32, z);
+        part(b, box(1.3, 0.45, 0.02), GLASS, 0, 1.45, 1.335);
+        // the driver
+        part(b, box(0.62, 0.035, 0.035), BLACK, 0, 1.08, -0.72);
+        part(b, rbox(0.38, 0.5, 0.26, 0.07), [0.55, 0.12, 0.1], 0, 1.25, -0.3);
+        part(b, new T.SphereGeometry(0.12, 10, 8), [0.42, 0.28, 0.18], 0, 1.6, -0.32);
+        part(b, new T.CylinderGeometry(0.15, 0.15, 0.04, 10), [0.9, 0.9, 0.86], 0, 1.7, -0.32);
+        // lamps
+        part(l, box(0.22, 0.13, 0.03), HEAD, 0, 0.86, -1.42);
+        for (const sx of [1, -1]) { part(l, box(0.07, 0.05, 0.03), AMBER, sx * 0.3, 0.98, -1.3); part(l, box(0.1, 0.16, 0.03), TAILC, sx * 0.52, 0.66, 1.355); }
+        part(b, box(1.3, 0.1, 0.1), CHROME, 0, 0.38, 1.38);
+        plate(b, 0.62, 1.36);
+      },
+    },
+    {
+      id: 'chicken', name: 'CAMIONETA', len: 11.5, wid: 2.45, hgt: 3.6, mass: 11000, weight: 0, vmin: 17, vmax: 24, bonus: 900, outer: true,
+      build(b, l) {
+        // an old school bus: a long nose, a boxy body, chrome everywhere, a stack of luggage on the roof
+        part(b, rbox(2.45, 2.45, 10.4, 0.22), BODY, 0, 1.92, 0.55);
+        prism(b, [[-5.75, 0.62], [-5.75, 1.55], [-5.58, 1.78], [-4.6, 1.92], [-4.6, 0.62]], 1.95, BODY);
+        grille(b, 1.0, 0.78, 1.18, -5.77, CHROME, 6);
+        part(b, box(2.5, 0.32, 0.26), CHROME, 0, 0.62, -5.86);
+        plate(b, 0.62, -6.0);
+        for (const sx of [1, -1]) {
+          part(b, cylZ(0.17, 0.12, 12), CHROME, sx * 0.76, 1.32, -5.74);
+          part(l, cylZ(0.14, 0.04, 12), HEAD, sx * 0.76, 1.32, -5.81);
+          part(l, box(0.12, 0.08, 0.03), AMBER, sx * 0.95, 0.95, -5.78);
+          part(b, new T.CylinderGeometry(0.62, 0.62, 0.36, 14, 1, true, -0.2, Math.PI + 0.4).rotateZ(Math.PI / 2), BODY, sx * 1.02, 0.52, -4.95);
+          part(b, box(0.3, 0.04, 0.5), CHROME, sx * 1.36, 2.6, -4.7);
+          part(b, box(0.08, 0.5, 0.24), CHROME, sx * 1.52, 2.4, -4.95);
+        }
+        part(b, box(2.2, 0.95, 0.05), GLASS, 0, 2.48, -4.63);
+        part(b, box(0.06, 0.95, 0.06), CHROME, 0, 2.48, -4.65);
+        part(b, box(2.1, 0.32, 0.05), BLACK, 0, 3.1, -4.62);
+        // the window band with its pillars, and the livery: bright stripes along the side and a white roof
+        part(b, box(2.47, 0.78, 9.3), GLASS, 0, 2.45, 0.75);
+        for (let z = -3.75; z <= 5.4; z += 0.92) part(b, box(2.49, 0.8, 0.09), BLACK, 0, 2.45, z);
+        part(b, box(2.475, 0.1, 10.42), CHROME, 0, 2.0, 0.55);
+        part(b, box(2.475, 0.14, 10.42), [0.95, 0.78, 0.12], 0, 1.72, 0.55);
+        part(b, box(2.475, 0.14, 10.42), WHITE, 0, 1.52, 0.55);
+        part(b, box(2.475, 0.14, 10.42), [0.78, 0.1, 0.1], 0, 1.32, 0.55);
+        part(b, box(2.475, 0.08, 10.42), CHROME, 0, 0.85, 0.55);
+        part(b, rbox(2.2, 0.1, 10.0, 0.04), WHITE, 0, 3.15, 0.6);
+        // the door on the +X side, behind the front wheel
+        part(b, box(0.04, 2.1, 0.9), GLASS, 1.236, 1.75, -4.1);
+        part(b, box(0.05, 2.1, 0.04), CHROME, 1.24, 1.75, -4.1);
+        // roof rack: chrome rails on posts, and the luggage
+        for (const sx of [1, -1]) {
+          part(b, box(0.06, 0.06, 7.6), CHROME, sx * 1.12, 3.55, 1.0);
+          for (let z = -2.6; z <= 4.6; z += 1.2) part(b, box(0.05, 0.4, 0.05), CHROME, sx * 1.12, 3.35, z);
+        }
+        part(b, box(2.3, 0.05, 0.05), CHROME, 0, 3.55, -2.8);
+        part(b, box(2.3, 0.05, 0.05), CHROME, 0, 3.55, 4.8);
+        const bags = [[-0.5, -2.0, 1.0, 0.5, 1.1, [0.55, 0.45, 0.3]], [0.5, -1.6, 0.9, 0.42, 1.4, [0.15, 0.3, 0.62]],
+          [-0.35, -0.2, 1.4, 0.55, 1.2, [0.62, 0.12, 0.1]], [0.6, 0.3, 0.8, 0.38, 0.9, [0.85, 0.8, 0.7]],
+          [-0.1, 1.6, 1.8, 0.62, 1.6, [0.2, 0.42, 0.18]], [0.55, 2.8, 0.9, 0.5, 0.9, [0.6, 0.5, 0.32]],
+          [-0.55, 3.2, 0.8, 0.4, 1.0, [0.82, 0.62, 0.15]], [0.3, 4.2, 1.1, 0.45, 0.8, [0.15, 0.3, 0.62]]];
+        for (const [x, z, w, h, d, c] of bags) part(b, rbox(w, h, d, 0.1), c, x, 3.2 + h / 2, z);
+        // the back: the emergency door, a ladder up to the rack, lamps, bumper
+        part(b, box(1.1, 0.9, 0.04), GLASS, 0, 2.45, 5.77);
+        part(b, box(1.2, 2.3, 0.02), TRIM, 0, 1.85, 5.76);
+        for (const sx of [1, -1]) part(b, box(0.05, 2.6, 0.05), CHROME, 0.75 + sx * 0.22, 2.25, 5.85);
+        for (let y = 1.1; y < 3.5; y += 0.3) part(b, box(0.44, 0.04, 0.04), CHROME, 0.75, y, 5.85);
+        for (const sx of [1, -1]) { part(l, cylZ(0.11, 0.04, 10), TAILC, sx * 0.95, 1.1, 5.79); part(l, cylZ(0.08, 0.04, 10), AMBER, sx * 0.95, 1.4, 5.79); }
+        part(b, box(2.5, 0.28, 0.2), CHROME, 0, 0.62, 5.82);
+        plate(b, 0.8, 5.79);
+        // amber marker lights along the roof edge, front and back
+        for (let i = -2; i <= 2; i++) { part(l, box(0.12, 0.07, 0.04), AMBER, i * 0.38, 3.08, -4.66); part(l, box(0.12, 0.07, 0.04), TAILC, i * 0.38, 3.08, 5.8); }
+        for (const sx of [1, -1]) for (const z of [-2.5, 0, 2.5]) part(l, box(0.03, 0.06, 0.12), AMBER, sx * 1.237, 3.0, z);
+        arch(b, 1.226, 0.5, 3.4, TRIM);
+        for (const sx of [1, -1]) {
+          wheelAt(b, sx * 1.02, 0.5, -4.95, 0.3, CHROME, 0);
+          wheelAt(b, sx * 1.05, 0.5, 3.4, 0.28, CHROME, 0); wheelAt(b, sx * 0.76, 0.5, 3.4, 0.28, STEEL, 0);
+        }
+      },
+    },
   ];
   G.TRAFFIC_TYPES = TYPES;
 
@@ -526,12 +657,15 @@
       this.near = [];
       this.group = new T.Group();
       game.scene.add(this.group);
-      const totalW = TYPES.reduce((a, t) => a + t.weight, 0);
+      // a track can bring its own mix (tuk-tuks and chicken buses on Atitlán); otherwise each type's own weight
+      const mix = G.TRACK && G.TRACK.trafficMix, wOf = (t) => (mix ? mix[t.id] || 0 : t.weight);
+      const totalW = TYPES.reduce((a, t) => a + wOf(t), 0);
       const counts = TYPES.map(() => 0);
       const assign = [];
       for (let i = 0; i < n + xn; i++) {
         let r = Math.random() * totalW, ti = 0;
-        while (r > TYPES[ti].weight) { r -= TYPES[ti].weight; ti++; }
+        while (ti < TYPES.length - 1 && (r > wOf(TYPES[ti]) || !wOf(TYPES[ti]))) { r -= wOf(TYPES[ti]); ti++; }
+        if (!wOf(TYPES[ti])) ti = TYPES.findIndex((t) => wOf(t) > 0);
         assign.push(ti); counts[ti]++;
       }
       const shadows = game.Q.shadows;
@@ -565,7 +699,10 @@
         const ti = assign[i], t = TYPES[ti];
         const mesh = this.meshes[ti];
         const idx = mesh.used++;
-        mesh.bm.setColorAt(idx, col.set(t.id === 'bus' ? G.pick([0xf2c230, 0xe9e9e6, 0x2c6fb7, 0xc0302c]) : G.pick(BODY_COLS)));
+        mesh.bm.setColorAt(idx, col.set(t.id === 'bus' ? G.pick([0xf2c230, 0xe9e9e6, 0x2c6fb7, 0xc0302c])
+          : t.id === 'chicken' ? G.pick([0xd6262a, 0x1d5fbf, 0x16a34a, 0xf2c230, 0x7a2bbf, 0xe8702a, 0x0fa3b1])
+          : t.id === 'tuktuk' ? G.pick([0xc8141b, 0xc8141b, 0x1d4fa8, 0xe9e9e6, 0xf2c230, 0x1c1e22])
+          : G.pick(BODY_COLS)));
         const c = {
           id: i, ti, t, idx, s: 0, lane: 0, lat: 0, latT: 0, v: 0, vT: 0, dir: 1,
           x: 0, y: 0, z: 0, yaw: 0, hx: 0, hz: -1,
