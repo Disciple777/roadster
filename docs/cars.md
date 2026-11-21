@@ -55,6 +55,20 @@ In one ChatGPT chat: a front 3/4 view of the car in flat matte grey, then "the e
 Save them as `models/source/<id>_front.png` and `models/source/<id>_rear.png` (these are committed).
 **Show both to the user and wait for an OK before modelling.**
 
+#### Prompts
+Keep each car's prompt here, so it can be re-run or tweaked.
+
+**ATLAS** (prize for winning the World Tour):
+> Concept art of a futuristic grand-touring race car for an arcade racing game, front three-quarter view from slightly
+> above, on a plain light grey studio background. A long, low, wide two-seater GT: a long sculpted bonnet with a sharp
+> centre crease, slim wraparound LED headlight blades, a big lower air intake, a teardrop bubble canopy set well back,
+> deep side scoops behind the front wheels, and muscular rear haunches. Its signature is a large thin hoop wing: a
+> ring-shaped aerofoil that rises from both rear haunches and arches over the tail like a planet's orbit, and inside it
+> sit two big round rocket thruster nozzles in the tail. Simple dark wheels. Clean hard-surface
+> design with simple readable shapes, easy to model in 3D. The whole car is flat matte grey clay, no decals, no text.
+
+Then, in the same chat: "Now the exact same car from a rear three-quarter view, same style, flat matte grey."
+
 ### 2. Model script
 Write `tools/model_<id>.py`. It starts with:
 ```python
