@@ -264,6 +264,18 @@
         boost = boost || tb.has('boost'); hand = hand || tb.has('handbrake');
       }
 
+      // double-tap flip: tap a side thruster, then tap it again and hold. While the second tap is held that side's pair
+      // of under-thrusters fires (the same as jump + that side), so the car rolls over. A single tap-and-hold still slides.
+      const dt2 = this.dtap || (this.dtap = { t: 0, L: { on: false, down: -9, up: -9, flip: false }, R: { on: false, down: -9, up: -9, flip: false } });
+      dt2.t += dt;
+      for (const [side, on] of [['L', thrL], ['R', thrR]]) {
+        const d = dt2[side];
+        if (on && !d.on) { d.flip = dt2.t - d.up < 0.3 && d.up - d.down < 0.3; d.down = dt2.t; }
+        else if (!on && d.on) { d.up = dt2.t; d.flip = false; }
+        d.on = on;
+      }
+      if (dt2.L.flip || dt2.R.flip) { jump = true; thrL = dt2.L.flip; thrR = dt2.R.flip; }
+      s.flipping = dt2.L.flip ? 'L' : dt2.R.flip ? 'R' : '';
       // physics reads thrL / thrR as "slide left / right". Inverted (default): the key names the thruster that fires,
       // so the left thruster pushes the car right. With the under-thrusters lit, L / R still pick that side's pair.
       if (this.thrInvert && !jump) { const t = thrL; thrL = thrR; thrR = t; }

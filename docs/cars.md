@@ -86,6 +86,18 @@ Then, in the same chat: "Now the exact same car from a rear three-quarter view, 
 Then, in the same chat: "Now the exact same car from a rear three-quarter view, same style, flat matte grey."
 The model gives SHARD a flat roof instead of the concept's peak (the user's call: the peak looked crooked).
 
+**TUK TUK** (prize for winning a Street Race on LAGO DE ATITLÁN; separate from the traffic tuk-tuks there):
+> Concept art of a futuristic tuk-tuk (auto-rickshaw) racer for an arcade racing game, front three-quarter view from
+> slightly above, on a plain light grey studio background. It keeps the classic tuk-tuk silhouette: a narrow rounded nose
+> cowl with a single big round headlight and a small windscreen, a tall boxy passenger cabin with a curved hard canopy roof
+> that overhangs front and back, open sides with a grab rail, and a bench seat in the back. Because it races, it stands on
+> four small wheels: two close together under the narrow nose and two wider apart at the rear, with chunky fenders. Its
+> signature is the tail: two big round rocket thruster nozzles poking out under the rear bumper, plus a small roof-mounted
+> spoiler. Simple dark wheels. Clean hard-surface design with simple readable shapes, easy to model in 3D. The whole
+> vehicle is flat matte grey clay, no decals, no text.
+
+Then, in the same chat: "Now the exact same car from a rear three-quarter view, same style, flat matte grey."
+
 ### 2. Model script
 Write `tools/model_<id>.py`. It starts with:
 ```python

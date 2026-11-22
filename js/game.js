@@ -870,14 +870,14 @@
           <div class="kh-tile wide"><h4>STEER</h4><p>${this.settings.tilt ? 'Tilt the phone like a steering wheel. Hold <b>GAS</b> to go.' : 'Drag anywhere on the left half of the screen. Drag down to brake.'}</p></div>
           <div class="kh-tile"><h4>DRIFT</h4><div class="kh-keys"><span class="kc hot">DRIFT</span></div></div>
           <div class="kh-tile"><h4>JUMP / HOVER</h4><div class="kh-keys"><span class="kc">JUMP</span></div><p>Hold to fly over traffic and gaps</p></div>
-          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys"><span class="kc">L</span><span class="kc">R</span></div><p>Hold JUMP and slide onto L / R to flip</p></div>
+          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys"><span class="kc">L</span><span class="kc">R</span></div><p>Tap = slide. Double-tap L / R and hold the second tap to flip</p></div>
           <div class="kh-tile"><h4>BOOST</h4><div class="kh-keys"><span class="kc">BOOST</span></div><p>Uses N₂, refill it with tricks</p></div>
         </div>` : `<div class="kh-grid">
           <div class="kh-tile"><h4>DRIVE</h4><div class="kh-t">${one('accel')}${one('left')}${one('brake')}${one('right')}</div><p>Brake again when stopped to reverse</p></div>
           <div class="kh-tile"><h4>DRIFT</h4><div class="kh-keys">${k('hand', 'hot')}</div><p>Hold while turning to slide. Drifts refill N₂</p></div>
           <div class="kh-tile"><h4>BOOST</h4><div class="kh-keys">${k('boost')}</div><p>Rear thruster</p></div>
           <div class="kh-tile wide"><h4>JUMP / HOVER</h4><div class="kh-keys">${one('jump', 'sp')}</div><p>Under-thrusters: hold to jump traffic and fly the gaps</p></div>
-          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys">${one('thrL')}${one('thrR')}</div><p>Hold with jump to barrel-roll</p></div>
+          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys">${one('thrL')}${one('thrR')}</div><p>Tap and hold to slide. Double-tap and hold the second tap to flip</p></div>
         </div>
         <div class="kh-small"><span>${one('camera')} camera</span><span>${one('reset')} reset car</span><span>${one('pause')} pause</span><span>Gamepad: RT gas · LT brake · A jump · B drift · X boost</span></div>`;
       this.introHold = true;

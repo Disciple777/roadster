@@ -1106,8 +1106,8 @@
     // ---------------- FLIP AND STICK: kicker, a full flip, a deck to land on
     flip: {
       name: 'FLIP AND STICK', tod: 'day', seed: 61, n2: 20, par: 14, limit: 45,
-      brief: 'Hit the kicker, roll the car all the way round in the air, land on the deck and stop in the box.',
-      tip: 'Kicker at about 80 km/h. In the air hold Space + Q (or E) to roll, let go after a quarter turn: it comes round on its own',
+      brief: 'Hit the kicker and flip the car all the way round in the air: double-tap a side thruster and hold the second tap. Land on the deck and stop in the box.',
+      tip: 'Kicker at about 80 km/h. To flip: double-tap a side thruster and hold the second tap (or hold Space + that thruster). Let go after a quarter turn: it comes round on its own',
       build(w) {
         w.box(w.m.asphalt, 0, -0.5, -60, 120, 0.52, 260, { solid: false, tile: 5 });
         // parking bays and cars on both sides of the lot

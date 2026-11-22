@@ -797,7 +797,7 @@
           });
         });
         // warning signs on the way in
-        const back = tr.sample(sp.s - 160, {}), wy = tr.heightAt(sp.s - 160), mat = signMaterial('CAÍDA DE ROCAS', '#ffd23a', '#141518', 'FALLING ROCKS · DO NOT STOP');
+        const back = tr.sample(sp.s - 160, {}), wy = tr.heightAt(sp.s - 160), mat = signMaterial('FALLING ROCKS', '#ffd23a', '#141518', 'DO NOT STOP');
         for (const sg of [-1, 1]) {
           const grp = new T.Group(); grp.position.set(back.x + back.rx * sg * (WO + 2.6), wy, back.z + back.rz * sg * (WO + 2.6)); grp.rotation.y = yawOf(back) + Math.PI - sg * 0.25;
           const b = new T.Mesh(new T.PlaneGeometry(7, 3.4), mat); b.position.y = 5.2; grp.add(b);
@@ -1104,6 +1104,110 @@
         instance(sGeo[k].trunk, barkMat, list, place).castShadow = false;
       });
       W.pines = kept;
+      // highland pueblo houses (Panajachel, San Juan, Santiago): painted cinder-block walls with a darker band along the
+      // bottom, a wooden door and barred windows; tin shed roofs, clay-tile roofs, or a second storey of bare block
+      // under a flat slab with the rebar still sticking up for the next floor and a black water tank on top
+      const pueblo = (ch) => {
+        const rough = (ctx, W, H, a, n) => { for (let k = 0; k < n; k++) { ctx.fillStyle = `rgba(${R() < 0.5 ? '0,0,0' : '255,255,255'},${a * R()})`; ctx.fillRect(R() * W, R() * H, 2 + R() * 5, 2 + R() * 5); } };
+        const win = (ctx, x, y, w, h) => {
+          ctx.fillStyle = '#ece8e0'; ctx.fillRect(x - 6, y - 6, w + 12, h + 12);           // plaster surround
+          ctx.fillStyle = '#1b2128'; ctx.fillRect(x, y, w, h);                              // dark glass
+          ctx.fillStyle = 'rgba(150,175,190,0.35)'; ctx.fillRect(x + 4, y + 4, w * 0.4, h - 8);
+          ctx.fillStyle = '#2a2a2a'; for (let k = 1; k < 5; k++) ctx.fillRect(x + (w * k) / 5 - 2, y, 4, h); // iron bars
+          ctx.fillRect(x, y + h / 2 - 2, w, 4);
+        };
+        // ground floor: 3.6 m of wall (the bottom 0.6 m is sunk in the slope), 1024 px wide for one face
+        const facade = G.canvasTexture(1024, 512, (ctx, W, H) => {
+          const m = (y) => H - ((y + 0.6) / 3.6) * H; // metres above ground -> canvas y
+          ctx.fillStyle = '#f4f1ea'; ctx.fillRect(0, 0, W, H);
+          rough(ctx, W, H, 0.08, 2500);
+          ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.fillRect(0, m(1.0), W, H - m(1.0));      // the darker band (zócalo)
+          ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(0, m(1.0), W, 6);
+          const gr = ctx.createLinearGradient(0, m(0.5), 0, H); gr.addColorStop(0, 'rgba(60,40,20,0)'); gr.addColorStop(1, 'rgba(60,40,20,0.5)');
+          ctx.fillStyle = gr; ctx.fillRect(0, m(0.5), W, H);                                // splashed mud
+          ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(0, 0, W, m(2.85));               // shadow under the eaves
+          // the door: planked wood, a little off centre
+          const dx = W * 0.44, dw = W * 0.13, dt = m(2.1);
+          ctx.fillStyle = '#ece8e0'; ctx.fillRect(dx - 8, dt - 8, dw + 16, m(0) - dt + 8);
+          ctx.fillStyle = '#5a3a22'; ctx.fillRect(dx, dt, dw, m(0) - dt);
+          ctx.fillStyle = 'rgba(0,0,0,0.3)'; for (let k = 1; k < 5; k++) ctx.fillRect(dx + (dw * k) / 5, dt, 3, m(0) - dt);
+          ctx.fillStyle = '#c9a45a'; ctx.fillRect(dx + dw * 0.8, m(1.0), 8, 8);
+          win(ctx, W * 0.12, m(2.2), W * 0.18, m(1.0) - m(2.2));
+          win(ctx, W * 0.68, m(2.2), W * 0.18, m(1.0) - m(2.2));
+        });
+        // upper storey of bare grey block: mortar courses and two openings
+        const block = G.canvasTexture(1024, 512, (ctx, W, H) => {
+          ctx.fillStyle = '#9d9a94'; ctx.fillRect(0, 0, W, H);
+          const ch2 = H / 15, cw = W / 18;
+          for (let r = 0; r < 15; r++) for (let k = -1; k < 19; k++) {
+            const v = 140 + Math.floor(R() * 30); ctx.fillStyle = `rgb(${v},${v - 3},${v - 8})`;
+            ctx.fillRect(k * cw + (r % 2) * cw / 2 + 2, r * ch2 + 2, cw - 4, ch2 - 4);
+          }
+          rough(ctx, W, H, 0.12, 1500);
+          win(ctx, W * 0.15, H * 0.25, W * 0.2, H * 0.38);
+          win(ctx, W * 0.62, H * 0.25, W * 0.2, H * 0.38);
+        });
+        const corr = G.canvasTexture(256, 256, (ctx, W, H) => {
+          for (let x = 0; x < W; x++) { const v = 150 + 55 * Math.sin((x / W) * Math.PI * 2 * 16); ctx.fillStyle = `rgb(${v},${v},${v + 4})`; ctx.fillRect(x, 0, 1, H); }
+          for (let k = 0; k < 40; k++) { ctx.fillStyle = `rgba(${120 + R() * 40},${55 + R() * 20},20,${0.2 + R() * 0.35})`; const x = R() * W; ctx.fillRect(x, R() * H, 3 + R() * 14, 20 + R() * 120); } // rust runs
+        });
+        const tiles = G.canvasTexture(256, 256, (ctx, W, H) => {
+          ctx.fillStyle = '#8e3e22'; ctx.fillRect(0, 0, W, H);
+          for (let r = 0; r < 12; r++) for (let k = 0; k < 10; k++) {
+            const x = k * W / 10 + (r % 2) * W / 20, y = r * H / 12, v = R();
+            ctx.fillStyle = `rgb(${150 + v * 40},${66 + v * 22},${36 + v * 12})`; ctx.fillRect(x + 1, y + 1, W / 10 - 2, H / 12 - 3);
+            ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y + H / 12 - 4, W / 10, 3);
+          }
+          rough(ctx, W, H, 0.15, 400);
+        });
+        corr.wrapS = corr.wrapT = tiles.wrapS = tiles.wrapT = T.RepeatWrapping;
+        const pal = [0xd9b84a, 0x3d7fbf, 0xc8553d, 0x4e9a64, 0xe8e0cc, 0xc25a8a, 0x7d63b5, 0xd98a3a, 0x3aa39a, 0xb59a76, 0xdcd8cf, 0x6fb0d8];
+        const H1 = 3.0;
+        const info = ch.map((c) => {
+          const h1 = G.wrap(c[3] * 97, 1), h2 = G.wrap(c[3] * 331, 1), h3 = G.wrap(c[3] * 733, 1);
+          return { type: h2 < 0.42 ? 'tin' : h2 < 0.72 ? 'two' : 'tile', w: 6 + h3 * 3.5, d: 5.5 + h1 * 2.5, col: pal[Math.floor(h1 * 7919 % pal.length)], up: h3 < 0.5 };
+        });
+        const tcol = new T.Color();
+        const place = (c, m, x, y, z, sx, sy, sz, tilt = 0) => {
+          qq.setFromAxisAngle(up, c[4]); if (tilt) qq.multiply(_qt.setFromAxisAngle(_ax.set(1, 0, 0), tilt));
+          m.compose(ps.set(x, y, z).applyAxisAngle(up, c[4]).add(_o.set(c[0], c[1], c[2])), qq, sc.set(sx, sy, sz));
+        };
+        const _qt = new T.Quaternion(), _ax = new T.Vector3(), _o = new T.Vector3();
+        const box = new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+        // ground floor walls, painted
+        const wm = instance(box, new T.MeshStandardMaterial({ map: facade, roughness: 0.92 }), ch, (c, m, k) => { const f = info[k]; place(c, m, 0, -0.6, 0, f.w, H1 + 0.6, f.d); });
+        ch.forEach((c, k) => wm.setColorAt(k, tcol.set(info[k].col))); wm.instanceColor.needsUpdate = true;
+        // second storeys: bare block, or painted to match on the better-off houses
+        const two = ch.filter((c, k) => info[k].type === 'two'), ti = two.map((c) => info[ch.indexOf(c)]);
+        if (two.length) {
+          const um = instance(box, new T.MeshStandardMaterial({ map: block, roughness: 0.95 }), two, (c, m, k) => { const f = ti[k]; place(c, m, 0, H1, 0, f.w, 2.8, f.d); });
+          two.forEach((c, k) => um.setColorAt(k, tcol.set(ti[k].up ? 0xffffff : ti[k].col).lerp(tcol.clone().set(0xffffff), ti[k].up ? 0 : 0.35))); um.instanceColor.needsUpdate = true;
+          const slab = new T.MeshStandardMaterial({ color: 0x8f8b84, roughness: 0.95 });
+          instance(box, slab, two, (c, m, k) => { const f = ti[k]; place(c, m, 0, H1 + 2.8, 0, f.w + 0.4, 0.22, f.d + 0.4); });
+          instance(box, slab, two, (c, m, k) => { const f = ti[k]; place(c, m, 0, H1 - 0.1, 0, f.w + 0.3, 0.2, f.d + 0.3); }); // the floor slab edge
+          // rebar at the corners for the next floor, and a black water tank
+          const bars = []; two.forEach((c, k) => { for (const sx of [-1, 1]) for (const sz of [-1, 1]) bars.push([c, ti[k], sx, sz]); });
+          instance(new T.BoxGeometry(0.07, 1, 0.07).translate(0, 0.5, 0), new T.MeshStandardMaterial({ color: 0x4a3426, roughness: 0.7, metalness: 0.4 }), bars,
+            (b, m) => { const [c, f, sx, sz] = b; place(c, m, sx * (f.w / 2 - 0.15), H1 + 3.0, sz * (f.d / 2 - 0.15), 1, 1.1, 1); });
+          instance(new T.CylinderGeometry(0.62, 0.55, 1.2, 14).translate(0, 0.6, 0), new T.MeshStandardMaterial({ color: 0x151515, roughness: 0.5 }), two,
+            (c, m, k) => { const f = ti[k]; place(c, m, f.w * 0.22, H1 + 3.0, -f.d * 0.18, 1, 1, 1); });
+        }
+        // tin shed roofs, sloping back, on the one-storey houses
+        const tin = ch.filter((c, k) => info[k].type === 'tin'), tn = tin.map((c) => info[ch.indexOf(c)]);
+        if (tin.length) {
+          const rm = instance(new T.BoxGeometry(1, 1, 1), new T.MeshStandardMaterial({ map: corr, roughness: 0.55, metalness: 0.45 }), tin,
+            (c, m, k) => { const f = tn[k]; place(c, m, 0, H1 + 0.25, 0, f.w + 0.9, 0.07, f.d + 1.1, 0.16); });
+          tin.forEach((c, k) => rm.setColorAt(k, tcol.setRGB(0.75 + 0.25 * G.wrap(c[3] * 53, 1), 0.72 + 0.2 * G.wrap(c[3] * 53, 1), 0.7 + 0.2 * G.wrap(c[3] * 53, 1)))); rm.instanceColor.needsUpdate = true;
+          instance(box, new T.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.9 }), tin, (c, m, k) => { const f = tn[k]; place(c, m, 0, H1, 0, f.w, 0.35, f.d); }); // timber wall plate
+        }
+        // clay-tile gable roofs
+        const tl = ch.filter((c, k) => info[k].type === 'tile'), tt = tl.map((c) => info[ch.indexOf(c)]);
+        if (tl.length) {
+          // a triangular prism, ridge along the width, apex up, base 1.73 wide and 0.5 below the centre
+          const g = new T.CylinderGeometry(1, 1, 1, 3, 1).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2);
+          instance(g, new T.MeshStandardMaterial({ map: tiles, roughness: 0.85 }), tl, (c, m, k) => { const f = tt[k]; place(c, m, 0, H1 - 0.05 + f.d * 0.11, 0, f.w + 0.8, f.d * 0.22, (f.d + 1.0) / 1.73); });
+        }
+      };
       // a village of chalets round the start
       const ch = [];
       for (let k = 0; k < 900 && ch.length < Math.round((atit ? 90 : 34) * dens); k++) {
@@ -1112,21 +1216,16 @@
         if (distAt(x, z) < WO + 7 || slopeAt(x, z) > 0.2 || ((fjord || atit) && hAt(x, z) < 0.3) || !notChasm(x, z) || ch.some((c) => Math.hypot(c[0] - x, c[2] - z) < 16)) continue;
         ch.push([x, hAt(x, z), z, R(), yawOf(p)]);
       }
-      const walls = new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-      const roofG = new T.CylinderGeometry(0.62, 0.62, 1, 3, 1).rotateZ(Math.PI / 2).rotateX(Math.PI / 6 + Math.PI); roofG.scale(1, 0.62, 1.15);
-      const sizes = ch.map((c) => [9 + c[3] * 6, 5 + c[3] * 3, 8 + c[3] * 4]);
-      const wm = instance(walls, new T.MeshStandardMaterial({ color: fjord ? 0x9a2620 : atit ? 0xffffff : 0x7a4e2e, roughness: 0.85 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] - 0.6, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w, h + 0.6, d2)); });
-      if (atit) {
-        // pueblo houses painted every colour going
-        const pal = [0xe8c33a, 0x2f8fd6, 0xe0563a, 0x3fae6a, 0xf0e6d2, 0xd94f9a, 0x8a5ad0, 0xf08a2a, 0x37b8b0];
-        const tc2 = new T.Color();
-        ch.forEach((c, j) => wm.setColorAt(j, tc2.set(pal[Math.floor(G.wrap(c[3] * 97, 1) * pal.length)])));
-        wm.instanceColor.needsUpdate = true;
+      if (atit) pueblo(ch); else {
+        const walls = new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+        const roofG = new T.CylinderGeometry(0.62, 0.62, 1, 3, 1).rotateZ(Math.PI / 2).rotateX(Math.PI / 6 + Math.PI); roofG.scale(1, 0.62, 1.15);
+        const sizes = ch.map((c) => [9 + c[3] * 6, 5 + c[3] * 3, 8 + c[3] * 4]);
+        instance(walls, new T.MeshStandardMaterial({ color: fjord ? 0x9a2620 : 0x7a4e2e, roughness: 0.85 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] - 0.6, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w, h + 0.6, d2)); });
+        instance(roofG, new T.MeshStandardMaterial({ color: fjord ? 0x2b2d30 : 0xf2f5f8, roughness: 0.8 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] + h - 0.1, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w * 1.18, w * 0.62, d2 * 1.2)); });
+        // warm windows
+        const winM = new T.MeshBasicMaterial({ color: new T.Color(3.2, 1.9, 0.8), toneMapped: false });
+        W.chaletWin = instance(new T.BoxGeometry(1, 1, 1), winM, ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] + h * 0.45, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w * 0.7, 1.1, d2 + 0.08)); });
       }
-      instance(roofG, new T.MeshStandardMaterial({ color: fjord ? 0x2b2d30 : atit ? 0xa0482c : 0xf2f5f8, roughness: 0.8 }), ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] + h - 0.1, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w * 1.18, w * 0.62, d2 * 1.2)); });
-      // warm windows
-      const winM = new T.MeshBasicMaterial({ color: new T.Color(3.2, 1.9, 0.8), toneMapped: false });
-      W.chaletWin = instance(new T.BoxGeometry(1, 1, 1), winM, ch, (c, m, k) => { const [w, h, d2] = sizes[k]; m.compose(ps.set(c[0], c[1] + h * 0.45, c[2]), qq.setFromAxisAngle(up, c[4]), sc.set(w * 0.7, 1.1, d2 + 0.08)); });
       const rocks = placeScatter(Math.round(260 * dens), (x, z, d, y) => offRoad(d, 3) && d < 500 && (!fjord || y > -1));
       instance(new T.DodecahedronGeometry(1, 0), rockMat, rocks, (c, m) => {
         const k = 1 + c[3] * c[3] * 5; m.compose(ps.set(c[0], c[1] + k * 0.2, c[2]), qq.setFromEuler(eu.set(c[3] * 3, c[3] * 9, c[3] * 5)), sc.set(k * 1.3, k, k * 1.1));
@@ -1238,8 +1337,11 @@
           // black volcanic sand at the water, lush green highlands with patches of milpa, brown earth on the steep,
           // the volcanoes' upper slopes dark cloud forest then bare grey-brown ash at the top
           vec3 sandA = vec3(0.16, 0.15, 0.14) * (0.85 + 0.3 * gn);
-          vec3 green = mix(vec3(0.13, 0.3, 0.09), vec3(0.28, 0.44, 0.13), gn);
-          green = mix(green, vec3(0.55, 0.5, 0.22), smoothstep(0.7, 0.82, ln(vLWP.xz * 0.045)) * 0.75); // dry milpa fields
+          // grass toned down from lime to a highland olive green, with finer clumps and patches broken up underneath
+          float fine = ln(vLWP.xz * 0.6) * 0.6 + ln(vLWP.xz * 2.3) * 0.4;
+          vec3 green = mix(vec3(0.09, 0.175, 0.07), vec3(0.18, 0.26, 0.105), gn) * (0.82 + 0.3 * fine);
+          green = mix(green, vec3(0.25, 0.24, 0.13), smoothstep(0.62, 0.9, fine) * 0.35); // dry grass tufts
+          green = mix(green, vec3(0.37, 0.33, 0.18), smoothstep(0.7, 0.82, ln(vLWP.xz * 0.045)) * 0.7); // dry milpa fields
           green = mix(green, vec3(0.09, 0.2, 0.07), smoothstep(0.6, 0.75, ln(vLWP.xz * 0.02 + 3.0)) * 0.7); // coffee & forest
           vec3 earth = mix(vec3(0.3, 0.2, 0.12), vec3(0.44, 0.31, 0.19), ln(vec2(y * 0.3, vLWP.x * 0.05 + vLWP.z * 0.05)));
           vec3 cloud = mix(vec3(0.06, 0.15, 0.07), vec3(0.12, 0.22, 0.1), gn);
