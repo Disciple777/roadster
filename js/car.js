@@ -251,25 +251,31 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     const wp = [[-0.88, WHEEL_Z[0], true], [0.88, WHEEL_Z[0], true], [-0.88, WHEEL_Z[1], false], [0.88, WHEEL_Z[1], false]];
     for (const [x, z, fr] of wp) {
       const side = Math.sign(x);
-      const pivot = new T.Group(); pivot.position.set(x, WHEEL_Y, z);
+      // kit.frontOne: a three-wheeler. Physics keeps both front contact points; one wheel is drawn on the centre line
+      // (dressed on both faces) and the other is hidden
+      const one = !!(kit && kit.frontOne && fr);
+      const pivot = new T.Group(); pivot.position.set(one ? 0 : x, WHEEL_Y, z);
+      if (one && side > 0) pivot.visible = false;
       // hold: a GLB body with bigger arches scales the wheel up and lifts it (the body is lifted by the same amount
       // in tools/prep_car.py) so the tyre still meets the ground where the physics wheel does
       const hold = new T.Group(); pivot.add(hold);
       if (kit && kit.wheelR) {
         hold.scale.setScalar(kit.wheelR / 0.37);
-        hold.position.set(side * ((kit.wheelX || 0.88) - 0.88), kit.wheelR - 0.37, 0);
+        hold.position.set(one ? 0 : side * ((kit.wheelX || 0.88) - 0.88), kit.wheelR - 0.37, 0);
       }
       const spin = new T.Group(); hold.add(spin);
       const tyre = new T.Mesh(tyreGeo, tyreMat); tyre.castShadow = shadows; spin.add(tyre);
       spin.add(new T.Mesh(barrelGeo, satin));
-      const lip = new T.Mesh(rimLipGeo, bladeMat); lip.position.x = side * 0.14; spin.add(lip);
-      const face = new T.Mesh(faceGeo, faceMat); face.position.x = side * 0.1; face.rotation.y = side > 0 ? 0 : Math.PI; spin.add(face);
-      for (let s = 0; s < 5; s++) {
-        const b = new T.Mesh(blade, bladeMat);
-        b.position.x = side * 0.1 + (side > 0 ? 0 : -0.035);
-        b.rotation.x = (s / 5) * Math.PI * 2 * side; b.scale.z = side; spin.add(b);
+      for (const sd of one ? [-1, 1] : [side]) {
+        const lip = new T.Mesh(rimLipGeo, bladeMat); lip.position.x = sd * 0.14; spin.add(lip);
+        const face = new T.Mesh(faceGeo, faceMat); face.position.x = sd * 0.1; face.rotation.y = sd > 0 ? 0 : Math.PI; spin.add(face);
+        for (let s = 0; s < 5; s++) {
+          const b = new T.Mesh(blade, bladeMat);
+          b.position.x = sd * 0.1 + (sd > 0 ? 0 : -0.035);
+          b.rotation.x = (s / 5) * Math.PI * 2 * sd; b.scale.z = sd; spin.add(b);
+        }
+        const hub = new T.Mesh(hubGeo, bladeMat); hub.position.x = sd * 0.13; spin.add(hub);
       }
-      const hub = new T.Mesh(hubGeo, bladeMat); hub.position.x = side * 0.13; spin.add(hub);
       const disc = new T.Mesh(discGeo2, discMat); disc.position.x = side * 0.02; spin.add(disc);
       const cal = new T.Mesh(caliperGeo, caliperMat); cal.position.set(side * 0.055, 0.15, fr ? 0.08 : -0.08); hold.add(cal);
       group.add(pivot);
@@ -352,6 +358,11 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       glb: 'models/shard.glb', v: 2, hand: true,
       kit: { rear: [[0, 1.38, 2.52]], rearW: 2.2, sideX: 1.0, sideY: 0.72, wheelR: 0.47, wheelX: 0.95 },
     },
+    {
+      id: 'tuktuk', name: 'TUK TUK', desc: 'A three-wheel rickshaw from the lake road: one front wheel, a canopy on posts, a big wing and two rocket nozzles.',
+      glb: 'models/tuktuk.glb', v: 1, hand: true,
+      kit: { rear: [[0.32, 0.6, 2.62], [-0.32, 0.6, 2.62]], rearW: 1.7, sideX: 0.7, sideY: 0.55, wheelR: 0.38, wheelX: 0.88, frontOne: true },
+    },
   ];
   G.PAINTS = [
     { name: 'Arctic', hex: 0xd9dcdf }, { name: 'Rosso', hex: 0xb3121b }, { name: 'Ember', hex: 0xe0561a }, { name: 'Solar', hex: 0xe8b51c },
@@ -360,13 +371,13 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   ];
   // Garage roster, in display order. START_CARS can be picked from the first run; the rest show locked.
   // The Meshy/Tripo cars (comet, bastion, pebble) stay showroom-only. Ctrl+Shift+U toggles "unlock all" for testing.
-  G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2', 'atlas', 'shard'];
+  G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2', 'atlas', 'shard', 'tuktuk'];
   G.START_CARS = ['thruster', 'mantis', 'ridgeback'];
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
   G.carUnlocked = (id) => G.START_CARS.includes(id) || G.store.get('unlockAll', false) || G.store.get('unlockedCars', []).includes(id);
 
   // ---- unlocks: each locked Garage car has one goal. Progress lives in localStorage rt_progress
-  // ({ tracks: [ids with a finished street race], officialWin, courseDone, mpRaced, tourWin, fjordWin }); stunt levels count from
+  // ({ tracks: [ids with a finished street race], officialWin, courseDone, mpRaced, tourWin, fjordWin, atitlanWin }); stunt levels count from
   // rt_chalLvl_<i> (any cleared level, practice included). G.checkUnlocks() moves met goals into rt_unlockedCars.
   const prog = () => G.store.get('progress', {});
   G.progress = (patch) => { const p = Object.assign(prog(), patch); G.store.set('progress', p); return p; };
@@ -378,6 +389,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     bastion2: { goal: 'Race a friend in Multiplayer', of: () => [prog().mpRaced ? 1 : 0, 1] },
     atlas: { goal: 'Win the World Tour', of: () => [prog().tourWin ? 1 : 0, 1] },
     shard: { goal: "Win a Street Race on DEVIL'S FJORD", of: () => [prog().fjordWin ? 1 : 0, 1] },
+    tuktuk: { goal: 'Win a Street Race on LAGO DE ATITLÁN', of: () => [prog().atitlanWin ? 1 : 0, 1] },
   };
   // "goal (k/n)" for the Garage
   G.unlockHint = (id) => { const u = G.UNLOCKS[id]; if (!u) return ''; const [k, n] = u.of(); return n > 1 ? `${u.goal} (${k}/${n})` : u.goal; };

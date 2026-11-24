@@ -1528,7 +1528,7 @@
       // unlock progress: a finished street race on this track, and a win in an official one
       const pr = G.store.get('progress', {}), tracks = pr.tracks || [];
       if (!tracks.includes(G.TRACK_ID)) tracks.push(G.TRACK_ID);
-      G.progress({ tracks, officialWin: pr.officialWin || (myPlace === 1 && !G.unofficial('race', this.laps, this.settings).length), fjordWin: pr.fjordWin || (myPlace === 1 && G.TRACK_ID === 'fjord') });
+      G.progress({ tracks, officialWin: pr.officialWin || (myPlace === 1 && !G.unofficial('race', this.laps, this.settings).length), fjordWin: pr.fjordWin || (myPlace === 1 && G.TRACK_ID === 'fjord'), atitlanWin: pr.atitlanWin || (myPlace === 1 && G.TRACK_ID === 'atitlan') });
       this.checkUnlocks();
       $('res-title').textContent = myPlace === 1 ? 'VICTORY' : `P${myPlace} OF ${rows.length}`;
       $('res-rows').innerHTML = rows.map((r, i) => `<div class="row ${r.me ? 'me' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${r.me ? '#ff2a3c' : '#' + r.color.toString(16).padStart(6, '0')}"></span><span class="n">${r.name}</span><span class="t">${G.fmtTime(r.time)}</span></div>`).join('');

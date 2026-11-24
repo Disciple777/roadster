@@ -16,6 +16,7 @@ How the RoadsterThruster cars are made, and the numbers they have to fit.
 | bastion2 | BASTION v2 | `tools/model_bastion2.py` | locked |
 | atlas | ATLAS | `tools/model_atlas.py` | locked |
 | shard | SHARD | `tools/model_shard.py` | locked |
+| tuktuk | TUK TUK | `tools/model_tuktuk.py` (one front wheel: kit `frontOne`) | locked |
 | comet, bastion | COMET, BASTION | Meshy + `tools/prep_car.py` | showroom only |
 | pebble | PEBBLE | Tripo + `tools/prep_car.py` | showroom only |
 
@@ -44,6 +45,7 @@ In `js/car.js`:
 | BASTION v2 | finish a multiplayer race with at least one other person | `mpProgress()` sets `mpRaced` |
 | ATLAS | finish the World Tour in P1 | the tour's last race sets `tourWin` |
 | SHARD | win a Street Race on DEVIL'S FJORD (World Tour leg counts) | `finish()` sets `fjordWin` |
+| TUK TUK | win a Street Race on LAGO DE ATITLÁN (World Tour leg counts) | `finish()` sets `atitlanWin` |
 
 `game.checkUnlocks()` runs after each of those (and once at startup, so old progress counts). It moves met goals into
 `rt_unlockedCars` and shows a "NEW CAR UNLOCKED" toast per car. To add a goal: add an `G.UNLOCKS` entry, record its
@@ -123,6 +125,8 @@ one `sheet.jpg`. Compare it with the concepts and iterate. `--blend` saves the s
 - Wheels are *not* modelled. The game adds its own wheels on the physics wheels, sized by the kit's `wheelR`
   (radius) and `wheelX` (half track). The tyre half-width is `0.16 * wheelR / 0.37`. Cut arches big enough for them:
   arch radius ≈ wheelR + 0.07.
+- A three-wheeler sets `frontOne: true` in the kit: physics keeps both front contact points, but the game draws one
+  front wheel on the centre line (TUK TUK). `finish(..., front_one=True)` matches it in the preview renders.
 - Typical sizes: body length about 4.2–5.1 m (y -2.5 … +2.6), half-width 0.95–1.25 m, wheelR 0.40–0.52.
 - Keep it light: 15k–40k triangles. `finish()` prints `TRIS` and `BBOX`. A BBOX much bigger than the car means a
   decal missed the body and flew off (see below).
@@ -161,6 +165,7 @@ Use carlib's names. The game swaps the first four for its own.
   - Joins everything, smooths the shading, prints the numbers and writes the renders, the .blend and the GLB.
   - `rear` is the nozzle exit centres (Blender coordinates).
   - `side` is where the side thruster puffs come out.
+  - `cam_d` pulls the preview cameras back for a tall or long car (TUK TUK uses 1.3).
 
 ### 6. Game entry
 `finish()` prints the lines you need:

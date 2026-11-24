@@ -329,7 +329,8 @@ def ellipse(cx, cy, rx, ry, n=32):
     return [(cx + rx * math.cos(2 * math.pi * i / n), cy + ry * math.sin(2 * math.pi * i / n)) for i in range(n)]
 
 # ---------------- finish: shading, join, renders, export ----------------
-def finish(body, name, wheel_r, wheel_x, wheel_w=0.3, rear=None, side=None, cam_h=1.0):
+def finish(body, name, wheel_r, wheel_x, wheel_w=0.3, rear=None, side=None, cam_h=1.0, front_one=False, cam_d=1.0):
+    """front_one: the preview shows a single centred front tyre (a three-wheeler; the game's kit flag frontOne)"""
     for ob in [body] + parts:
         if ob.type != 'MESH': continue
         for p in ob.data.polygons: p.use_smooth = True
@@ -357,7 +358,7 @@ def finish(body, name, wheel_r, wheel_x, wheel_w=0.3, rear=None, side=None, cam_
         tmp = []
         tyre = mat('tyre', (0.02, 0.02, 0.02), 0.9)
         for y in (AXLE_F, AXLE_R):
-            for sx in (1, -1):
+            for sx in ((0,) if front_one and y == AXLE_F else (1, -1)):
                 bpy.ops.mesh.primitive_cylinder_add(radius=wheel_r, depth=wheel_w, location=(sx * wheel_x, y, wheel_r - 0.01), rotation=(0, math.pi / 2, 0))
                 o = bpy.context.object; o.data.materials.append(tyre); tmp.append(o)
         bpy.ops.mesh.primitive_plane_add(size=30, location=(0, 0, 0)); fl = bpy.context.object
@@ -369,6 +370,7 @@ def finish(body, name, wheel_r, wheel_x, wheel_w=0.3, rear=None, side=None, cam_
         views = [('front34', (-4.2, 6.0, 1.9 * cam_h)), ('rear34', (4.4, -6.0, 2.1 * cam_h)), ('side', (8.5, 0, 0.75 * cam_h)),
                  ('front', (0, 8.5, 0.8 * cam_h)), ('rear', (0, -8.5, 0.9 * cam_h)), ('top', (0, 0.001, 9.5))]
         for vname, loc in views:
+            if vname != 'top': loc = (loc[0] * cam_d, loc[1] * cam_d, loc[2])
             cam.location = loc
             d = Vector((0, 0, 0.6 * cam_h)) - Vector(loc); cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
             sc.render.filepath = os.path.join(PNG, vname + '.png')
