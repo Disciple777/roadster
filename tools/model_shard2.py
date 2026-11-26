@@ -1,5 +1,5 @@
 # SHARD v2: the same faceted armoured truck as tools/model_shard.py, remodelled closer to the concepts: a much taller
-# slab body (higher hood, beltline and roof), more body above the wheel arches, bigger arch gaps, taller fins and the
+# slab body (higher hood, beltline and roof) with the same wheel arches as v1, so there's more body above them, taller fins and the
 # turbine sitting up on the bed. The roof stays flat (the user's earlier call: no peak).
 # blender -b -P tools/model_shard2.py -- models/shard2.glb [--renders DIR] [--blend models/source/shard2.blend]
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -44,7 +44,7 @@ ys = [-2.38, -2.2, -0.95, 0.95, 2.15, 2.42]
 body = section_loft('body', [bsec(Y0, 0.05)] + [bsec(y) for y in ys] + [bsec(Y1, 0.04)], ['paint'])
 
 # hexagonal wheel arches, flat on top
-HEX = [(0.82, 0.02), (0.45, 0.8), (-0.45, 0.8), (-0.82, 0.02), (-0.43, -0.65), (0.43, -0.65)]
+HEX = [(0.8, 0.0), (0.43, 0.65), (-0.43, 0.65), (-0.8, 0.0), (-0.43, -0.65), (0.43, -0.65)]   # same arches as v1
 for y in (AXLE_F, AXLE_R):
     for sx in (1, -1):
         cut = section_loft('arch', [[(sx * x, y + a, WZ + b) for a, b in HEX] for x in (0.58, 1.5)], ['black'])
@@ -101,7 +101,7 @@ for sx in (1, -1):
     box('handle', (0.02, 0.16, 0.025), (sx * 1.0, -0.62, 1.22 + DZ), m='trim', bevel=0.2)
 
 # ---------------- angular arch flares, rocker armour ----------------
-OUT = [(1.04, 0.0), (0.56, 0.94), (-0.56, 0.94), (-1.04, 0.0)]
+OUT = [(1.0, -0.02), (0.53, 0.78), (-0.53, 0.78), (-1.0, -0.02)]
 INN = [HEX[0], HEX[1], HEX[2], HEX[3]]
 for y in (AXLE_F, AXLE_R):
     for sx in (1, -1):
