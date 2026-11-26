@@ -558,7 +558,7 @@
       },
     },
     {
-      id: 'chicken', name: 'CAMIONETA', len: 11.5, wid: 2.45, hgt: 3.6, mass: 11000, weight: 0, vmin: 17, vmax: 24, bonus: 900, outer: true,
+      id: 'chicken', name: 'CHICKEN BUS', len: 11.5, wid: 2.45, hgt: 3.6, mass: 11000, weight: 0, vmin: 17, vmax: 24, bonus: 900, outer: true,
       build(b, l) {
         // an old school bus: a long nose, a boxy body, chrome everywhere, a stack of luggage on the roof
         part(b, rbox(2.45, 2.45, 10.4, 0.22), BODY, 0, 1.92, 0.55);
@@ -911,17 +911,17 @@
       c.x += c.lvx * dt; c.y += c.lvy * dt; c.z += c.lvz * dt;
       this.track.groundAt(c.x, c.z, this._gq, c.y + 0.5);
       const gh = c.gy = this._gq.h;
-      const onGround = c.y <= gh + 0.01;
+      const onGround = c.y <= gh + 0.01, TU = G.TUNING;
       if (onGround) {
         c.y = gh;
-        if (c.lvy < -4) { c.lvy *= -0.25; c.rollV *= 0.6; c.pitchV *= 0.6; } else c.lvy = 0;
+        if (c.lvy < -TU.trafficBounceSpeed) { c.lvy *= -TU.trafficLandBounce; c.rollV *= 0.6; c.pitchV *= 0.6; } else c.lvy = 0;
         const hs = Math.hypot(c.lvx, c.lvz);
-        if (hs > 0.01) { const k = Math.max(0, hs - 9 * dt) / hs; c.lvx *= k; c.lvz *= k; }
-        c.yawV *= Math.exp(-2.5 * dt);
+        if (hs > 0.01) { const k = Math.max(0, hs - TU.trafficSlide * dt) / hs; c.lvx *= k; c.lvz *= k; }
+        c.yawV *= Math.exp(-TU.trafficSpinDamp * dt);
         // settle roll/pitch to nearest stable (upright or on the roof)
         const tr = Math.abs(c.roll) > Math.PI / 2 ? Math.sign(c.roll) * Math.PI : 0;
-        c.roll = G.damp(c.roll, tr, 5, dt); c.rollV *= Math.exp(-6 * dt);
-        c.pitch = G.damp(c.pitch, 0, 5, dt); c.pitchV *= Math.exp(-6 * dt);
+        c.roll = G.damp(c.roll, tr, TU.trafficSettle, dt); c.rollV *= Math.exp(-TU.trafficTumbleDamp * dt);
+        c.pitch = G.damp(c.pitch, 0, TU.trafficSettle, dt); c.pitchV *= Math.exp(-TU.trafficTumbleDamp * dt);
       }
       c.yaw += c.yawV * dt; c.roll += c.rollV * dt; c.pitch += c.pitchV * dt;
       c.hx = -Math.sin(c.yaw); c.hz = -Math.cos(c.yaw);
@@ -984,16 +984,16 @@
         }
         if (sep) continue;
         if (!o.loose) this.knock(o, 0, 0, 0, 0);
-        const mc = c.t.mass, mo = o.t.mass * (o.loose ? 0.7 : 1);
+        const TU = G.TUNING, mc = c.t.mass * TU.trafficMass, mo = o.t.mass * TU.trafficMass * (o.loose ? TU.trafficLooseMass : 1);
         c.x -= nx * minO * mo / (mc + mo); c.z -= nz * minO * mo / (mc + mo);
         if (o.loose) { o.x += nx * minO * mc / (mc + mo); o.z += nz * minO * mc / (mc + mo); }
         const ovx = o.loose ? o.lvx : o.hx * o.v, ovz = o.loose ? o.lvz : o.hz * o.v;
         const vrel = (ovx - c.lvx) * nx + (ovz - c.lvz) * nz;
         if (vrel >= 0) continue;
-        const j = -1.25 * vrel / (1 / mc + 1 / mo);
+        const j = -TU.trafficBounce * vrel / (1 / mc + 1 / mo);
         c.lvx -= nx * j / mc; c.lvz -= nz * j / mc;
         const dv = j / mo;
-        this.knock(o, nx * dv, dv > 1.2 ? Math.min(6, dv * 0.2) : 0, nz * dv, (Math.random() - 0.5) * dv * 0.2);
+        this.knock(o, nx * dv, dv > 1.2 ? Math.min(TU.trafficKnockLiftMax * 2 / 3, dv * TU.trafficKnockLift * 0.8) : 0, nz * dv, (Math.random() - 0.5) * dv * 0.2);
       }
     }
 
@@ -1006,10 +1006,19 @@
       c.lvx += dvx; c.lvy += dvy; c.lvz += dvz;
       c.yawV += spin;
       const m = Math.hypot(dvx, dvz);
-      c.rollV += (Math.random() - 0.5) * m * 0.25;
-      c.pitchV += (Math.random() - 0.5) * m * 0.12;
+      c.rollV += (Math.random() - 0.5) * m * G.TUNING.trafficKnockRoll;
+      c.pitchV += (Math.random() - 0.5) * m * G.TUNING.trafficKnockPitch;
       c.timer = 0;
     }
+
+    // half the height of a car's box as it sits now: tumbling or on its roof it spans more (or the other way up) than
+    // its upright height. c.y is always the box's lowest point, so a knocked car never sinks into the road
+    halfH(c) {
+      if (!c.roll && !c.pitch) return c.t.hgt / 2;
+      const cp = Math.cos(c.pitch);
+      return Math.abs(cp * Math.sin(c.roll)) * c.t.wid / 2 + Math.abs(cp * Math.cos(c.roll)) * c.t.hgt / 2 + Math.abs(Math.sin(c.pitch)) * c.t.len / 2;
+    }
+    topOf(c) { return c.y + 2 * this.halfH(c); }
 
     writeInstances() {
       const m4 = this._m4 || (this._m4 = new T.Matrix4());
@@ -1017,7 +1026,9 @@
       for (const c of this.all) {
         e.set(c.pitch, c.yaw, c.roll);
         q.setFromEuler(e);
-        p.set(c.x, c.y, c.z);
+        // the mesh's origin is at its floor: turn it about the box centre, then sit that centre halfH above c.y
+        p.set(0, -c.t.hgt / 2, 0).applyQuaternion(q);
+        p.x += c.x; p.y += c.y + this.halfH(c); p.z += c.z;
         m4.compose(p, q, s1);
         const mesh = this.meshes[c.ti];
         mesh.bm.setMatrixAt(c.idx, m4); mesh.lm.setMatrixAt(c.idx, m4);
@@ -1036,7 +1047,7 @@
     roofAt(x, z, yRef, out, list = this.near) {
       for (const c of list) {
         if (Math.abs(c.roll) > 0.35 || Math.abs(c.pitch) > 0.35) continue;
-        const top = c.y + c.t.hgt;
+        const top = this.topOf(c);
         if (top <= out.h || top > yRef + 0.05) continue;
         const dx = x - c.x, dz = z - c.z;
         const along = dx * c.hx + dz * c.hz, side = dx * -c.hz + dz * c.hx;
@@ -1062,9 +1073,9 @@
       if (fwd.lengthSq() < 0.01) fwd.set(0, 0, -1);
       fwd.normalize();
       const pfx = fwd.x, pfz = fwd.z, prx = -pfz, prz = pfx;
-      const PL = 4.6, PW = 2.05, MP = 1400;
+      const PL = 4.6, PW = 2.05, MP = G.TUNING.mass;
       for (const c of list) {
-        const top = c.y + c.t.hgt;
+        const top = this.topOf(c);
         if (pl.pos.y + 0.18 > top - 0.25) continue;     // above the roof
         if (pl.pos.y + 1.2 < c.y) continue;              // under a flying car
         const dx = c.x - pl.pos.x, dz = c.z - pl.pos.z;
@@ -1084,14 +1095,14 @@
         if (sep) continue;
         // touching a car hands this one over to physics (a lane-changer can't just shove you aside)
         if (!c.loose) this.knock(c, 0, 0, 0, 0);
-        const MT = c.t.mass * (c.loose ? 0.7 : 1);
+        const TU = G.TUNING, MT = c.t.mass * TU.trafficMass * (c.loose ? TU.trafficLooseMass : 1);
         const wp = MT / (MP + MT), wc = MP / (MP + MT);
         pl.pos.x += nx * minO * wp; pl.pos.z += nz * minO * wp;
         if (c.loose) { c.x -= nx * minO * wc; c.z -= nz * minO * wc; }
         const cvx = c.loose ? c.lvx : c.hx * c.v, cvz = c.loose ? c.lvz : c.hz * c.v;
         const vrel = (pl.vel.x - cvx) * nx + (pl.vel.z - cvz) * nz;
         if (vrel < 0) {
-          const j = -(1.25) * vrel / (1 / MP + 1 / MT);
+          const j = -TU.trafficBounce * vrel / (1 / MP + 1 / MT);
           pl.vel.x += nx * j / MP; pl.vel.z += nz * j / MP;
           const dv = j / MT;
           // tangential scrub
@@ -1100,7 +1111,7 @@
           pl.vel.x -= tx * vt * 0.08; pl.vel.z -= tz * vt * 0.08;
           const side = (pl.pos.x - c.x) * c.hx + (pl.pos.z - c.z) * c.hz;
           pl.w.y += (Math.random() - 0.5) * Math.abs(vrel) * 0.05 + Math.sign(vt) * Math.abs(vrel) * 0.015;
-          this.knock(c, -nx * dv, dv > 1.2 ? Math.min(9, dv * 0.25 + (dv > 6 ? 2 : 0)) : 0, -nz * dv, (Math.sign(side) || 1) * dv * 0.12);
+          this.knock(c, -nx * dv, dv > 1.2 ? Math.min(TU.trafficKnockLiftMax, dv * TU.trafficKnockLift + (dv > 6 ? 2 : 0)) : 0, -nz * dv, (Math.sign(side) || 1) * dv * 0.12);
           pl.onTrafficHit(c, -vrel, pl.pos.x - nx * 1.0, pl.pos.y + 0.6, pl.pos.z - nz * 1.0);
         }
       }
@@ -1118,7 +1129,7 @@
         const cvx = c.hx * c.v, cvz = c.hz * c.v;
         const rel = Math.hypot(pl.vel.x - cvx, pl.vel.z - cvz);
         if (rel < 10) continue;
-        const top = c.y + c.t.hgt;
+        const top = this.topOf(c);
         const edge = Math.abs(side) - c.t.wid / 2 - 1.02;
         if (pl.pos.y > top - 0.3 && Math.abs(side) < c.t.wid / 2 + 1.5) {
           c.cd = 1.5; this.game.onJumpOver(c);

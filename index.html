@@ -107,7 +107,7 @@
     <div class="scroll">
       <p class="acct-pitch">The web version is a free demo. The <b>full game</b> is one payment of <b>$4.99</b>, yours for good, on any device you sign in on.</p>
       <ul class="acct-list">
-        <li><b>All 8 circuits</b>: Skyway, the Alps, the Isle, Devil's Fjord, Lago de Atitlán and more</li>
+        <li><b>All 8 circuits</b>: Skyway, the Alps, the Isle, Devil's Fjord, Lake Atitlán and more</li>
         <li><b>All 11 cars</b> in the Garage, each with its own unlock goal</li>
         <li><b>World Tour</b>, <b>Multiplayer</b> and the <b>Course Editor</b></li>
         <li><b>All 15 Stunt Challenge levels</b> (the demo stops after Act I)</li>
@@ -376,12 +376,12 @@
         <div>
           <h3>TOUCH</h3>
           <p>Left half: floating stick — drag sideways to steer (unless tilt is on), down to brake.</p>
-          <p>Right cluster: <b>BOOST</b>, <b>JUMP</b>, <b>L</b>/<b>R</b> side thrusters, <b>BRAKE</b>, <b>DRIFT</b>. Double-tap <b>L</b>/<b>R</b> and hold the second tap to flip (or hold <b>JUMP</b> and slide onto <b>L</b>/<b>R</b>).</p>
+          <p>Right cluster: <b>BOOST</b>, <b>JUMP</b>, <b>L</b>/<b>R</b> side thrusters, <b>BRAKE</b>, <b>DRIFT</b>. The small <b>&#x21BA;</b>/<b>&#x21BB;</b> <b>FLIP</b> buttons above <b>L</b>/<b>R</b> roll the car over (or hold <b>JUMP</b> and slide onto <b>L</b>/<b>R</b>).</p>
           <p>With tilt steering: right side <b>GAS</b>, <b>BOOST</b>, <b>JUMP</b>, <b>R</b>, <b>DRIFT</b>; left side <b>L</b> over <b>BRAKE</b>.</p>
         </div>
         <div>
           <h3>GAMEPAD</h3>
-          <p>RT gas · LT brake · A jump · LB/RB side thrusters (double-tap LB/RB and hold to flip, or A + LB/RB) · X boost · B drift · Y camera · right stick pitch/roll in the air</p>
+          <p>RT gas · LT brake · A jump · LB/RB side thrusters (hold A + LB/RB to flip) · X boost · B drift · Y camera · right stick pitch/roll in the air</p>
         </div>
       </div>
       <h3>TIPS</h3>
@@ -453,7 +453,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry, GLTFLoader };
     const BUILD = Date.now();
-    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'account', 'tour', 'ghost', 'course', 'editor', 'challenge', 'game'];
+    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'account', 'tour', 'ghost', 'course', 'editor', 'challenge', 'sandbox', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }

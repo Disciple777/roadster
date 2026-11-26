@@ -231,6 +231,7 @@
       try { auto = sessionStorage.getItem('rt-autostart'); sessionStorage.removeItem('rt-autostart'); } catch (e) { /* ignore */ }
       if (auto === 'race' || auto === 'free' || auto === 'course') this.startRace(auto);
       else if (auto === 'tour' && G.isFull()) this.tourGo();
+      if (G.sandbox) G.sandbox.start(this); // index.html?sandbox: the physics sandbox (js/sandbox.js)
       // a course opened on the other circuit reloads the page and lands here (editor.js)
       let cAuto = null;
       try { cAuto = JSON.parse(sessionStorage.getItem('rt-course') || 'null'); sessionStorage.removeItem('rt-course'); } catch (e) { /* ignore */ }
@@ -297,8 +298,34 @@
     }
 
     // ---------------- UI ----------------
+    // main screen: hold a mouse button (or a finger on empty space) and drag to orbit the car, the wheel zooms, like the showroom
+    wireMenuDrag() {
+      this.menuA = 0; this.menuLift = 0; this.menuZoom = 1; this.menuHold = 0;
+      const free = (e) => this.state === 'menu' && (e.target === $('c') || e.target === $('menu') || !!e.target.closest('.logo'));
+      let drag = null;
+      window.addEventListener('pointerdown', (e) => {
+        if (!free(e) || (e.pointerType === 'mouse' && e.button > 2)) return;
+        drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        this.menuHold = 1e9;
+      });
+      window.addEventListener('pointermove', (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+        this.menuA -= dx * 0.008;
+        this.menuLift = G.clamp(this.menuLift + dy * 0.012, -1.5, 4.5);
+      });
+      const up = (e) => { if (drag && e.pointerId === drag.id) { drag = null; this.menuHold = 4; } }; // the slow spin picks up again after 4 s
+      window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+      window.addEventListener('wheel', (e) => {
+        if (!free(e)) return;
+        this.menuZoom = G.clamp(this.menuZoom * Math.exp(e.deltaY * 0.001), 0.55, 1.8);
+      }, { passive: true });
+      $('menu').addEventListener('contextmenu', (e) => { if (e.target === $('menu')) e.preventDefault(); });
+    }
+
     wireUI() {
       const S = this.settings;
+      this.wireMenuDrag();
       const click = (id, fn) => $(id).addEventListener('click', (e) => { G.audio.init(); G.audio.tone(700, 0.05, 0.08, 'triangle'); fn(e); });
       click('btn-play', () => this.showPanel('play'));
       click('btn-chal', () => { this.buildChalPanel(); this.showPanel('chal'); });
@@ -919,14 +946,16 @@
           <div class="kh-tile wide"><h4>STEER</h4><p>${this.settings.tilt ? 'Tilt the phone like a steering wheel. Hold <b>GAS</b> to go.' : 'Drag anywhere on the left half of the screen. Drag down to brake.'}</p></div>
           <div class="kh-tile"><h4>DRIFT</h4><div class="kh-keys"><span class="kc hot">DRIFT</span></div></div>
           <div class="kh-tile"><h4>JUMP / HOVER</h4><div class="kh-keys"><span class="kc">JUMP</span></div><p>Hold to fly over traffic and gaps</p></div>
-          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys"><span class="kc">L</span><span class="kc">R</span></div><p>Tap = slide. Double-tap L / R and hold the second tap to flip</p></div>
+          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys"><span class="kc">L</span><span class="kc">R</span></div><p>Tap = slide</p></div>
+          <div class="kh-tile"><h4>FLIP</h4><div class="kh-keys"><span class="kc">&#x21BA;</span><span class="kc">&#x21BB;</span></div><p>The small buttons above L / R: hold to roll over</p></div>
           <div class="kh-tile"><h4>BOOST</h4><div class="kh-keys"><span class="kc">BOOST</span></div><p>Uses N₂, refill it with tricks</p></div>
         </div>` : `<div class="kh-grid">
           <div class="kh-tile"><h4>DRIVE</h4><div class="kh-t">${one('accel')}${one('left')}${one('brake')}${one('right')}</div><p>Brake again when stopped to reverse</p></div>
           <div class="kh-tile"><h4>DRIFT</h4><div class="kh-keys">${k('hand', 'hot')}</div><p>Hold while turning to slide. Drifts refill N₂</p></div>
           <div class="kh-tile"><h4>BOOST</h4><div class="kh-keys">${k('boost')}</div><p>Rear thruster</p></div>
-          <div class="kh-tile wide"><h4>JUMP / HOVER</h4><div class="kh-keys">${one('jump', 'sp')}</div><p>Under-thrusters: hold to jump traffic and fly the gaps</p></div>
-          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys">${one('thrL')}${one('thrR')}</div><p>Tap and hold to slide. Double-tap and hold the second tap to flip</p></div>
+          <div class="kh-tile"><h4>JUMP / HOVER</h4><div class="kh-keys">${one('jump', 'sp')}</div><p>Under-thrusters: hold to jump traffic and fly the gaps</p></div>
+          <div class="kh-tile"><h4>SIDE THRUSTERS</h4><div class="kh-keys">${one('thrL')}${one('thrR')}</div><p>Tap and hold to slide</p></div>
+          <div class="kh-tile"><h4>FLIP</h4><div class="kh-keys">${one('flipL')}${one('flipR')}</div><p>Hold to roll over left / right</p></div>
         </div>
         <div class="kh-small"><span>${one('camera')} camera</span><span>${one('reset')} reset car</span><span>${one('pause')} pause</span><span>Gamepad: RT gas · LT brake · A jump · B drift · X boost</span></div>`;
       this.introHold = true;
@@ -1012,7 +1041,7 @@
       this.addShake(Math.min(1, vrel / 25));
       if (vrel > 6) { this.combo = 1; this.comboT = 0; }
       if (navigator.vibrate && vrel > 5) try { navigator.vibrate(Math.min(120, vrel * 4)); } catch (e) { /* ignore */ }
-      if (vrel > 38 && c.t.mass > 1000) this.wreck();
+      if (vrel > 38 && c.t.mass > 1000 && !(G.sandbox && !G.sandbox.opt.wrecks)) this.wreck();
       else if (vrel > 8) this.hud.popup(c.loose ? 'TAKEDOWN' : 'CRASH', c.t.name, 'warn');
     }
     onWallHit(pos, vn, vt) {
@@ -1381,7 +1410,7 @@
       return myPlace;
     }
     // results board: finished drivers by time, then those still racing by distance, then drop-outs
-    // a multiplayer race with at least one other person in it counts for the BASTION v2 unlock
+    // a multiplayer race with at least one other person in it counts for the BASTION unlock
     mpProgress() {
       if (this.mpGrid && this.mpGrid.length > 1) G.progress({ mpRaced: true });
       this.checkUnlocks();
@@ -1438,6 +1467,7 @@
         p.step(h, ctrl);
         if (this.traffic) this.traffic.collidePlayer(p);
         if (this.rivals) this.rivals.step(h); // same physics, traffic and car-vs-car rules as the player
+        if (G.sandbox && G.sandbox.game) G.sandbox.sub(h);
         this.acc -= h; steps++;
       }
       if (steps === 8) this.acc = 0;
@@ -1460,6 +1490,7 @@
         if (st === 'race' || st === 'finished') this.traffic.detectStunts(p);
       }
       if (this.rivals) this.rivals.update(dt, st === 'race' || st === 'finished' || st === 'wreck', p, this.progress);
+      if (G.sandbox && G.sandbox.root) G.sandbox.frame(dt);
       this.mpFrame(dt, driving);
 
       if (this.course) this.course.update(dt, st === 'race');
@@ -1766,8 +1797,10 @@
         // in the garage the camera closes in and slides the car left, clear of the panel
         const gar = $('garage').classList.contains('open');
         this.garK = G.damp(this.garK || 0, gar ? 1 : 0, 3, realDt);
-        const k = this.garK, a = this.t * (0.18 - k * 0.08), r = 7.5 - k * 1.6;
-        cam.position.set(p.pos.x + Math.sin(a) * r, p.pos.y + 1.9 - k * 0.5 + Math.sin(this.t * 0.3) * 0.4 * (1 - k), p.pos.z + Math.cos(a) * r);
+        const k = this.garK;
+        if ((this.menuHold = Math.max(0, (this.menuHold || 0) - realDt)) <= 0) this.menuA = (this.menuA || 0) + realDt * (0.18 - k * 0.08);
+        const a = this.menuA || 0, r = (7.5 - k * 1.6) * (this.menuZoom || 1);
+        cam.position.set(p.pos.x + Math.sin(a) * r, p.pos.y + 1.9 - k * 0.5 + Math.sin(this.t * 0.3) * 0.4 * (1 - k) + (this.menuLift || 0) * (r / 7.5), p.pos.z + Math.cos(a) * r);
         const sh = k * (window.innerWidth > 700 ? 1.7 : 0); // look past the car's right so it sits left of centre
         cam.lookAt(p.pos.x + Math.cos(a) * sh, p.pos.y + 0.7 - k * 0.1, p.pos.z - Math.sin(a) * sh);
         cam.fov = 50; cam.updateProjectionMatrix();
@@ -1780,9 +1813,10 @@
       const spdF = G.clamp(p.speed / 100, 0, 1.4);
       const mode = this.camMode;
       if (mode === 2) {
-        const v = new T.Vector3(0, 1.0, -0.3).applyQuaternion(p.q).add(p.pos);
+        const eye = G.cockpitEye(p.model); // per car, from its shape, so the bonnet never hides the road
+        const v = new T.Vector3(0, eye.y, eye.z).applyQuaternion(p.q).add(p.pos);
         cam.position.copy(v);
-        cam.quaternion.copy(p.q);
+        cam.quaternion.copy(p.q).multiply(this._camTilt || (this._camTilt = new T.Quaternion().setFromAxisAngle(new T.Vector3(1, 0, 0), -0.06)));
       } else {
         // raised chase cam, tilted down a touch so the road ahead stays in view over the car
         const dist = (mode === 0 ? 7.0 : 11.0) + spdF * 1.6;

@@ -218,6 +218,13 @@ body.touch.playing #touch { display: block; }
 .tb-brake { right: 12px; bottom: 0; width: 64px; height: 64px; border-radius: 14px; }
 .tb-drift { right: 196px; bottom: 16px; width: 66px; height: 66px; border-radius: 14px; }
 .tb-r, .tb-l { border-color: rgba(95, 212, 255, 0.5); }
+/* small flip buttons, each just above its side thruster */
+.tb-fl { right: 207px; bottom: 166px; width: 40px; height: 40px; }
+.tb-fr { right: 119px; bottom: 206px; width: 40px; height: 40px; }
+.tb-fl, .tb-fr { border-color: rgba(255, 196, 60, 0.6); background: rgba(255, 196, 60, 0.12); }
+.tb-fl b, .tb-fr b { font-size: 15px; line-height: 1; }
+.tb-fl i, .tb-fr i { font-size: 7px; }
+.tb-fl.on, .tb-fr.on { background: rgba(255, 196, 60, 0.55); box-shadow: 0 0 20px rgba(255, 196, 60, 0.8); }
 .tb-boost { bottom: 76px; }
 /* tilt steering: no stick zone. Left edge: L thruster over BRAKE. Right corner: GAS, BOOST to its left, JUMP above it, R on top; DRIFT stays put */
 #touch { --k: 1; }
@@ -233,6 +240,8 @@ body.touch.playing #touch { display: block; }
 #touch.tilt .tb-jump { right: calc(10px + var(--sa-r) + 6px * var(--k)); bottom: calc(10px + var(--sa-b) + 104px * var(--k)); width: calc(86px * var(--k)); height: calc(86px * var(--k)); }
 #touch.tilt .tb-r { right: calc(10px + var(--sa-r) + 18px * var(--k)); bottom: calc(10px + var(--sa-b) + 196px * var(--k)); width: calc(62px * var(--k)); height: calc(62px * var(--k)); }
 #touch.tilt .tb-l { right: auto; left: calc(14px + var(--sa-l)); bottom: calc(14px + var(--sa-b) + 76px * var(--k)); width: calc(62px * var(--k)); height: calc(62px * var(--k)); }
+#touch.tilt .tb-fr { right: calc(10px + var(--sa-r) + 29px * var(--k)); bottom: calc(10px + var(--sa-b) + 264px * var(--k)); width: calc(40px * var(--k)); height: calc(40px * var(--k)); }
+#touch.tilt .tb-fl { right: auto; left: calc(25px + var(--sa-l)); bottom: calc(14px + var(--sa-b) + 144px * var(--k)); width: calc(40px * var(--k)); height: calc(40px * var(--k)); }
 #touch.tilt .tb-brake { right: auto; left: calc(14px + var(--sa-l)); bottom: calc(14px + var(--sa-b)); width: calc(64px * var(--k)); height: calc(64px * var(--k)); }
 @media (max-height: 430px) { #touch.tilt { --k: 0.84; } }
 @media (max-height: 340px) { #touch.tilt { --k: 0.72; } }
@@ -485,3 +494,51 @@ body.is-full #acct .acct-pitch, body.is-full #acct .acct-list, body.is-full #acc
 #acct .acct-get { margin: 6px 0 12px; }
 #acct .acct-get .hint { margin-top: 8px; transition: color 0.2s; }
 #acct .acct-get .hint.flash { color: #ffd36a; }
+
+/* ---------- physics sandbox (index.html?sandbox, js/sandbox.js) ---------- */
+#sbx { position: fixed; top: 0; right: 0; bottom: 0; width: 330px; z-index: 30; display: flex; font-family: system-ui, sans-serif; font-size: 12px; color: #dfe6f0; pointer-events: none; }
+body:not(.playing) #sbx { display: none; }
+#sbx .sbx-tab { pointer-events: auto; position: absolute; left: -28px; top: 120px; width: 28px; padding: 10px 0; writing-mode: vertical-rl; transform: rotate(180deg); background: rgba(10, 14, 22, 0.9); color: #4fc3ff; border: 1px solid rgba(79, 195, 255, 0.5); border-left: 0; border-radius: 0 8px 8px 0; font: 700 10px 'Orbitron', sans-serif; letter-spacing: 0.15em; cursor: pointer; }
+#sbx.shut { width: 0; }
+#sbx.shut .sbx-body { display: none; }
+#sbx .sbx-body { pointer-events: auto; flex: 1; overflow-y: auto; background: rgba(8, 11, 18, 0.9); border-left: 1px solid rgba(79, 195, 255, 0.35); padding: 10px 12px 40px; box-sizing: border-box; }
+#sbx .sbx-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+#sbx .sbx-head b { font: 700 14px 'Orbitron', sans-serif; letter-spacing: 0.1em; }
+#sbx .sbx-head b span { color: #4fc3ff; }
+#sbx a { color: #8aa; }
+#sbx button { background: #1b2433; color: #dfe6f0; border: 1px solid #34435a; border-radius: 6px; padding: 5px 8px; font-size: 11px; cursor: pointer; }
+#sbx button:hover { border-color: #4fc3ff; }
+#sbx button.on { background: #4fc3ff; color: #061018; border-color: #4fc3ff; }
+#sbx .sbx-go { background: #ffb03b; color: #1a1000; border-color: #ffb03b; font-weight: 700; }
+#sbx .sbx-copy { display: flex; gap: 6px; }
+#sbx .sbx-copy .sbx-go { flex: 1; padding: 8px; font-size: 12px; letter-spacing: 0.08em; }
+#sbx .sbx-n { margin: 6px 0 4px; color: #ffb03b; min-height: 14px; }
+#sbx details { margin: 8px 0; border-top: 1px solid #243046; padding-top: 6px; }
+#sbx summary { cursor: pointer; font: 700 11px 'Orbitron', sans-serif; letter-spacing: 0.12em; color: #4fc3ff; margin-bottom: 6px; }
+#sbx label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 5px 0; }
+#sbx label.ck { justify-content: flex-start; }
+#sbx label.opt { display: block; }
+#sbx label.opt b { float: right; font-weight: 600; }
+#sbx select { background: #121a27; color: #dfe6f0; border: 1px solid #34435a; border-radius: 5px; padding: 3px; max-width: 190px; }
+#sbx input[type=range] { width: 100%; accent-color: #4fc3ff; margin: 2px 0 0; }
+#sbx .sbx-row { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+#sbx canvas { width: 100%; background: #05080e; border-radius: 6px; margin-top: 6px; }
+#sbx .sbx-key { color: #8a97a8; font-size: 10px; display: flex; gap: 8px; align-items: center; }
+#sbx .sbx-key i { display: inline-block; width: 10px; height: 3px; margin-right: -4px; }
+#sbx .sbx-key i.a { background: #4fc3ff; } #sbx .sbx-key i.b { background: #ffb03b; } #sbx .sbx-key i.c { background: #ff5a4f; }
+#sbx .sbx-land { margin-top: 6px; color: #8a97a8; }
+#sbx .sbx-land div { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #172031; }
+#sbx .sbx-land b { color: #fff; }
+#sbx .sbx-find { width: 100%; box-sizing: border-box; margin: 10px 0 2px; padding: 6px 8px; background: #121a27; color: #dfe6f0; border: 1px solid #34435a; border-radius: 6px; }
+#sbx .sbx-var { padding: 4px 6px; margin: 2px -6px; border-radius: 5px; }
+#sbx .sbx-var.ch { background: rgba(255, 176, 59, 0.14); box-shadow: inset 3px 0 0 #ffb03b; }
+#sbx .sbx-var .l { display: flex; align-items: center; gap: 4px; }
+#sbx .sbx-var .l span { flex: 1; font-family: ui-monospace, monospace; }
+#sbx .sbx-var .l input { width: 74px; background: #121a27; color: #fff; border: 1px solid #34435a; border-radius: 4px; padding: 2px 4px; text-align: right; }
+#sbx .sbx-var .l button { padding: 1px 6px; }
+#sbx .sbx-var small { display: block; color: #6f7d90; font-size: 10px; line-height: 1.3; }
+#sbx .sbx-out { pointer-events: auto; position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; }
+#sbx .sbx-out.hidden { display: none; }
+#sbx .sbx-out > div { background: #0d131e; border: 1px solid #4fc3ff; border-radius: 10px; padding: 14px; width: min(520px, 90vw); display: flex; flex-direction: column; gap: 8px; }
+#sbx .sbx-out textarea { height: 220px; background: #05080e; color: #dfe6f0; border: 1px solid #34435a; border-radius: 6px; font: 12px ui-monospace, monospace; padding: 8px; }
+body.sbx-open.playing #hud { right: 330px; } /* the sandbox panel sits beside the HUD, not over it */

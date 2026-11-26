@@ -66,7 +66,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div class="brand"><b>SHOW<span>ROOM</span></b><small>ROADSTER THRUSTER · CAR SANDBOX</small><br /><a href="./">← back to the game</a></div>
+  <div class="brand"><b>SHOW<span>ROOM</span></b><small>ROADSTER THRUSTER · CAR SANDBOX</small><br /><a href="./">← back to the game</a> · <a href="./?sandbox">physics sandbox →</a></div>
   <div id="carname"><b id="cn"></b><span id="cd"></span></div>
 
   <div id="panel">
@@ -341,7 +341,7 @@
     // car pickers
     for (const sel of ['car', 'cmp']) {
       if (sel === 'cmp') $('cmp').add(new Option('— nothing —', ''));
-      for (const c of G.CARS) $(sel).add(new Option(c.name, c.id));
+      for (const c of G.CARS) $(sel).add(new Option(c.name + (G.GARAGE_CARS && !G.GARAGE_CARS.includes(c.id) ? ' (old AI model)' : ''), c.id));
     }
     $('car').value = S.car; $('cmp').value = S.cmp || '';
     $('car').onchange = () => { S.car = $('car').value; save(); setCar(); };

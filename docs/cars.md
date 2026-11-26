@@ -12,8 +12,8 @@ How the RoadsterThruster cars are made, and the numbers they have to fit.
 | halo | HALO | `tools/model_halo.py` | locked |
 | brick | BRICK | `tools/model_brick.py` | locked |
 | rhino | RHINO | `tools/model_rhino.py` | locked |
-| comet2 | COMET v2 | `tools/model_comet2.py` | locked |
-| bastion2 | BASTION v2 | `tools/model_bastion2.py` | locked |
+| comet2 | COMET | `tools/model_comet2.py` | locked |
+| bastion2 | BASTION | `tools/model_bastion2.py` | locked |
 | atlas | ATLAS | `tools/model_atlas.py` | locked |
 | shard | SHARD | `tools/model_shard.py` | locked |
 | tuktuk | TUK TUK | `tools/model_tuktuk.py` (one front wheel: kit `frontOne`) | locked |
@@ -41,11 +41,11 @@ In `js/car.js`:
 | HALO | finish a Street Race on every track | `finish()` adds the track to `rt_progress.tracks` |
 | BRICK | win an Official Street Race (`G.unofficial` empty, P1) | `finish()` sets `officialWin` |
 | RHINO | clear every Stunt Challenge level (practice counts) | `rt_chalLvl_<i>`, written by `challenge.js complete()` |
-| COMET v2 | complete the official Obstacle Course without wrecking (solo or multiplayer) | `finishCourse()` sets `courseDone` |
-| BASTION v2 | finish a multiplayer race with at least one other person | `mpProgress()` sets `mpRaced` |
+| COMET | complete the official Obstacle Course without wrecking (solo or multiplayer) | `finishCourse()` sets `courseDone` |
+| BASTION | finish a multiplayer race with at least one other person | `mpProgress()` sets `mpRaced` |
 | ATLAS | finish the World Tour in P1 | the tour's last race sets `tourWin` |
 | SHARD | win a Street Race on DEVIL'S FJORD (World Tour leg counts) | `finish()` sets `fjordWin` |
-| TUK TUK | win a Street Race on LAGO DE ATITLÁN (World Tour leg counts) | `finish()` sets `atitlanWin` |
+| TUK TUK | win a Street Race on LAKE ATITLÁN (World Tour leg counts) | `finish()` sets `atitlanWin` |
 
 `game.checkUnlocks()` runs after each of those (and once at startup, so old progress counts). It moves met goals into
 `rt_unlockedCars` and shows a "NEW CAR UNLOCKED" toast per car. To add a goal: add an `G.UNLOCKS` entry, record its
@@ -88,7 +88,7 @@ Then, in the same chat: "Now the exact same car from a rear three-quarter view, 
 Then, in the same chat: "Now the exact same car from a rear three-quarter view, same style, flat matte grey."
 The model gives SHARD a flat roof instead of the concept's peak (the user's call: the peak looked crooked).
 
-**TUK TUK** (prize for winning a Street Race on LAGO DE ATITLÁN; separate from the traffic tuk-tuks there):
+**TUK TUK** (prize for winning a Street Race on LAKE ATITLÁN; separate from the traffic tuk-tuks there):
 > Concept art of a futuristic tuk-tuk (auto-rickshaw) racer for an arcade racing game, front three-quarter view from
 > slightly above, on a plain light grey studio background. It keeps the classic tuk-tuk silhouette: a narrow rounded nose
 > cowl with a single big round headlight and a small windscreen, a tall boxy passenger cabin with a curved hard canopy roof

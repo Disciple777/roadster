@@ -4,15 +4,15 @@
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from carlib import *
 
-WR, WX = 0.40, 0.80
+WR, WX = 0.37, 0.76   # tyre tops stay under the fender skin (0.40 poked through the front fenders)
 WZ = WR - 0.01
 
 Y0, Y1 = -2.2, 2.4
 W = pchip([(-2.2, 0.34), (-2.0, 0.66), (-1.75, 0.98), (-1.45, 1.06), (-1.0, 1.02), (-0.3, 0.93), (0.5, 0.93), (1.1, 0.98), (1.45, 1.0),
            (1.85, 0.94), (2.15, 0.78), (2.33, 0.56), (2.4, 0.3)])
 ZB = pchip([(-2.2, 0.36), (-1.9, 0.22), (-1.5, 0.19), (1.6, 0.19), (2.1, 0.24), (2.33, 0.3), (2.4, 0.4)])
-ZW = pchip([(-2.2, 0.52), (-1.5, 0.58), (-0.6, 0.52), (1.5, 0.5), (2.4, 0.48)])
-ZT = pchip([(-2.2, 0.64), (-1.9, 0.76), (-1.4, 0.84), (-0.5, 0.86), (0.6, 0.86), (1.3, 0.82), (1.9, 0.75), (2.25, 0.68), (2.4, 0.58)])
+ZW = pchip([(-2.2, 0.52), (-1.5, 0.58), (-0.6, 0.52), (0.7, 0.52), (1.42, 0.72), (2.0, 0.6), (2.4, 0.48)])   # front fender bulge over the wheels
+ZT = pchip([(-2.2, 0.64), (-1.9, 0.76), (-1.4, 0.84), (-0.5, 0.86), (0.6, 0.86), (1.42, 0.87), (1.9, 0.77), (2.25, 0.68), (2.4, 0.58)])
 def control(y):
     w, zb, zw, zt = W(y), ZB(y), ZW(y), ZT(y)
     return [(0.0, zb), (w * 0.62, zb), (w * 0.93, zb + (zw - zb) * 0.35), (w, zw), (w * 0.94, zw + (zt - zw) * 0.6),
@@ -21,7 +21,7 @@ body = loft('body', control, [3, 3, 3, 4, 4, 4], lambda s, y: 0, Y0, Y1)
 
 # front arches open; rear wheels hidden under skirts (only the bottom of the tyre shows)
 for sx in (1, -1):
-    boolean(body, cylinder('arch', 0.47, 0.8, (sx * 0.95, AXLE_F, WZ), (0, math.pi / 2, 0), 64))
+    boolean(body, cylinder('arch', 0.42, 0.8, (sx * 0.95, AXLE_F, WZ), (0, math.pi / 2, 0), 64))
     boolean(body, cylinder('skirt', 0.62, 0.8, (sx * 0.95, AXLE_R, -0.16), (0, math.pi / 2, 0), 64))
 
 # nose intake: a round hole with a turbine fan and spinner

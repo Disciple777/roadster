@@ -10,6 +10,8 @@
     ['jump', 'Jump / hover', ['Space']],
     ['thrL', 'Left thruster', ['KeyQ']],
     ['thrR', 'Right thruster', ['KeyE']],
+    ['flipL', 'Flip left', ['Digit1']],
+    ['flipR', 'Flip right', ['Digit3']],
     ['boost', 'Boost', ['ShiftLeft', 'ShiftRight']],
     ['camera', 'Camera', ['KeyC']],
     ['reset', 'Reset car', ['KeyR']],
@@ -19,11 +21,12 @@
     ['hud', 'Hide HUD', ['KeyH']],
   ];
   const EVENT_ACTIONS = new Set(['camera', 'reset', 'pause', 'mute', 'fullscreen', 'hud']);
-  // control layouts: 1 drives on the arrows with the side thrusters on A / D, 2 is the original WASD + Q / E
+  // control layouts: 1 drives on the arrows with the side thrusters on A / D and flips on Q / E, 2 is the original
+  // WASD + Q / E with flips on 1 / 3
   G.KEY_PRESETS = {
     // drift: Ctrl on the arrows layout (left Ctrl for the left hand, right Ctrl next to the arrows). Not on WASD: Ctrl+W
     // closes the browser tab and no page can stop that, so WASD keeps X
-    1: { name: 'ARROWS + A/D', keys: { accel: ['ArrowUp'], brake: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], thrL: ['KeyA'], thrR: ['KeyD'], hand: ['ControlLeft', 'ControlRight'] } },
+    1: { name: 'ARROWS + A/D', keys: { accel: ['ArrowUp'], brake: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], thrL: ['KeyA'], thrR: ['KeyD'], flipL: ['KeyQ'], flipR: ['KeyE'], hand: ['ControlLeft', 'ControlRight'] } },
     2: { name: 'WASD + Q/E', keys: {} },
   };
   G.KEY_ACTIONS = ACTIONS;
@@ -95,6 +98,8 @@
           <div class="tb tb-jump" data-btn="jump"><span class="ic">&#x2B06;&#xFE0E;</span><b>JUMP</b></div>
           <div class="tb tb-l" data-btn="thrL"><b>L</b><i>THR</i></div>
           <div class="tb tb-r" data-btn="thrR"><b>R</b><i>THR</i></div>
+          <div class="tb tb-fl" data-btn="flipL"><b>&#x21BA;</b><i>FLIP</i></div>
+          <div class="tb tb-fr" data-btn="flipR"><b>&#x21BB;</b><i>FLIP</i></div>
           <div class="tb tb-brake" data-btn="brake"><b>BRAKE</b></div>
           <div class="tb tb-accel" data-btn="accel"><b>GAS</b></div>
           <div class="tb tb-drift" data-btn="handbrake"><b>DRIFT</b></div>
@@ -264,18 +269,12 @@
         boost = boost || tb.has('boost'); hand = hand || tb.has('handbrake');
       }
 
-      // double-tap flip: tap a side thruster, then tap it again and hold. While the second tap is held that side's pair
-      // of under-thrusters fires (the same as jump + that side), so the car rolls over. A single tap-and-hold still slides.
-      const dt2 = this.dtap || (this.dtap = { t: 0, L: { on: false, down: -9, up: -9, flip: false }, R: { on: false, down: -9, up: -9, flip: false } });
-      dt2.t += dt;
-      for (const [side, on] of [['L', thrL], ['R', thrR]]) {
-        const d = dt2[side];
-        if (on && !d.on) { d.flip = dt2.t - d.up < 0.3 && d.up - d.down < 0.3; d.down = dt2.t; }
-        else if (!on && d.on) { d.up = dt2.t; d.flip = false; }
-        d.on = on;
-      }
-      if (dt2.L.flip || dt2.R.flip) { jump = true; thrL = dt2.L.flip; thrR = dt2.R.flip; }
-      s.flipping = dt2.L.flip ? 'L' : dt2.R.flip ? 'R' : '';
+      // flip: its own key / button fires that side's pair of under-thrusters (the same as jump + that side), so the car
+      // rolls over. Gamepad: hold A and a bumper
+      let flipL = h('flipL'), flipR = h('flipR');
+      if (this.touchRoot) { flipL = flipL || this.touch.btn.has('flipL'); flipR = flipR || this.touch.btn.has('flipR'); }
+      if (flipL || flipR) { jump = true; thrL = flipL; thrR = flipR && !flipL; }
+      s.flipping = flipL ? 'L' : flipR ? 'R' : '';
       // physics reads thrL / thrR as "slide left / right". Inverted (default): the key names the thruster that fires,
       // so the left thruster pushes the car right. With the under-thrusters lit, L / R still pick that side's pair.
       if (this.thrInvert && !jump) { const t = thrL; thrL = thrR; thrR = t; }

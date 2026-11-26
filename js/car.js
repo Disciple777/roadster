@@ -299,7 +299,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.8, whiteHi: 0.95, satLo: 0.1, satHi: 0.22 },
     },
     {
-      id: 'comet2', name: 'COMET v2', desc: 'Hand-built open two-seater: wedge nose with a full-width light strip, wraparound screen, twin head fairings.',
+      id: 'comet2', name: 'COMET', desc: 'Hand-built open two-seater: wedge nose with a full-width light strip, wraparound screen, twin head fairings.',
       glb: 'models/comet2.glb', v: 3, hand: true, // modelled in Blender by tools/model_comet2.py
       kit: { rear: [[-0.36, 0.43, 2.33], [0.36, 0.43, 2.33]], rearW: 1.6, sideX: 1.03, sideY: 0.5, wheelR: 0.46, wheelX: 0.94 },
     },
@@ -311,7 +311,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.97, whiteHi: 1.01, satLo: 0.1, satHi: 0.22 }, // no white parts: Meshy baked a bright roof highlight
     },
     {
-      id: 'bastion2', name: 'BASTION v2', desc: 'Hand-built widebody grand tourer: long domed hood, ducktail, four ring tail lights and twin turbines.',
+      id: 'bastion2', name: 'BASTION', desc: 'Hand-built widebody grand tourer: long domed hood, ducktail, four ring tail lights and twin turbines.',
       glb: 'models/bastion2.glb', v: 2, hand: true, // modelled in Blender by tools/model_bastion2.py, no AI texture
       kit: { rear: [[-0.3, 0.37, 2.56], [0.3, 0.37, 2.56]], rearW: 1.8, sideX: 1.06, sideY: 0.5, wheelR: 0.42, wheelX: 0.92 },
     },
@@ -335,8 +335,8 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     },
     {
       id: 'halo', name: 'HALO', desc: '1950s jet-age teardrop: bubble canopy, tail fins, skirted rear wheels and a turbine at each end.',
-      glb: 'models/halo.glb', v: 1, hand: true,
-      kit: { rear: [[0, 0.5, 2.48]], rearW: 2.1, sideX: 1.02, sideY: 0.45, wheelR: 0.40, wheelX: 0.80 },
+      glb: 'models/halo.glb', v: 2, hand: true,
+      kit: { rear: [[0, 0.5, 2.48]], rearW: 2.1, sideX: 1.02, sideY: 0.45, wheelR: 0.37, wheelX: 0.76 },
     },
     {
       id: 'brick', name: 'BRICK', desc: 'Boxy 80s rally hatch: bolt-on flares, roof wing, four rally lamps and twin thrusters in the bumper.',
@@ -390,7 +390,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     bastion2: { goal: 'Race a friend in Multiplayer', of: () => [prog().mpRaced ? 1 : 0, 1] },
     atlas: { goal: 'Win the World Tour', of: () => [prog().tourWin ? 1 : 0, 1] },
     shard: { goal: "Win a Street Race on DEVIL'S FJORD", of: () => [prog().fjordWin ? 1 : 0, 1] },
-    tuktuk: { goal: 'Win a Street Race on LAGO DE ATITLÁN', of: () => [prog().atitlanWin ? 1 : 0, 1] },
+    tuktuk: { goal: 'Win a Street Race on LAKE ATITLÁN', of: () => [prog().atitlanWin ? 1 : 0, 1] },
   };
   // "goal (k/n)" for the Garage
   G.unlockHint = (id) => { if (!G.isFull() && !G.START_CARS.includes(id)) return 'FULL GAME'; const u = G.UNLOCKS[id]; if (!u) return ''; const [k, n] = u.of(); return n > 1 ? `${u.goal} (${k}/${n})` : u.goal; };
@@ -560,6 +560,50 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
     model.carId = id;
     return model;
   };
+  // cockpit camera spot for a car model, in car space ({ y, z }, forward is -z), worked out once per car from its own
+  // geometry: along the centre line, the lowest eye that sits above the body under it and still sees the road 9 m ahead
+  // over everything in front of it. Cars with a low open cockpit keep the eye near the driver; a car with a tall cabin
+  // or a tinted bubble gets a bonnet cam just ahead of it.
+  const eyeCache = {};
+  G.cockpitEye = function (model) {
+    const key = model.carId || 'thruster';
+    if (eyeCache[key]) return eyeCache[key];
+    const skip = new Set(model.wheels.map((w) => w.pivot));
+    model.group.updateMatrixWorld(true);
+    const inv = new T.Matrix4().copy(model.group.matrixWorld).invert(), m = new T.Matrix4(), v = new T.Vector3();
+    const pts = [];
+    const walk = (o) => {
+      if (skip.has(o) || !o.visible) return;
+      if (o.isMesh && !o.material.isShaderMaterial && o.geometry.attributes.position) {
+        const pos = o.geometry.attributes.position, step = Math.max(1, Math.floor(pos.count / 60000));
+        m.multiplyMatrices(inv, o.matrixWorld);
+        for (let i = 0; i < pos.count; i += step) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(m);
+          if (Math.abs(v.x) < 0.7) pts.push(v.x, v.y, v.z);
+        }
+      }
+      for (const c of o.children) walk(c);
+    };
+    walk(model.group);
+    let nose = 0;
+    for (let i = 2; i < pts.length; i += 3) nose = Math.min(nose, pts[i]);
+    const D = 9, DRIVER = -0.3;
+    let best = { y: 1.0, z: DRIVER }, bestScore = Infinity;
+    for (let zc = 0.1; zc >= nose + 0.45; zc -= 0.1) {
+      let roof = 0.5, need = 0;
+      for (let i = 0; i < pts.length; i += 3) {
+        const x = pts[i], y = pts[i + 1], z = pts[i + 2];
+        if (Math.abs(x) < 0.45 && Math.abs(z - zc) < 0.3) roof = Math.max(roof, y);
+        const d = zc - z;
+        if (d > 0.3 && d < D - 1) need = Math.max(need, (y + 0.05) / (1 - d / D));
+      }
+      const y = Math.max(roof + 0.12, need);
+      const score = y + 0.35 * Math.abs(zc - DRIVER);
+      if (score < bestScore) { bestScore = score; best = { y, z: zc }; }
+    }
+    return (eyeCache[key] = best);
+  };
+
   G.setPaint = function (model, hex) {
     if (model.paint && model.paint.userData.u) model.paint.userData.u.uPaint.value.setHex(hex);
     else if (model.paint) model.paint.color.setHex(hex);
@@ -599,12 +643,18 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
   // ---------------- player physics ----------------
   // the tweakable numbers live in js/tuning.js
   const TU = G.TUNING;
-  const GRAV = TU.gravity;
-  const REST = 0.55, ANCHOR_Y = 0.8, WR = 0.36, KS = TU.springStiffness, CS = TU.damperBump, CS_REB = TU.damperRebound, MAXC = 0.36;
-  const MASS = TU.mass;
-  const POWER = TU.enginePower, FMAX = TU.maxDriveForce, BRAKE = TU.brakeForce, KDRAG = TU.airDrag, DOWNF = TU.downforce;
-  const MU = TU.tyreGrip, CLAT_F = TU.corneringFront, CLAT_R = TU.corneringRear;
-  const F_UNDER = TU.underThrust * MASS * GRAV, F_BACK = TU.rearThrust * MASS * GRAV, F_SIDE = TU.sideThrust * MASS * GRAV;
+  const ANCHOR_Y = 0.8, WR = 0.36;
+  let GRAV, REST, KS, CS, CS_REB, MAXC, MASS, POWER, FMAX, BRAKE, KDRAG, DOWNF, MU, CLAT_F, CLAT_R, F_UNDER, F_BACK, F_SIDE;
+  // read G.TUNING into the working numbers. Runs once here; the physics sandbox calls it again after every change
+  G.retune = () => {
+    GRAV = G.GRAV = TU.gravity;
+    REST = TU.springTravel; KS = TU.springStiffness; CS = TU.damperBump; CS_REB = TU.damperRebound; MAXC = TU.bumpStop;
+    MASS = TU.mass;
+    POWER = TU.enginePower; FMAX = TU.maxDriveForce; BRAKE = TU.brakeForce; KDRAG = TU.airDrag; DOWNF = TU.downforce;
+    MU = TU.tyreGrip; CLAT_F = TU.corneringFront; CLAT_R = TU.corneringRear;
+    F_UNDER = TU.underThrust * MASS * GRAV; F_BACK = TU.rearThrust * MASS * GRAV; F_SIDE = TU.sideThrust * MASS * GRAV;
+  };
+  G.retune();
   const BODY_PTS = [
     [0.95, 0.22, 2.1], [-0.95, 0.22, 2.1], [0.95, 0.22, -2.1], [-0.95, 0.22, -2.1],
     [0.55, 1.18, 0.4], [-0.55, 1.18, 0.4], [0.55, 1.05, -0.5], [-0.55, 1.05, -0.5],
@@ -622,7 +672,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
       this.game = game; this.model = model;
       this.pos = new T.Vector3(); this.vel = new T.Vector3();
       this.q = new T.Quaternion(); this.w = new T.Vector3();
-      this.I = new T.Vector3(3400, 3900, 1400);
+      this.I = new T.Vector3(TU.inertiaPitch, TU.inertiaYaw, TU.inertiaRoll);
       this.wheels = model.wheels.map((w) => ({ x: w.x, z: w.z, front: w.front, comp: 0, len: REST, contact: false, spin: 0, spinV: 0, slip: 0 }));
       this.fuel = 100; this.fuelLock = false; this.fuelUse = false; this.fuelIdle = 0; this.fuelCharging = false;
       this.th = { L: 0, R: 0, B: 0, SL: 0, SR: 0 };
@@ -662,6 +712,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
       const rider = this.game.chalRun ? this.game.chalRun.world : this.game.course;
       if (this.ride && rider) { rider.rideStep(this, dt, inp); return; } // on a loop: follows the track
       const pos = this.pos, vel = this.vel, q = this.q, w = this.w;
+      this.I.set(TU.inertiaPitch, TU.inertiaYaw, TU.inertiaRoll);
       const up = _v[0].set(0, 1, 0).applyQuaternion(q);
       const fwd = _v[1].set(0, 0, -1).applyQuaternion(q);
       const right = _v[2].set(1, 0, 0).applyQuaternion(q);
@@ -701,8 +752,8 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
         wh.comp = comp; wh.len = Math.max(len, REST - MAXC);
         // firmer rebound than bump damping (like real shocks) so landings settle instead of springing back up
         let Fs = KS * comp + (compV > 0 ? CS : CS_REB) * compV;
-        if (comp > MAXC) Fs += KS * 10 * (comp - MAXC) + CS * 3 * compV;
-        Fs = G.clamp(Fs, 0, MASS * GRAV * 6);
+        if (comp > MAXC) Fs += KS * TU.bumpStopStiffness * (comp - MAXC) + CS * TU.bumpStopDamping * compV;
+        Fs = G.clamp(Fs, 0, MASS * GRAV * TU.maxWheelForce);
         wh.contact = true; contacts++;
         // contact point
         const P = _v[8].copy(A).addScaledVector(up, -dist);
@@ -720,9 +771,9 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
         const load = Fs + (this.grounded ? DOWNF * spd * spd * 0.25 : 0);
         let grip = MU * load * (this.gripMul || 1); // gripMul: an oil slick on the obstacle course
         let fLat = -vs * (wh.front ? CLAT_F : CLAT_R);
-        if (!wh.front && hand) { grip *= 0.42; fLat *= 0.35; }
+        if (!wh.front && hand) { grip *= TU.driftRearGrip; fLat *= TU.driftRearSide; }
         let fLong = driveTotal / 4;
-        const bF = brake * BRAKE / 4 + (!wh.front && hand ? 9000 : 0);
+        const bF = brake * BRAKE / 4 + (!wh.front && hand ? TU.driftBrake : 0);
         fLong -= G.clamp(vl * 2500, -bF, bF);
         fLong -= vl * 25;
         const mag = Math.hypot(fLat, fLong);
@@ -753,11 +804,11 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
         const vP = _v[10].crossVectors(w, r).add(vel);
         vP.x -= g.vx; vP.z -= g.vz;
         const vn = vP.dot(n);
-        const Fn = Math.max(0, 160000 * depth - 9000 * vn);
+        const Fn = Math.max(0, TU.bodyStiffness * depth - TU.bodyDamping * vn);
         const vt = vP.addScaledVector(n, -vn);
         const vtl = vt.length();
         const f = _v[11].copy(n).multiplyScalar(Fn);
-        if (vtl > 0.01) f.addScaledVector(vt, -Math.min(0.55 * Fn, vtl * 4000) / vtl);
+        if (vtl > 0.01) f.addScaledVector(vt, -Math.min(TU.bodyFriction * Fn, vtl * 4000) / vtl);
         addForce(f, P);
         if (vtl > 6 && Fn > 2000) this.onScrape(P, vtl);
       }
@@ -823,12 +874,12 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
         const yawT = _v[10].copy(up).multiplyScalar(-inp.steer * TU.airYaw);
         Tq.add(pitchT).add(yawT);
         if (inp.rollAir) Tq.addScaledVector(fwd, inp.rollAir * TU.airRoll);
-        if (!singleSide && !inp.rollAir && Math.abs(inp.pitch) < 0.1) Tq.addScaledVector(levelAxis, 5200);
-        w.multiplyScalar(Math.exp(-0.9 * dt));
+        if (!singleSide && !inp.rollAir && Math.abs(inp.pitch) < 0.1) Tq.addScaledVector(levelAxis, TU.autoLevelAir);
+        w.multiplyScalar(Math.exp(-TU.spinDampAir * dt));
       } else {
-        if (!singleSide) Tq.addScaledVector(levelAxis, up.y > 0.3 ? 3500 : 0);
+        if (!singleSide) Tq.addScaledVector(levelAxis, up.y > 0.3 ? TU.autoLevelGround : 0);
         // steering assist: nudge the yaw rate toward what the arrows ask for so the car answers the input quickly
-        const yawTarget = -inp.steer * G.clamp(spd / 12, 0, 1) * 1.35 * Math.sign(vF || 1);
+        const yawTarget = -inp.steer * G.clamp(spd / 12, 0, 1) * TU.steerAssist * Math.sign(vF || 1);
         const yawErr = yawTarget - w.dot(up);
         if (Math.abs(inp.steer) > 0.05 && Math.sign(yawErr) === Math.sign(yawTarget)) Tq.addScaledVector(up, yawErr * this.I.y * 4 * Math.abs(inp.steer));
         // stability: catch over-rotation and settle leftover spin once the arrows are released (~0.06 s, so the car stops turning when you let go)
@@ -836,12 +887,12 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
         // grip assist: bend sideways velocity into forward motion so the car goes where it points instead of sliding
         if (!hand && contacts >= 3 && spd > 2 && !(this.gripMul < 0.9)) {
           // energy-safe: forward speed only gains part of what the slide loses, so total speed can never rise
-          const vs = vel.dot(right), vsNew = vs * Math.exp(-6 * dt);
+          const vs = vel.dot(right), vsNew = vs * Math.exp(-TU.gripAssist * dt);
           const vfNew = Math.sign(vF || 1) * Math.sqrt(vF * vF + (vs * vs - vsNew * vsNew) * 0.7);
           F.addScaledVector(right, (vsNew - vs) * MASS / dt);
           F.addScaledVector(fwd, (vfNew - vF) * MASS / dt);
         }
-        w.multiplyScalar(Math.exp(-0.25 * dt));
+        w.multiplyScalar(Math.exp(-TU.spinDampGround * dt));
       }
 
       // --- integrate ---
@@ -851,7 +902,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
       tl.x /= this.I.x; tl.y /= this.I.y; tl.z /= this.I.z;
       tl.applyQuaternion(q);
       w.addScaledVector(tl, dt);
-      if (w.lengthSq() > 144) w.setLength(12);
+      if (w.lengthSq() > TU.maxSpin * TU.maxSpin) w.setLength(TU.maxSpin);
       vel.addScaledVector(F, dt / MASS);
       pos.addScaledVector(vel, dt);
       _q.set(w.x * dt * 0.5, w.y * dt * 0.5, w.z * dt * 0.5, 0).multiply(q);
@@ -875,7 +926,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
         pos.x -= nx * pen; pos.z -= nz * pen;
         const vn = vel.x * nx + vel.z * nz;
         if (vn > 0) {
-          vel.x -= nx * vn * 1.35; vel.z -= nz * vn * 1.35;
+          vel.x -= nx * vn * TU.wallBounce; vel.z -= nz * vn * TU.wallBounce;
           const tx = this.near.tx, tz = this.near.tz;
           const vt = vel.x * tx + vel.z * tz;
           const loss = Math.min(0.25, vn * 0.012);
@@ -1021,7 +1072,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
     if (vrel >= 0) return;
     const ca = rax * nz - raz * nx, cb = rbx * nz - rbz * nx; // lever arms about y
     const Iy = A.I.y;
-    const j = -1.25 * vrel / (2 / MASS + (ca * ca + cb * cb) / Iy);
+    const j = -TU.carBounce * vrel / (2 / MASS + (ca * ca + cb * cb) / Iy);
     A.vel.x -= nx * j / MASS; A.vel.z -= nz * j / MASS;
     B.vel.x += nx * j / MASS; B.vel.z += nz * j / MASS;
     A.w.y += ca * j / Iy; B.w.y -= cb * j / Iy; // (r x J).y with J = -n j on A, +n j on B
@@ -1033,5 +1084,4 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
     const y = (A.pos.y + B.pos.y) / 2 + 0.6;
     A.onCarHit(B, -vrel, cx, y, cz); B.onCarHit(A, -vrel, cx, y, cz);
   };
-  G.GRAV = GRAV;
 })();

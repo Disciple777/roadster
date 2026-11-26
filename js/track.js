@@ -159,15 +159,15 @@
       ],
       ramps: [0.12, 0.62, 0.92],
     },
-    // Guatemala: the highway ring around Lago de Atitlán. The lake fills the inside of the loop (right), the highlands and the
+    // Guatemala: the highway ring around Lago de Atitlán (shown in English, LAKE ATITLÁN; only the Nariz del Indio keeps its Spanish name). The lake fills the inside of the loop (right), the highlands and the
     // three volcanoes (San Pedro, Tolimán, Atitlán) rise outside it. Two-way traffic with tuk-tuks, motos and camionetas.
     // kite: a giant Sumpango barrilete standing across the road (solid, go under it); rocks: boulders rolling across the road
     // off the hillside (solid, moving); bumps: túmulos (speed humps), full-width mini kickers.
     atitlan: {
-      name: 'LAGO DE ATITLÁN', tod: 'day', tag: 'guatemalan lake highway', fwd: [1.8, 5.4], onc: [-1.8, -5.4], road: 8, walk: 9.8, wall: 9.5, grid: [1.9, 5.5], traffic: 1.15,
+      name: 'LAKE ATITLÁN', tod: 'day', tag: 'guatemalan lake highway', fwd: [1.8, 5.4], onc: [-1.8, -5.4], road: 8, walk: 9.8, wall: 9.5, grid: [1.9, 5.5], traffic: 1.15,
       trafficMix: { sedan: 12, suv: 8, hatch: 10, pickup: 18, van: 6, box: 4, semi: 2, bus: 0, tuktuk: 22, moto: 26, chicken: 14 },
       elev: true, wild: true, theme: 'atitlan', trees: false, noCourse: true, xings: false, lampEvery: 70, fogK: 0.45,
-      desc: 'The ring road around Lake Atitlán, under three volcanoes. Two-way traffic full of tuk-tuks, motos and chicken buses. Jump the Panajachel river, cross a landslide, launch off the Mirador under a giant barrilete, dodge falling rocks, hit the túmulos, and drop down Los Tres Saltos.',
+      desc: 'The ring road around Lake Atitlán, under three volcanoes. Two-way traffic full of tuk-tuks, motos and chicken buses. Jump the Panajachel river, cross a landslide, launch off the lookout under a giant kite, dodge falling rocks, hit the speed humps, and drop down the Three Jumps.',
       ctrl: [
         [-560, -660], [-300, -690], [-20, -700], [260, -690], [540, -630], [760, -500], [880, -300], [930, -60], [950, 180], [960, 420],
         [870, 600], [640, 700], [360, 720], [80, 700], [-200, 730], [-480, 700], [-720, 580], [-890, 380], [-950, 140], [-950, -100],
@@ -177,7 +177,7 @@
         [2600, 4], [2800, 4], [2990, 22], [3060, 18], [3300, 4], [3700, 4], [4200, 60], [4700, 100], [4790, 95], [4980, 86], [5020, 79],
         [5120, 72], [5160, 65], [5260, 58], [5300, 51], [5600, 4]],
       gaps: [
-        { s0: 440, s1: 500, kick: { len: 30, h: 4.5 }, floor: -10, v: 48, back: 260, name: 'RÍO PANAJACHEL', warn: 'BRIDGE CLOSED · JUMP THE RIVER' },
+        { s0: 440, s1: 500, kick: { len: 30, h: 4.5 }, floor: -10, v: 48, back: 260, name: 'PANAJACHEL RIVER', warn: 'BRIDGE CLOSED · JUMP THE RIVER' },
         { s0: 1180, s1: 1240, floor: -30, v: 48, back: 220, name: 'LANDSLIDE', warn: 'LANDSLIDE · KEEP THRUSTING' },
         { s0: 1960, s1: 2115, kick: { len: 34, h: 7 }, floor: -30, v: 56, back: 300, name: 'LOOKOUT LEAP', warn: 'LOOKOUT · FLAT OUT · MIND THE GIANT KITE', big: true },
         { s0: 2990, s1: 3060, floor: -20, v: 48, back: 220, name: 'FALLEN BRIDGE', warn: 'FALLEN BRIDGE · HOLD THRUST', broken: true },
