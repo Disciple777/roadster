@@ -57,9 +57,9 @@ TZ, TR, TEXIT = 1.6 + DZ, 0.32, -2.52
 boolean(body, cylinder('bore', 0.37, 0.4, (0, -2.42, TZ), (math.pi / 2, 0, 0), 8))
 
 # ---------------- cabin: raked screen, FLAT roof, a steep rear facet down to the bed ----------------
-A0, A1 = (1.25, float(ZT0(1.25)) + 0.01), (-0.05, 1.98)   # windscreen bottom / top (y, z before DZ)
+A0, A1 = (1.25, float(ZT0(1.25)) + 0.01), (0.5, 1.98)   # roof runs forward to y 0.5: a long roof, short steep screen   # windscreen bottom / top (y, z before DZ)
 B0, B1 = (-0.82, 1.98), (-1.3, float(ZT0(-1.3)) + 0.03)    # rear facet top / bottom
-CAB = [(A0[0], A0[1] + DZ, 0.97), (A1[0], A1[1] + DZ, 0.7), (B0[0], B0[1] + DZ, 0.7), (B1[0], B1[1] + DZ, 0.95)]   # (y, top z, top half-width)
+CAB = [(A0[0], A0[1] + DZ, 0.97), (A1[0], A1[1] + DZ, 0.74), (B0[0], B0[1] + DZ, 0.7), (B1[0], B1[1] + DZ, 0.95)]   # (y, top z, top half-width)
 secs = []
 for y, zt, wr in CAB:
     poly = [(-0.99, 1.2 + DZ), (0.99, 1.2 + DZ), (wr, zt), (-wr, zt)]
