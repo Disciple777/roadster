@@ -363,6 +363,12 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       glb: 'models/tuktuk.glb', v: 1, hand: true,
       kit: { rear: [[0.32, 0.6, 2.62], [-0.32, 0.6, 2.62]], rearW: 1.7, sideX: 0.7, sideY: 0.55, wheelR: 0.38, wheelX: 0.88, frontOne: true },
     },
+    {
+      // Showroom-only remodel of TUK TUK, closer to the concept images. Not in G.GARAGE_CARS until Oscar picks it.
+      id: 'tuktuk2', name: 'TUK TUK v2', desc: 'A three-wheel rickshaw from the lake road: one front wheel under a big round headlight, a curled canopy, a pleated bench and two ribbed rocket nozzles.',
+      glb: 'models/tuktuk2.glb', v: 1, hand: true,
+      kit: { rear: [[0.3, 0.5, 2.52], [-0.3, 0.5, 2.52]], rearW: 1.7, sideX: 1.0, sideY: 0.6, wheelR: 0.34, wheelX: 0.86, frontOne: true },
+    },
   ];
   G.PAINTS = [
     { name: 'Arctic', hex: 0xd9dcdf }, { name: 'Rosso', hex: 0xb3121b }, { name: 'Ember', hex: 0xe0561a }, { name: 'Solar', hex: 0xe8b51c },
@@ -370,7 +376,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     { name: 'Violet', hex: 0x6a2bb3 }, { name: 'Sakura', hex: 0xe87fa8 }, { name: 'Graphite', hex: 0x3a3d42 }, { name: 'Onyx', hex: 0x0c0d0f },
   ];
   // Garage roster, in display order. START_CARS can be picked from the first run; the rest show locked.
-  // The Meshy/Tripo cars (comet, bastion, pebble) stay showroom-only. Ctrl+Shift+U toggles "unlock all" for testing.
+  // The Meshy/Tripo cars (comet, bastion, pebble) and tuktuk2 stay showroom-only. Ctrl+Shift+U toggles "unlock all" for testing.
   G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2', 'atlas', 'shard', 'tuktuk'];
   G.START_CARS = ['thruster', 'mantis', 'ridgeback'];
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];

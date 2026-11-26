@@ -341,7 +341,7 @@
     // car pickers
     for (const sel of ['car', 'cmp']) {
       if (sel === 'cmp') $('cmp').add(new Option('— nothing —', ''));
-      for (const c of G.CARS) $(sel).add(new Option(c.name + (G.GARAGE_CARS && !G.GARAGE_CARS.includes(c.id) ? ' (old AI model)' : ''), c.id));
+      for (const c of G.CARS) $(sel).add(new Option(c.name + (G.GARAGE_CARS && !G.GARAGE_CARS.includes(c.id) ? (c.hand ? ' (showroom only)' : ' (old AI model)') : ''), c.id));
     }
     $('car').value = S.car; $('cmp').value = S.cmp || '';
     $('car').onchange = () => { S.car = $('car').value; save(); setCar(); };

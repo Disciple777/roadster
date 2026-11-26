@@ -17,6 +17,7 @@ How the RoadsterThruster cars are made, and the numbers they have to fit.
 | atlas | ATLAS | `tools/model_atlas.py` | locked |
 | shard | SHARD | `tools/model_shard.py` | locked |
 | tuktuk | TUK TUK | `tools/model_tuktuk.py` (one front wheel: kit `frontOne`) | locked |
+| tuktuk2 | TUK TUK v2 | `tools/model_tuktuk2.py` (remodel closer to the concepts, one front wheel) | showroom only, not in the Garage |
 | comet, bastion | COMET, BASTION | Meshy + `tools/prep_car.py` | showroom only |
 | pebble | PEBBLE | Tripo + `tools/prep_car.py` | showroom only |
 
