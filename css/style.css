@@ -478,3 +478,10 @@ body.is-full #btn-getfull { border-color: rgba(120, 255, 160, 0.35); background:
   content: 'FULL GAME'; position: absolute; top: 4px; right: 6px; font-family: 'Orbitron'; font-size: 8px; font-weight: 700; letter-spacing: 0.12em;
   color: #ffd36a; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 196, 60, 0.45); border-radius: 5px; padding: 2px 5px; }
 .modes .mode.full-lock i { display: none; }
+
+/* full game owners: no sales pitch; the download block and the cloud-save note instead */
+body.is-full #acct .acct-pitch, body.is-full #acct .acct-list, body.is-full #acct .acct-fund, body.is-full #acct .acct-payhint { display: none; }
+#acct .acct-cloud { font-size: 13px; opacity: 0.75; margin: 4px 0 10px; }
+#acct .acct-get { margin: 6px 0 12px; }
+#acct .acct-get .hint { margin-top: 8px; transition: color 0.2s; }
+#acct .acct-get .hint.flash { color: #ffd36a; }

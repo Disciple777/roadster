@@ -146,6 +146,13 @@ function rd_install(PDO $pdo): void {
         UNIQUE KEY uq_txn (txn_id, status),
         KEY idx_new (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // cloud save: one JSON blob of the game's settings and progress per account; rev goes up by one per write
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$p}saves (
+        account_id INT UNSIGNED NOT NULL PRIMARY KEY,
+        rev INT UNSIGNED NOT NULL DEFAULT 0,
+        data MEDIUMTEXT NOT NULL,
+        updated_at INT UNSIGNED NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 
 /** Race control: the passkey must hash (with the server's salt) to admin_sha from config.php. */

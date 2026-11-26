@@ -26,6 +26,8 @@ function shop_route(string $a): void {
         case 'logout': logout(); break;
         case 'me': me(); break;
         case 'buy': buy(); break;
+        case 'save_get': save_get(); break;
+        case 'save_put': save_put(); break;
         case 'ipn': ipn(); break;
         case 'lic_list': rd_admin(); lic_list(); break;
         case 'lic_grant': rd_admin(); lic_grant(); break;
@@ -117,7 +119,53 @@ function logout(): void {
 function me(): void {
     $a = rd_account();
     if (!$a) rd_fail(401, 'signed_out', 'Signed out.');
-    rd_json(['ok' => true, 'account' => acct_out($a)]);
+    rd_json(['ok' => true, 'account' => acct_out($a), 'save_rev' => save_rev((int) $a['id'])]);
+}
+
+// ---------------- cloud save: settings, unlocked cars, records, courses follow the account ----------------
+const SAVE_MAX = 400000; // bytes of JSON
+
+function save_rev(int $id): int {
+    $p = rd_prefix();
+    $st = rd_db()->prepare("SELECT rev FROM {$p}saves WHERE account_id = ?");
+    $st->execute([$id]);
+    return (int) $st->fetchColumn();
+}
+
+function save_row(int $id): array {
+    $p = rd_prefix();
+    $st = rd_db()->prepare("SELECT rev, data FROM {$p}saves WHERE account_id = ?");
+    $st->execute([$id]);
+    $r = $st->fetch();
+    return $r ? ['rev' => (int) $r['rev'], 'data' => json_decode($r['data'], true) ?: new stdClass()] : ['rev' => 0, 'data' => new stdClass()];
+}
+
+function save_get(): void {
+    $a = rd_account();
+    if (!$a) rd_fail(401, 'signed_out', 'Signed out.');
+    rd_json(['ok' => true] + save_row((int) $a['id']));
+}
+
+/** Write the save if nobody else wrote since `rev` (the client's last known); otherwise answer with the newer one to merge. */
+function save_put(): void {
+    $a = rd_account();
+    if (!$a) rd_fail(401, 'signed_out', 'Signed out.');
+    $data = rd_in('data');
+    if (!is_array($data) || ($data && array_is_list($data))) rd_fail(400, 'bad_save');
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false || strlen($json) > SAVE_MAX) rd_fail(413, 'save_too_big', 'The save is too big.');
+    $base = (int) rd_in('rev', 0);
+    $id = (int) $a['id'];
+    $db = rd_db(); $p = rd_prefix(); $now = time();
+    if ($base === 0) {
+        $st = $db->prepare("INSERT IGNORE INTO {$p}saves (account_id, rev, data, updated_at) VALUES (?, 1, ?, ?)");
+        $st->execute([$id, $json, $now]);
+    } else {
+        $st = $db->prepare("UPDATE {$p}saves SET rev = rev + 1, data = ?, updated_at = ? WHERE account_id = ? AND rev = ?");
+        $st->execute([$json, $now, $id, $base]);
+    }
+    if ($st->rowCount() !== 1) rd_json(['ok' => true, 'conflict' => true] + save_row($id));
+    rd_json(['ok' => true, 'rev' => $base + 1]);
 }
 
 /** The PayPal "Buy Now" link for the signed-in account. */

@@ -41,3 +41,24 @@ On localhost it uses the sandbox tables (`sbx_`).
 
 ## Install
 The game is a PWA (`manifest.json`, `icons/`). Browsers that support installing show an INSTALL button in the FULL GAME panel.
+
+## Cloud save
+Signed-in players get every `rt_` localStorage key except `acct`, `driverId`, `edClip`, `syncRev` and `syncDirty`.
+That covers settings, unlocked cars, progress, records, stunt levels, courses and the tour, and it follows the account
+(table `rdstr_saves`, actions `save_get` / `save_put`, `save_rev` in `me`).
+- `G.store.set` is wrapped in `js/account.js`. A changed key is marked dirty and sent 3 s later.
+  `pagehide` sends a last keepalive write.
+- Writes are versioned: `save_put` with an outdated `rev` returns the newer save. The client merges it and tries again.
+- Merging never loses progress:
+  - `unlockedCars` and progress arrays are combined (union), and progress flags are combined (OR).
+  - Stunt and course records keep the higher value, and lap records the lower one.
+  - `myCourses` is combined by course id.
+  - For any other key, this browser's value wins if it changed that key since the last sync. Otherwise the account's value wins.
+- Signing in starts from the account's save. When another device's save changes this browser's data, the game reloads
+  once the player is back in the menu, and shows "SAVE LOADED FROM YOUR ACCOUNT".
+
+## Owners: download again
+An owner's FULL GAME panel shows **DOWNLOAD THE GAME**.
+- When the browser offers it, the button opens the install prompt. Otherwise the panel shows install steps for that browser
+  (Chrome/Edge, Android, iOS, Safari, Firefox).
+- The installed app resizes its window to the screen when it opens narrow (`window.resizeTo`, allowed in app windows).
