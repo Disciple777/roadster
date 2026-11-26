@@ -1541,6 +1541,9 @@
       this.course = RUN.courses[opt.course || 0] || RUN.courses[0];
       this.first = this.practice ? opt.level : this.course.from;
       this.last = this.practice ? opt.level : Math.min(this.course.to, LEVELS.length - 1);
+      // the free web demo: a ranked run stops after ACT I (its score still goes on the board)
+      this.demo = !this.practice && !G.isFull();
+      if (this.demo) this.last = Math.min(this.last, this.first + G.FREE.chalLevels - 1);
       this.count = this.last - this.first + 1;
       this.lives = this.practice ? Infinity : RUN.lives;
       this.total = 0; this.runTime = 0;
@@ -1788,10 +1791,11 @@
       this.total += lifeB;
       g.score = Math.round(this.total);
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-      $('res-title').textContent = this.practice ? (cleared ? 'LEVEL CLEAR' : 'PRACTICE OVER') : cleared ? 'RUN COMPLETE' : 'GAME OVER';
+      $('res-title').textContent = this.practice ? (cleared ? 'LEVEL CLEAR' : 'PRACTICE OVER') : cleared ? (this.demo ? 'ACT I COMPLETE' : 'RUN COMPLETE') : 'GAME OVER';
       const rows = this.results.map((r, i) => `<div class="row"><span class="p">${this.first + i + 1}</span><span class="n">${esc(r.name)}<small class="tries"> · ${r.tries === 1 ? 'first try' : r.tries + ' tries'}</small></span><span class="when">${G.fmtTime(r.time)}</span><span class="t">${r.pts.toLocaleString()}</span></div>`);
       if (!cleared && !this.practice) rows.push(`<div class="row dim"><span class="p">${this.idx + 1}</span><span class="n">${esc(this.level.name)}</span><span class="t">FAILED</span></div>`);
       if (lifeB) rows.push(`<div class="row"><span class="p">♥</span><span class="n">LIVES LEFT × ${this.lives}</span><span class="t">${lifeB.toLocaleString()}</span></div>`);
+      if (this.demo && cleared) rows.push(`<div class="row dim"><span class="p">★</span><span class="n">ACTS II and III: 10 more levels in the FULL GAME</span><span class="t">$${G.FULL_PRICE}</span></div>`);
       $('res-rows').innerHTML = rows.join('');
       const best = G.store.get('chalBest', 0), isBest = !this.practice && this.total > best;
       if (isBest) G.store.set('chalBest', Math.round(this.total));

@@ -101,6 +101,7 @@
       if (!this.settings.todAuto) { this.settings.tod = 'auto'; this.settings.todAuto = 1; } // once: older saves pinned NIGHT, now each track has its own
       // v2 laps: street races default to 2 laps and courses to 1 (the official lengths); 3 is the long option
       if (!G.GARAGE_CARS.includes(this.settings.car) || !G.carUnlocked(this.settings.car)) this.settings.car = 'thruster';
+      if (!G.trackOpen(this.settings.track) && !(G.tourState() && G.isFull())) this.settings.track = 'city'; // the free web demo's circuits only
       if (this.settings.lapsV !== 2) { Object.assign(this.settings, { laps: 2, courseLaps: 1, lapsV: 2 }); G.store.set('settings', this.settings); }
       this.Q = QUALITY[this.settings.quality] || QUALITY.high;
       this.state = 'loading';
@@ -229,15 +230,15 @@
       let auto = null;
       try { auto = sessionStorage.getItem('rt-autostart'); sessionStorage.removeItem('rt-autostart'); } catch (e) { /* ignore */ }
       if (auto === 'race' || auto === 'free' || auto === 'course') this.startRace(auto);
-      else if (auto === 'tour') this.tourGo();
+      else if (auto === 'tour' && G.isFull()) this.tourGo();
       // a course opened on the other circuit reloads the page and lands here (editor.js)
       let cAuto = null;
       try { cAuto = JSON.parse(sessionStorage.getItem('rt-course') || 'null'); sessionStorage.removeItem('rt-course'); } catch (e) { /* ignore */ }
-      if (cAuto) this.editor.resume(cAuto);
+      if (cAuto && G.isFull()) this.editor.resume(cAuto);
       this.syncOfficial();
       let mpAuto = null;
       try { mpAuto = JSON.parse(sessionStorage.getItem('rt-mp') || 'null'); sessionStorage.removeItem('rt-mp'); } catch (e) { /* ignore */ }
-      if (mpAuto) { this.showPanel('mp'); if (mpAuto.act === 'host') this.mpHost(); else this.mpJoin(mpAuto.code, true); }
+      if (mpAuto && G.isFull()) { this.showPanel('mp'); if (mpAuto.act === 'host') this.mpHost(); else this.mpJoin(mpAuto.code, true); }
       $('loading').classList.add('hidden');
       this.last = performance.now();
       renderer.setAnimationLoop((t) => this.frame(t));
@@ -301,8 +302,8 @@
       const click = (id, fn) => $(id).addEventListener('click', (e) => { G.audio.init(); G.audio.tone(700, 0.05, 0.08, 'triangle'); fn(e); });
       click('btn-play', () => this.showPanel('play'));
       click('btn-chal', () => { this.buildChalPanel(); this.showPanel('chal'); });
-      click('btn-tour', () => { this.buildTourPanel(); this.showPanel('tour'); });
-      click('btn-tgo', () => this.tourGo());
+      click('btn-tour', () => { if (this.needFull('WORLD TOUR')) return; this.buildTourPanel(); this.showPanel('tour'); });
+      click('btn-tgo', () => { if (!this.needFull('WORLD TOUR')) this.tourGo(); });
       click('btn-tquit', () => { if (!window.confirm('Abandon this World Tour? Its points are lost.')) return; G.tourEnd(); this.buildTourPanel(); });
             click('btn-race', () => this.showPanel('setup', 'race'));
       click('btn-free', () => this.showPanel('setup', 'free'));
@@ -312,6 +313,7 @@
       click('btn-garage', () => { this.buildGarage(); this.showPanel('garage'); });
       document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => this.backPanel()));
       click('btn-go', () => {
+        if (!G.trackOpen(S.track)) { this.needFull((G.TRACKS[S.track] || {}).name || 'This track'); return; }
         // another circuit means rebuilding the world: reload straight into the race
         if (S.track !== G.TRACK_ID) { try { sessionStorage.setItem('rt-autostart', this.pendingMode); } catch (e) { /* ignore */ } location.reload(); return; }
         this.startRace(this.pendingMode);
@@ -326,7 +328,7 @@
       click('btn-rmenu', () => (this.mpGrid ? this.mpLeave() : this.toMenu()));
       click('btn-pedit', () => { this.pause(false, true); this.editor.back(); });
       click('btn-redit', () => this.editor.back());
-      click('btn-editor', () => this.editor.home());
+      click('btn-editor', () => { if (!this.needFull('The COURSE EDITOR')) this.editor.home(); });
       click('btn-cam', () => this.cycleCam());
       click('btn-full', () => this.fullscreen());
       click('rot-ok', () => $('rotate').classList.add('dismissed'));
@@ -335,6 +337,7 @@
       window.addEventListener('keydown', (e) => {
         if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyU')) return;
         e.preventDefault();
+        if (!G.isFull()) { this.toast('UNLOCK-ALL NEEDS THE FULL GAME'); return; }
         const on = !G.store.get('unlockAll', false);
         G.store.set('unlockAll', on);
         if (on && this.previewId) { S.car = this.previewId; G.store.set('settings', S); this.previewId = null; const id = S.car; G.loadCar(id).then(() => { if (S.car === id) this.setPlayerCar(id, S.paint); }); }
@@ -351,6 +354,17 @@
       // track pickers: built from G.TRACKS, so a new circuit shows up everywhere on its own (a grid that wraps)
       const trackCards = Object.entries(G.TRACKS).map(([id, t]) => `<button data-v="${id}"><b>${t.name}</b>${t.tag ? `<small>${t.tag}</small>` : ''}</button>`).join('');
       for (const id of ['s-track', 'b-track', 's-mptrack']) { const el = $(id); if (el) { el.innerHTML = trackCards; el.classList.add('tracks'); } }
+
+      // the free web demo: other circuits show locked, and picking one opens the FULL GAME panel instead
+      for (const id of ['s-track', 's-mptrack']) {
+        const el = $(id);
+        if (el) el.addEventListener('click', (e) => {
+          const b = e.target.closest('button');
+          if (!b || G.trackOpen(b.dataset.v)) return;
+          e.stopImmediatePropagation(); e.preventDefault();
+          this.needFull(G.TRACKS[b.dataset.v].name);
+        }, true);
+      }
 
       // segmented controls
       const seg = (id, key, conv = (v) => v) => {
@@ -397,6 +411,7 @@
       rng('s-vol', 'vol', (v) => G.audio.setVolume(v));
       rng('s-sens', 'sens', (v) => (this.input.sens = v));
       G.audio.setVolume(S.vol);
+      this.wireFull();
       this.wireControls();
       this.wireMP(click);
       this.wireBoard(click);
@@ -509,6 +524,36 @@
       for (const sl of this.headlights) sl.intensity = tod.stars ? 480 : 220;
       this.fx.steam.mat.uniforms.uColor.value.setRGB(0.86, 0.9, 0.98).multiplyScalar(tod.steam);
       this.fx.smoke.mat.uniforms.uColor.value.setRGB(0.32, 0.32, 0.34).multiplyScalar(tod.steam);
+    }
+
+    // ---------------- full game ----------------
+    // true (and the FULL GAME panel opens) when `what` needs the full game and this player doesn't have it
+    needFull(what) {
+      if (G.isFull()) return false;
+      this.toast(`${what} IS IN THE FULL GAME`.toUpperCase(), 2200);
+      G.drawAcct();
+      if (!$('acct').classList.contains('open')) this.showPanel('acct');
+      return true;
+    }
+    wireFull() {
+      const S = this.settings;
+      const draw = () => {
+        const full = G.isFull();
+        for (const id of ['s-track', 's-mptrack']) { const el = $(id); if (el) el.querySelectorAll('button').forEach((b) => b.classList.toggle('full-lock', !G.trackOpen(b.dataset.v))); }
+        for (const id of ['btn-tour', 'btn-mp', 'btn-editor']) { const el = $(id); if (el) el.classList.toggle('full-lock', !full); }
+        if (this.garageRefresh) this.garageRefresh();
+        if ($('chal').classList.contains('open')) this.buildChalPanel();
+      };
+      G.onAcct((full) => {
+        draw();
+        if (full) return;
+        // signed out (or the license was taken back): off any locked car or circuit
+        if (!G.carUnlocked(S.car)) { S.car = 'thruster'; G.store.set('settings', S); G.loadCar('thruster').then(() => { if (S.car === 'thruster') this.setPlayerCar('thruster', S.paint); }); }
+        if (!G.trackOpen(S.track)) { S.track = 'city'; this.saveSettings('track'); }
+        if (!G.trackOpen(G.TRACK_ID) && !document.body.classList.contains('playing')) location.reload();
+      });
+      G.wireAcct(this);
+      draw();
     }
 
     showPanel(name, mode) {
@@ -847,14 +892,18 @@
       const RUN = G.CHAL_RUN;
       el.innerHTML = G.CHAL_LEVELS.map((L, i) => {
         const b = G.store.get('chalLvl_' + i, 0), act = RUN.acts.find((a) => a.from === i);
-        return (act ? `<h4>${esc(G.chalActName(i))}</h4>` : '') + `<button class="lvl" data-i="${i}"><span class="num">${i + 1}</span><span class="txt"><b>${esc(L.name)}</b><small>${esc(L.brief)}</small></span><span class="best">${b ? b.toLocaleString() : '—'}<small>BEST</small></span></button>`;
+        const lock = !G.isFull() && i >= G.FREE.chalLevels;
+        return (act ? `<h4>${esc(G.chalActName(i))}</h4>` : '') + `<button class="lvl${lock ? ' full-lock' : ''}" data-i="${i}"><span class="num">${i + 1}</span><span class="txt"><b>${esc(L.name)}</b><small>${esc(L.brief)}</small></span><span class="best">${b ? b.toLocaleString() : '—'}<small>BEST</small></span></button>`;
       }).join('');
       const runs = $('chal-runs');
       if (runs) {
-        runs.innerHTML = RUN.courses.map((c, k) => `<button class="big ${k ? '' : 'primary '}chal-run" data-c="${k}">START ${RUN.courses.length > 1 ? esc(c.name) : 'RUN'}<small>levels ${c.from + 1}–${c.to + 1} · ${RUN.lives} lives · ranked</small></button>`).join('');
+        runs.innerHTML = RUN.courses.map((c, k) => `<button class="big ${k ? '' : 'primary '}chal-run" data-c="${k}">START ${RUN.courses.length > 1 ? esc(c.name) : 'RUN'}<small>${G.isFull() ? `levels ${c.from + 1}–${c.to + 1}` : `free demo: ACT I, levels 1–${G.FREE.chalLevels}`} · ${RUN.lives} lives · ranked</small></button>`).join('');
         runs.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { G.audio.init(); this.startRace('challenge', { level: null, course: Number(b.dataset.c) }); }));
       }
-      el.querySelectorAll('button.lvl').forEach((b) => b.addEventListener('click', () => { G.audio.init(); this.startRace('challenge', { level: Number(b.dataset.i) }); }));
+      el.querySelectorAll('button.lvl').forEach((b) => b.addEventListener('click', () => {
+        if (b.classList.contains('full-lock')) { this.needFull('ACTS II AND III'); return; }
+        G.audio.init(); this.startRace('challenge', { level: Number(b.dataset.i) });
+      }));
       const best = G.store.get('chalBest', 0), bEl = $('chal-best');
       if (bEl) bEl.textContent = best ? `Your best run: ${best.toLocaleString()} pts` : 'No full run yet';
     }
@@ -1154,7 +1203,7 @@
       for (const el of [...nameEls, codeEl]) el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && el !== codeEl) el.blur(); });
       for (const el of nameEls) el.addEventListener('change', () => { S.mpName = el.value.replace(/[^\w \-.!?]/g, '').trim().slice(0, 12).toUpperCase() || S.mpName; for (const o of nameEls) o.value = S.mpName; G.store.set('settings', S); });
       codeEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.mpJoin(codeEl.value); });
-      click('btn-mp', () => { this.mpStatus(''); this.showPanel('mp'); });
+      click('btn-mp', () => { if (this.needFull('MULTIPLAYER')) return; this.mpStatus(''); this.showPanel('mp'); });
       click('btn-host', () => this.mpHost());
       click('btn-join', () => this.mpJoin(codeEl.value));
       click('btn-leave', () => this.mpLeave());

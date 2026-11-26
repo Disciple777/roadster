@@ -13,12 +13,19 @@
  *   GET  ?a=shared_list                           the newest shared courses (no items)
  *   POST {a:"admin_check" | "official_save" | "shared_delete", key, ...}   race control (passkey)
  *
+ * FULL GAME (api/shop.php): accounts, the PayPal purchase and its IPN, and the license admin.
+ *   POST {a:"signup" | "login", email, password} → {token, account}    POST {a:"me" | "logout" | "buy", token}
+ *   POST ?a=ipn                                   PayPal Instant Payment Notification (form-encoded)
+ *   POST {a:"lic_list" | "lic_grant" | "lic_revoke" | "pw_reset" | "pay_list", key, ...}   license admin (passkey)
+ * Runs on the full-game tracks (FREE_TRACKS lists the rest) and World Tours only rank with a full-game token.
+ *
  * Only official runs count: a 2-lap street race in heavy traffic against 7 pro rivals, or 1 lap of the
  * obstacle course. A WORLD TOUR (track "world", mode "tour") counts when every race ran in heavy traffic
  * against pro rivals: laps = races in the tour, score = tour points, time_ms = every race's time added up.
  */
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
+require __DIR__ . '/shop.php';
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -30,6 +37,7 @@ const COURSES = ['street'];
 const OFFICIAL_LAPS = ['race' => 2, 'course' => 1, 'chal' => 15]; // chal: levels in the run (see CHAL_LAPS)
 const CHAL_LAPS = ['stunt' => 5, 'stunt15' => 15, 'stunt1' => 5, 'stunt2' => 5, 'stunt3' => 5]; // levels per stunt challenge run
 const OFFICIAL_RACE = ['traffic' => 'heavy', 'rivals' => 7, 'difficulty' => 'pro'];
+const FREE_TRACKS = ['city', 'highway', 'canyon', 'stunt', 'stunt15', 'stunt1']; // the web demo; every other track needs the full game (keep in step with G.FREE in js/account.js)
 const TOP_N = 20;
 const LEVEL_MAX_ITEMS = 600;
 const LEVEL_MAX_JSON = 200000;
@@ -49,6 +57,7 @@ if ($a === 'shared_list') shared_list();
 if ($a === 'admin_check') { rd_admin(); rd_json(['ok' => true]); }
 if ($a === 'official_save') official_save();
 if ($a === 'shared_delete') shared_delete();
+shop_route($a);
 rd_fail(400, 'bad_action');
 
 /** ORDER BY for "better first" in each mode. */
@@ -108,6 +117,10 @@ function submit(): void {
     }
     if ($mode === 'race' && ((string) rd_in('traffic', '') !== OFFICIAL_RACE['traffic'] || (int) rd_in('rivals', 0) !== OFFICIAL_RACE['rivals']
         || (string) rd_in('difficulty', '') !== OFFICIAL_RACE['difficulty'])) rd_fail(400, 'not_official', 'Ranked street races use heavy traffic and 7 pro rivals.');
+    if ($mode === 'tour' || !in_array($track, FREE_TRACKS, true)) {
+        $acct = rd_account();
+        if (!$acct || !(int) $acct['full']) rd_fail(403, 'full_only', 'This board is for the full game.');
+    }
     $time = (int) rd_in('time_ms', 0);
     $score = (int) rd_in('score', 0);
     if ($time < 15000 || $time > ($mode === 'tour' ? 4 * 3600000 : 3600000)) rd_fail(400, 'bad_time');

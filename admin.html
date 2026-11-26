@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Roadster Thruster · Licenses</title>
+  <style>
+    :root { --bg: #0b0d13; --card: #141824; --line: #262c3d; --txt: #e8ebf2; --dim: #8a93a8; --red: #ff2a3c; --ok: #6fe39a; --warn: #ffd36a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--txt); font: 15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+    h1 { font-size: 20px; letter-spacing: 0.08em; margin: 0 0 4px; }
+    h2 { font-size: 14px; letter-spacing: 0.12em; color: var(--dim); margin: 28px 0 10px; text-transform: uppercase; }
+    .sub { color: var(--dim); margin: 0 0 18px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    input, select, button { font: inherit; color: var(--txt); background: #0e1119; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+    input:focus { outline: none; border-color: #4fb6ff; }
+    button { cursor: pointer; background: #1d2333; }
+    button:hover { border-color: #4a5470; }
+    button.primary { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+    button.small { padding: 4px 9px; font-size: 13px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .row input[type=email], .row input[type=search] { flex: 1 1 240px; }
+    .row input.note { flex: 1 1 180px; }
+    .msg { min-height: 20px; margin-top: 10px; color: var(--dim); }
+    .msg.bad { color: #ff7d88; } .msg.good { color: var(--ok); }
+    .stats { display: flex; gap: 22px; margin: 0 0 12px; color: var(--dim); }
+    .stats b { color: var(--txt); font-size: 18px; display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--dim); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+    td.e { word-break: break-all; }
+    .tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--line); color: var(--dim); }
+    .tag.full { color: var(--ok); border-color: rgba(111, 227, 154, 0.4); }
+    .dim { color: var(--dim); }
+    .scroll { overflow-x: auto; }
+    #gate { max-width: 380px; margin: 12vh auto 0; }
+    .pw { font-family: ui-monospace, Consolas, monospace; color: var(--warn); font-size: 16px; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <div id="gate" class="card">
+    <h1>RACE CONTROL</h1>
+    <p class="sub">Full-game licenses. Enter the race-control passkey.</p>
+    <div class="row"><input id="key" type="password" placeholder="Passkey" autocomplete="current-password" style="flex:1" /><button id="enter" class="primary">Enter</button></div>
+    <div id="gmsg" class="msg"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <h1>ROADSTER THRUSTER · FULL GAME</h1>
+    <p class="sub" id="sub"></p>
+    <div class="stats" id="stats"></div>
+
+    <h2>Turn the full game on for someone</h2>
+    <div class="card">
+      <div class="row">
+        <input id="g-email" type="email" placeholder="their email" autocomplete="off" />
+        <select id="g-src"><option value="gift">gift</option><option value="manual">paid another way</option><option value="tester">tester</option></select>
+        <input id="g-note" class="note" placeholder="note (optional): how they paid, who it's for…" maxlength="190" />
+        <button id="g-go" class="primary">Activate</button>
+      </div>
+      <div id="g-msg" class="msg">They sign up (or sign in) in the game with this same email and everything unlocks. No account yet? It is made now and waits for them.</div>
+    </div>
+
+    <h2>Accounts</h2>
+    <div class="row" style="margin-bottom:10px"><input id="q" type="search" placeholder="search by email" /><button id="q-go">Search</button><button id="q-all">Show all</button></div>
+    <div class="card scroll"><table><thead><tr><th>Email</th><th>Full game</th><th>Since</th><th>Note</th><th>Last seen</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div id="l-msg" class="msg"></div>
+
+    <h2>PayPal notifications</h2>
+    <div class="card scroll"><table><thead><tr><th>When</th><th>Status</th><th>Amount</th><th>Payer</th><th>Account</th><th>What happened</th><th>Txn</th></tr></thead><tbody id="pays"></tbody></table></div>
+  </div>
+</main>
+<script>
+(() => {
+  const LIVE = 'https://guatermelon.com/roadster/api/index.php';
+  const DEV = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const API = location.protocol === 'file:' ? LIVE : DEV ? LIVE + '?sandbox=1' : 'api/index.php';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const day = (t) => t ? new Date(t * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+  const when = (t) => t ? new Date(t * 1000).toLocaleString() : '—';
+  let key = sessionStorage.getItem('rt-ak') || '';
+
+  async function call(a, body = {}) {
+    const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ a, key }, body)) });
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok) throw new Error((j && (j.message || j.error)) || 'HTTP ' + r.status);
+    return j;
+  }
+  const say = (id, text, cls = '') => { const el = $(id); el.innerHTML = text; el.className = 'msg ' + cls; };
+
+  async function list(q = '') {
+    const j = await call('lic_list', { q });
+    $('stats').innerHTML = `<div><b>${j.full}</b>full game</div><div><b>${j.paid}</b>paid by PayPal</div><div><b>${j.accounts}</b>accounts</div>`;
+    $('sub').innerHTML = `$${esc(j.price)} USD · PayPal buying is ${j.paypal ? '<span style="color:var(--ok)">on</span>' : '<span style="color:var(--warn)">off (no PAYPAL_EMAIL on the server)</span>'}${DEV ? ' · <b style="color:var(--warn)">SANDBOX tables</b>' : ''}`;
+    $('rows').innerHTML = j.rows.map((r) => `<tr>
+      <td class="e">${esc(r.email)}${r.claimed ? '' : ' <span class="tag" title="nobody has signed up with this email yet">waiting for sign-up</span>'}</td>
+      <td>${r.full ? `<span class="tag full">${esc(r.src || 'yes')}</span>` : '<span class="dim">no</span>'}</td>
+      <td>${r.full ? day(r.full_at) : '—'}</td>
+      <td class="dim">${esc(r.note)}</td>
+      <td class="dim">${day(r.last_at || r.created_at)}</td>
+      <td class="row">${r.full ? `<button class="small" data-revoke="${esc(r.email)}">Revoke</button>` : `<button class="small" data-grant="${esc(r.email)}">Activate</button>`}${r.claimed ? `<button class="small" data-reset="${esc(r.email)}">New password</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="dim">No accounts.</td></tr>';
+  }
+  async function pays() {
+    const j = await call('pay_list');
+    $('pays').innerHTML = j.rows.map((r) => `<tr><td class="dim">${when(r.at)}</td><td>${esc(r.status)}</td><td>${esc(r.gross)} ${esc(r.currency)}</td><td class="e">${esc(r.payer)}</td><td class="e">${esc(r.account)}</td><td>${esc(r.verdict)}</td><td class="dim">${esc(r.txn)}</td></tr>`).join('')
+      || '<tr><td colspan="7" class="dim">No PayPal notifications yet.</td></tr>';
+  }
+  const refresh = () => Promise.all([list($('q').value.trim()), pays()]);
+
+  async function enter() {
+    say('gmsg', 'Checking…');
+    try {
+      await call('admin_check');
+      sessionStorage.setItem('rt-ak', key);
+      $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
+      await refresh();
+    } catch (e) { key = ''; sessionStorage.removeItem('rt-ak'); say('gmsg', esc(e.message), 'bad'); }
+  }
+  $('enter').addEventListener('click', () => { key = $('key').value; enter(); });
+  $('key').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('enter').click(); });
+  if (key) enter();
+
+  $('g-go').addEventListener('click', async () => {
+    const email = $('g-email').value.trim();
+    if (!email) return;
+    say('g-msg', 'Activating…');
+    try {
+      const j = await call('lic_grant', { email, src: $('g-src').value, note: $('g-note').value.trim() });
+      say('g-msg', `Full game ON for <b>${esc(j.row.email)}</b>. ${j.row.claimed ? 'It shows up next time they open the game.' : 'They create their account with this email and it is there.'}`, 'good');
+      $('g-email').value = ''; $('g-note').value = '';
+      refresh();
+    } catch (e) { say('g-msg', esc(e.message), 'bad'); }
+  });
+  $('q-go').addEventListener('click', () => list($('q').value.trim()).catch((e) => say('l-msg', esc(e.message), 'bad')));
+  $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('q-go').click(); });
+  $('q-all').addEventListener('click', () => { $('q').value = ''; list().catch((e) => say('l-msg', esc(e.message), 'bad')); });
+  $('rows').addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    try {
+      if (b.dataset.revoke) {
+        if (!confirm(`Turn the full game OFF for ${b.dataset.revoke}?`)) return;
+        await call('lic_revoke', { email: b.dataset.revoke }); say('l-msg', `Full game off for ${esc(b.dataset.revoke)}.`, 'good');
+      } else if (b.dataset.grant) {
+        await call('lic_grant', { email: b.dataset.grant, src: 'manual' }); say('l-msg', `Full game on for ${esc(b.dataset.grant)}.`, 'good');
+      } else if (b.dataset.reset) {
+        if (!confirm(`Give ${b.dataset.reset} a new password? Their devices get signed out.`)) return;
+        const j = await call('pw_reset', { email: b.dataset.reset });
+        say('l-msg', `New password for ${esc(b.dataset.reset)}: <span class="pw">${esc(j.password)}</span> (shown once: send it to them).`, 'good');
+      }
+      list($('q').value.trim());
+    } catch (err) { say('l-msg', esc(err.message), 'bad'); }
+  });
+})();
+</script>
+</body>
+</html>

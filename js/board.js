@@ -51,7 +51,10 @@
   };
   G.api = {
     top: (track, mode) => call({ a: 'top', track, mode, id }),
-    submit: (run) => call({}, Object.assign({ a: 'submit', id }, run)),
+    // the full-game boards (every track but the demo's, and the World Tour) need a full-game account's token
+    submit: (run) => call({}, Object.assign({ a: 'submit', id, token: G.acctToken ? G.acctToken() : '' }, run)),
+    // FULL GAME accounts (js/account.js): always POST, so the password and token never sit in a URL
+    account: (a, body) => call({}, Object.assign({ a }, body)),
     ghosts: (track, course = 'street') => call({ a: 'ghosts', track, course, id }),
     // obstacle courses: the official layout per circuit (null = the built-in one), shared player courses by code
     official: (track) => call({ a: 'official', track }),

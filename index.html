@@ -7,6 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>Roadster Thruster</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
   <script>{ const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/style.css?v=' + Date.now(); document.head.appendChild(l); }</script>
@@ -93,11 +96,41 @@
         <button id="btn-settings">SETTINGS</button>
         <button id="btn-controls">CONTROLS</button>
       </div>
-      <a id="btn-support" class="support" href="https://www.paypal.com/donate/?business=oscargalvezmont%40gmail.com&amp;amount=5&amp;currency_code=USD&amp;item_name=Roadster%20Thruster%3A%20help%20fund%20multiplayer" target="_blank" rel="noopener">
-        <span class="s1">&#9829; SUPPORT</span><span class="s2">$5 or more helps fund multiplayer</span>
-      </a>
+      <button id="btn-getfull" class="support"><span class="s1">&#9733; GET THE FULL GAME</span><span class="s2">Every track, car and mode. Helps fund online multiplayer</span></button>
       <div id="menu-best" class="best"></div>
     </div>
+  </div>
+
+  <!-- FULL GAME: account, buying through PayPal, installing (js/account.js) -->
+  <div id="acct" class="panel card">
+    <h2 id="acct-title">FULL GAME</h2>
+    <div class="scroll">
+      <p class="acct-pitch">The web version is a free demo. The <b>full game</b> is one payment of <b>$4.99</b>, yours for good, on any device you sign in on.</p>
+      <ul class="acct-list">
+        <li><b>All 8 circuits</b>: Skyway, the Alps, the Isle, Devil's Fjord, Lago de Atitlán and more</li>
+        <li><b>All 11 cars</b> in the Garage, each with its own unlock goal</li>
+        <li><b>World Tour</b>, <b>Multiplayer</b> and the <b>Course Editor</b></li>
+        <li><b>All 15 Stunt Challenge levels</b> (the demo stops after Act I)</li>
+        <li>A place on <b>every leaderboard</b></li>
+      </ul>
+      <p class="acct-fund">&#9829; Every copy helps fund <b>real online multiplayer</b>: if enough drivers join, that's what comes next.</p>
+      <div id="acct-out">
+        <label>SIGN IN OR CREATE AN ACCOUNT</label>
+        <input id="acct-email" class="txt" type="email" autocomplete="email" spellcheck="false" placeholder="EMAIL" />
+        <input id="acct-pw" class="txt" type="password" autocomplete="current-password" placeholder="PASSWORD (6+ CHARACTERS)" />
+        <div class="row2"><button id="acct-login">SIGN IN</button><button id="acct-signup" class="primary">CREATE ACCOUNT</button></div>
+      </div>
+      <div id="acct-in" class="hidden">
+        <p id="acct-who" class="acct-who"></p>
+        <p id="acct-owned" class="acct-owned hidden">&#10003; The full game is unlocked on this account. Thank you for supporting Roadster Thruster!</p>
+        <button id="acct-buy" class="primary wide">BUY WITH PAYPAL · $4.99</button>
+        <div class="row2"><button id="acct-check">CHECK AGAIN</button><button id="acct-logout">SIGN OUT</button></div>
+      </div>
+      <button id="acct-install" class="wide hidden">INSTALL THE APP</button>
+      <p id="acct-status" class="hint mp-status"></p>
+      <p class="hint">PayPal takes cards too, no PayPal account needed. Paid another way, or got it as a gift? Create your account with the same email: it unlocks as soon as Oscar turns it on.</p>
+    </div>
+    <div class="actions"><button data-back>BACK</button></div>
   </div>
 
   <!-- GARAGE: pick a car and its paint; the menu camera swings in on the live car behind the panel -->
@@ -415,7 +448,7 @@
     window.THREE = THREE;
     window.ADDONS = { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, OutputPass, mergeGeometries, toCreasedNormals, RoundedBoxGeometry, GLTFLoader };
     const BUILD = Date.now();
-    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'tour', 'ghost', 'course', 'editor', 'challenge', 'game'];
+    const files = ['util', 'tuning', 'track', 'wild', 'city', 'particles', 'car', 'crossing', 'traffic', 'rivals', 'audio', 'input', 'hud', 'net', 'board', 'account', 'tour', 'ghost', 'course', 'editor', 'challenge', 'game'];
     const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'js/' + f + '.js?v=' + BUILD; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + f)); document.body.appendChild(s); });
     (async () => {
       try { for (const f of files) await load(f); G.boot(); }

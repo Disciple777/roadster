@@ -108,6 +108,44 @@ function rd_install(PDO $pdo): void {
         KEY idx_pid (pid, created_at),
         KEY idx_new (kind, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // FULL GAME: player accounts. pass_hash '' = made by an admin grant or a PayPal payment, not claimed yet
+    // (signing up with that email sets the password and keeps the full game)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$p}accounts (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(190) NOT NULL,
+        pass_hash VARCHAR(255) NOT NULL DEFAULT '',
+        full TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        full_src VARCHAR(16) NOT NULL DEFAULT '',
+        full_note VARCHAR(190) NOT NULL DEFAULT '',
+        full_at INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at INT UNSIGNED NOT NULL,
+        last_at INT UNSIGNED NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_email (email),
+        KEY idx_full (full, full_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // sign-in tokens: the browser keeps the token, the server only its hash
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$p}tokens (
+        token_hash CHAR(64) NOT NULL PRIMARY KEY,
+        account_id INT UNSIGNED NOT NULL,
+        created_at INT UNSIGNED NOT NULL,
+        last_at INT UNSIGNED NOT NULL,
+        KEY idx_acct (account_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // every PayPal notification, verified or not, and what was done with it
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$p}payments (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        txn_id VARCHAR(32) NULL,
+        parent_txn VARCHAR(32) NOT NULL DEFAULT '',
+        status VARCHAR(24) NOT NULL DEFAULT '',
+        account_id INT UNSIGNED NULL,
+        payer_email VARCHAR(190) NOT NULL DEFAULT '',
+        gross VARCHAR(16) NOT NULL DEFAULT '',
+        currency VARCHAR(8) NOT NULL DEFAULT '',
+        verdict VARCHAR(48) NOT NULL DEFAULT '',
+        created_at INT UNSIGNED NOT NULL,
+        UNIQUE KEY uq_txn (txn_id, status),
+        KEY idx_new (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 
 /** Race control: the passkey must hash (with the server's salt) to admin_sha from config.php. */
@@ -158,6 +196,29 @@ function rd_pick(string $key, array $allowed): string {
     $v = (string) rd_in($key, '');
     if (!in_array($v, $allowed, true)) rd_fail(400, 'bad_' . $key);
     return $v;
+}
+
+/** The signed-in account for the request's token, or null (anonymous / signed out / unknown token). */
+function rd_account(): ?array {
+    $t = (string) rd_in('token', '');
+    if (!preg_match('/^[a-f0-9]{64}$/', $t)) return null;
+    $db = rd_db(); $p = rd_prefix();
+    $st = $db->prepare("SELECT a.* FROM {$p}tokens t JOIN {$p}accounts a ON a.id = t.account_id WHERE t.token_hash = ?");
+    $st->execute([hash('sha256', $t)]);
+    $a = $st->fetch();
+    if (!$a) return null;
+    $now = time();
+    if ($now - (int) $a['last_at'] > 3600) {
+        $db->prepare("UPDATE {$p}accounts SET last_at = ? WHERE id = ?")->execute([$now, $a['id']]);
+        $db->prepare("UPDATE {$p}tokens SET last_at = ? WHERE token_hash = ?")->execute([$now, hash('sha256', $t)]);
+    }
+    return $a;
+}
+
+function rd_email($raw): string {
+    $e = strtolower(trim((string) $raw));
+    if (strlen($e) > 190 || !filter_var($e, FILTER_VALIDATE_EMAIL)) rd_fail(400, 'bad_email', 'That email address does not look right.');
+    return $e;
 }
 
 if (!function_exists('array_is_list')) { // PHP < 8.1

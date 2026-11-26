@@ -7,7 +7,8 @@
 // The rendered file goes to the OS temp directory (never the project, so a local api/config.php
 // can never exist) and is deleted right after the upload.
 //
-// Needs DB_NAME, DB_USER, DB_PASSWORD in .env.deploy (optional: DB_HOST, DB_PORT, DB_PREFIX, ADMIN_PASSKEY).
+// Needs DB_NAME, DB_USER, DB_PASSWORD in .env.deploy (optional: DB_HOST, DB_PORT, DB_PREFIX, ADMIN_PASSKEY, PAYPAL_EMAIL).
+// PAYPAL_EMAIL is the PayPal account that receives FULL GAME payments (api/shop.php); without it buying is off.
 // ADMIN_PASSKEY unlocks race control in the game (Ctrl+Alt+Shift+O); only a salted hash of it reaches the server.
 
 import fs from 'node:fs';
@@ -29,6 +30,7 @@ return [
     'db_port' => ${Number(env.DB_PORT) || 3306},
     'prefix'  => '${q(env.DB_PREFIX || 'rdstr_')}',
     'admin_salt' => '${salt}',
+    'paypal_email' => '${q((env.PAYPAL_EMAIL || '').trim().toLowerCase())}',
     'admin_sha'  => '${env.ADMIN_PASSKEY ? crypto.createHash('sha256').update(salt + env.ADMIN_PASSKEY).digest('hex') : ''}',
 ];
 `;
@@ -45,6 +47,7 @@ async function main() {
   for (const k of ['DB_NAME', 'DB_USER', 'DB_PASSWORD']) console.log(`  ${k.padEnd(11)} [set, ${env[k].length} chars]`);
   console.log('  prefix   ' + (env.DB_PREFIX || 'rdstr_'));
   console.log('  race control ' + (env.ADMIN_PASSKEY ? `[passkey set, ${env.ADMIN_PASSKEY.length} chars, stored as a salted hash]` : 'off (no ADMIN_PASSKEY)'));
+  console.log('  full game PayPal ' + (env.PAYPAL_EMAIL ? '[set]' : 'off (no PAYPAL_EMAIL: buying is disabled, manual grants still work)'));
   if (!GO) { console.log('\nDry run. Re-run with --yes to upload (overwrites the live config).'); return; }
 
   const tmp = path.join(os.tmpdir(), `rdstr-config-${process.pid}.php`);

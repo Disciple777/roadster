@@ -374,7 +374,8 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
   G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2', 'atlas', 'shard', 'tuktuk'];
   G.START_CARS = ['thruster', 'mantis', 'ridgeback'];
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
-  G.carUnlocked = (id) => G.START_CARS.includes(id) || G.store.get('unlockAll', false) || G.store.get('unlockedCars', []).includes(id);
+  // the free web demo drives the START_CARS only; the rest need the FULL GAME and then their own goal (js/account.js)
+  G.carUnlocked = (id) => G.START_CARS.includes(id) || (G.isFull() && (G.store.get('unlockAll', false) || G.store.get('unlockedCars', []).includes(id)));
 
   // ---- unlocks: each locked Garage car has one goal. Progress lives in localStorage rt_progress
   // ({ tracks: [ids with a finished street race], officialWin, courseDone, mpRaced, tourWin, fjordWin, atitlanWin }); stunt levels count from
@@ -392,7 +393,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     tuktuk: { goal: 'Win a Street Race on LAGO DE ATITLÁN', of: () => [prog().atitlanWin ? 1 : 0, 1] },
   };
   // "goal (k/n)" for the Garage
-  G.unlockHint = (id) => { const u = G.UNLOCKS[id]; if (!u) return ''; const [k, n] = u.of(); return n > 1 ? `${u.goal} (${k}/${n})` : u.goal; };
+  G.unlockHint = (id) => { if (!G.isFull() && !G.START_CARS.includes(id)) return 'FULL GAME'; const u = G.UNLOCKS[id]; if (!u) return ''; const [k, n] = u.of(); return n > 1 ? `${u.goal} (${k}/${n})` : u.goal; };
   // newly earned cars (their ids), saved as unlocked
   G.checkUnlocks = () => {
     const have = G.store.get('unlockedCars', []), fresh = [];
