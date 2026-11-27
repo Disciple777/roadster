@@ -19,7 +19,6 @@ HUB = WHEEL_R - .01
 TURBINE_X, TURBINE_Z, TURBINE_EXIT = .306, .333, -2.575
 
 M.update({
-    'paint': mat('paint', (.195, .194, .194), .39, .24),
     'glass': mat('Bastion smoked glass', (.009, .0095, .011), .25, .0),
     'rubber': mat('Tire rubber', (.013, .014, .015), .79),
     'wheel': mat('Graphite wheel finish', (.051, .053, .056), .36, .76),
@@ -32,6 +31,11 @@ M.update({
     'light_head': mat('light_head', (.8, .85, .88), .27, emit=(.93, .96, 1), emit_s=1.3),
     'light_tail': mat('Bastion red taillights', (.56, .006, .008), .26, emit=(1, .014, .009), emit_s=1.05),
 })
+# Keep the shared material's exact name so the Showroom can replace it.
+paint_shader = M['paint'].node_tree.nodes['Principled BSDF']
+paint_shader.inputs['Base Color'].default_value = (.195, .194, .194, 1)
+paint_shader.inputs['Roughness'].default_value = .39
+paint_shader.inputs['Metallic'].default_value = .24
 M['glass'].node_tree.nodes['Principled BSDF'].inputs['Specular IOR Level'].default_value = .21
 for material in M.values():
     material.diffuse_color = material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value
