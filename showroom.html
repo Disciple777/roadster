@@ -123,6 +123,13 @@
     for (const f of ['util', 'tuning', 'city', 'particles', 'car']) await load(f);
     const T = THREE, $ = (id) => document.getElementById(id);
 
+    G.CARS.push({
+      id: 'tuktuk3', name: 'TUK TUK v3', hand: true, glb: 'models/tuktuk3.glb', v: 1,
+      desc: 'Open rickshaw with a rolled canopy, a single front wheel and twin exhaust bells.',
+      kit: { rear: [[-.412, .686, 2.645], [.412, .686, 2.645]], rearW: 1.7,
+        sideX: .796, sideY: .417, wheelR: .41, wheelX: .88, frontOne: true },
+    });
+
     // ---------- saved state (per viewer convenience only) ----------
     const DEF = { car: 'pebble', cmp: '', paint: 0xe8b51c, finish: 'gloss', fin: { ...G.FINISHES.gloss }, surf: 0, shade: 0,
       light: 'studio', env: 1, expo: 1, view: 'front', spin: true, thrust: 0 };
@@ -198,6 +205,18 @@
     async function build(id, x) {
       await G.loadCar(id);
       const m = G.buildCar(id, S.paint, { shadows: true });
+      if (id === 'tuktuk3' && m.carId === id) {
+        const wheel = m.group.getObjectByName('TukTukWheel');
+        wheel.removeFromParent();
+        for (const { pivot, spin } of m.wheels) {
+          pivot.clear();
+          if (!pivot.visible) continue;
+          spin.clear();
+          spin.position.y = G.carInfo(id).kit.wheelR - .37;
+          spin.add(wheel.clone(true));
+          pivot.add(spin);
+        }
+      }
       m.group.position.x = x;
       // own copy of the body geometry, so the smoothing preview never touches the shared cached GLB
       m.group.traverse((o) => { if (o.isMesh && o.material === m.paint && m.paint.userData.u) { o.geometry = o.geometry.clone(); } });
