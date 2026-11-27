@@ -81,6 +81,10 @@
 
     <h3>Paint colour</h3>
     <div class="row" id="paints"></div>
+    <div id="paints2box">
+      <h3>Second car's paint</h3>
+      <div class="row" id="paints2"></div>
+    </div>
 
     <h3>Finish</h3>
     <div class="row" id="finishes"></div>
@@ -123,30 +127,17 @@
     for (const f of ['util', 'tuning', 'city', 'particles', 'car']) await load(f);
     const T = THREE, $ = (id) => document.getElementById(id);
 
-    G.CARS.push({
-      id: 'bastion3', name: 'BASTION v3', hand: true, glb: 'models/bastion3.glb', v: 2,
-      desc: 'Widebody fastback with a low sculpted nose, deep-dish wheels, four ring tail lights and twin turbines.',
-      kit: { rear: [[-.306, .333, 2.575], [.306, .333, 2.575]], rearW: 1.8,
-        sideX: .80, sideY: .49, wheelR: .395, wheelX: .918 },
-    }, {
-      id: 'shard3', name: 'SHARD v3', hand: true, glb: 'models/shard3.glb', v: 1,
-      desc: 'Faceted turbine truck with a flat cab roof, hexagonal fenders and block-tread tires.',
-      kit: { rear: [[0, 1.603, 2.341]], rearW: 2.65,
-        sideX: .81, sideY: .68, wheelR: .490, wheelX: .974 },
-    }, {
-      id: 'tuktuk3', name: 'TUK TUK v3', hand: true, glb: 'models/tuktuk3.glb', v: 1,
-      desc: 'Open rickshaw with a rolled canopy, a single front wheel and twin exhaust bells.',
-      kit: { rear: [[-.412, .686, 2.645], [.412, .686, 2.645]], rearW: 1.7,
-        sideX: .796, sideY: .417, wheelR: .41, wheelX: .88, frontOne: true },
-    });
-
     // ---------- saved state (per viewer convenience only) ----------
-    const DEF = { car: 'pebble', cmp: '', paint: 0xe8b51c, finish: 'gloss', fin: { ...G.FINISHES.gloss }, surf: 0, shade: 0,
+    const DEF = { car: 'pebble', cmp: '', paint: 0xe8b51c, paint2: 0x8a8f99, finish: 'gloss', fin: { ...G.FINISHES.gloss }, surf: 0, shade: 0,
       light: 'studio', env: 1, expo: 1, view: 'front', spin: true, thrust: 0 };
     let S = structuredClone(DEF);
     try { Object.assign(S, JSON.parse(localStorage.getItem('showroom') || '{}')); } catch (e) {}
     const save = () => { try { localStorage.setItem('showroom', JSON.stringify(S)); } catch (e) {} };
+    // the v3 cars moved into the game under their old ids; older saved picks follow them
+    const MOVED = { bastion3: 'bastion2', shard3: 'shard', tuktuk3: 'tuktuk' };
+    for (const k of ['car', 'cmp']) if (MOVED[S[k]]) S[k] = MOVED[S[k]];
     if (!G.CARS.find((c) => c.id === S.car)) S.car = DEF.car;
+    if (S.cmp && !G.CARS.find((c) => c.id === S.cmp)) S.cmp = '';
 
     // ---------- renderer, scene ----------
     const renderer = new T.WebGLRenderer({ canvas: $('c'), antialias: true });
@@ -211,29 +202,10 @@
 
     // ---------- cars ----------
     let model = null, other = null, bodyGeos = [];
-    const showroomWheels = { bastion3: 'BastionWheel', shard3: 'ShardWheel', tuktuk3: 'TukTukWheel' };
     const orig = new Map(); // geometry -> { pos, nrm } untouched copies for the smoothing preview
     async function build(id, x) {
       await G.loadCar(id);
       const m = G.buildCar(id, S.paint, { shadows: true });
-      const wheelName = showroomWheels[id];
-      const wheel = wheelName && m.carId === id && m.group.getObjectByName(wheelName);
-      if (wheel) {
-        const kit = G.carInfo(id).kit;
-        wheel.removeFromParent();
-        for (const { pivot, spin } of m.wheels) {
-          if (!pivot.visible) continue;
-          const side = Math.sign(pivot.position.x);
-          pivot.clear();
-          pivot.position.x = side * kit.wheelX;
-          spin.clear();
-          spin.position.y = kit.wheelR - .37;
-          const rim = wheel.clone(true);
-          if (id === 'bastion3' || id === 'shard3') rim.scale.x = side;
-          spin.add(rim);
-          pivot.add(spin);
-        }
-      }
       m.group.position.x = x;
       // own copy of the body geometry, so the smoothing preview never touches the shared cached GLB
       m.group.traverse((o) => { if (o.isMesh && o.material === m.paint && m.paint.userData.u) { o.geometry = o.geometry.clone(); } });
@@ -248,7 +220,6 @@
       const [a, b] = await Promise.all([build(S.car, S.cmp ? -1.9 : 0), S.cmp ? build(S.cmp, 1.9) : null]);
       drop(model); drop(other); model = a; other = b;
       bodyGeos = []; model.group.traverse((o) => { if (o.isMesh && o.material === model.paint && model.paint.userData.u) bodyGeos.push(o.geometry); });
-      if (other) G.setPaint(other, 0x8a8f99);
       applyFinish(); smooth(); busy('');
       if (S.view) setView(S.view);
     }
@@ -262,7 +233,7 @@
       ['flat', 'Ignore AI bumps', 'how much of the model\'s bump texture is dropped on paint', 0, 1, 0.01],
       ['flake', 'Metal flake', 'sparkle in the paint', 0, 1, 0.01],
     ];
-    function applyFinish() { for (const m of [model, other]) if (m) G.setFinish(m, S.fin); if (model) G.setPaint(model, S.paint); }
+    function applyFinish() { for (const m of [model, other]) if (m) G.setFinish(m, S.fin); if (model) G.setPaint(model, S.paint); if (other) G.setPaint(other, S.paint2); }
 
     // ---------- smoothing preview ----------
     // weld by position, then Taubin smoothing (no shrinking) on the surface and/or Laplacian smoothing of the normals.
@@ -378,27 +349,34 @@
     for (const sel of ['car', 'cmp']) {
       if (sel === 'cmp') $('cmp').add(new Option('— nothing —', ''));
       for (const c of G.CARS) {
-        const name = c.id === 'bastion2' ? `${c.name} v2` : c.name;
-        const suffix = G.GARAGE_CARS && !G.GARAGE_CARS.includes(c.id) ? (c.hand ? ' (showroom only)' : ' (old AI model)') : '';
+        const name = c.ver ? `${c.name} ${c.ver}` : c.name;
+        const suffix = G.GARAGE_CARS.includes(c.id) ? ' (in game)' : c.hand ? ' (showroom only)' : ' (old AI model)';
         $(sel).add(new Option(name + suffix, c.id));
       }
     }
     $('car').value = S.car; $('cmp').value = S.cmp || '';
     $('car').onchange = () => { S.car = $('car').value; save(); setCar(); };
-    $('cmp').onchange = () => { S.cmp = $('cmp').value; save(); setCar(); };
+    const syncCmp = () => { $('paints2box').style.display = S.cmp ? '' : 'none'; };
+    $('cmp').onchange = () => { S.cmp = $('cmp').value; syncCmp(); save(); setCar(); };
 
-    // paints
-    const markPaint = () => { for (const b of $('paints').children) if (b.dataset.hex) b.classList.toggle('on', +b.dataset.hex === S.paint); };
-    for (const p of G.PAINTS) {
-      const b = document.createElement('button'); b.className = 'sw'; b.title = p.name; b.dataset.hex = p.hex;
-      b.style.background = '#' + p.hex.toString(16).padStart(6, '0');
-      b.onclick = () => { S.paint = p.hex; applyFinish(); markPaint(); save(); };
-      $('paints').appendChild(b);
+    // paints: one row per car (the second row shows while comparing)
+    function paintRow(box, key) {
+      const mark = () => { for (const b of $(box).children) if (b.dataset.hex) b.classList.toggle('on', +b.dataset.hex === S[key]); };
+      const set = (hex) => { S[key] = hex; applyFinish(); mark(); save(); };
+      for (const p of G.PAINTS) {
+        const b = document.createElement('button'); b.className = 'sw'; b.title = p.name; b.dataset.hex = p.hex;
+        b.style.background = '#' + p.hex.toString(16).padStart(6, '0');
+        b.onclick = () => set(p.hex);
+        $(box).appendChild(b);
+      }
+      const pick = document.createElement('input'); pick.type = 'color'; pick.title = 'Any colour';
+      pick.value = '#' + S[key].toString(16).padStart(6, '0');
+      pick.oninput = () => set(parseInt(pick.value.slice(1), 16));
+      $(box).appendChild(pick);
+      return mark;
     }
-    const pick = document.createElement('input'); pick.type = 'color'; pick.title = 'Any colour';
-    pick.value = '#' + S.paint.toString(16).padStart(6, '0');
-    pick.oninput = () => { S.paint = parseInt(pick.value.slice(1), 16); applyFinish(); markPaint(); save(); };
-    $('paints').appendChild(pick);
+    const markPaint = paintRow('paints', 'paint'), markPaint2 = paintRow('paints2', 'paint2');
+    syncCmp();
 
     // finishes
     const finSl = [];
@@ -434,7 +412,7 @@
     $('reset').onclick = () => { const car = S.car; S = structuredClone(DEF); S.car = car; save(); location.reload(); };
 
     // ---------- go ----------
-    mark('finishes', S.finish); mark('lights', S.light); markPaint(); syncSpin();
+    mark('finishes', S.finish); mark('lights', S.light); markPaint(); markPaint2(); syncSpin();
     resize(); applyLight(); setView(S.view || 'front'); syncSpin();
     controls.addEventListener('start', () => { if (S.view !== 'chase') return; S.view = ''; mark('views', ''); });
     await setCar();

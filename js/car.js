@@ -311,7 +311,13 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       mask: { lumLo: 0.05, lumHi: 0.13, whiteLo: 0.97, whiteHi: 1.01, satLo: 0.1, satHi: 0.22 }, // no white parts: Meshy baked a bright roof highlight
     },
     {
-      id: 'bastion2', name: 'BASTION', desc: 'Hand-built widebody grand tourer: long domed hood, ducktail, four ring tail lights and twin turbines.',
+      // in-game BASTION is v3 (tools/model_bastion3.py). The id stays 'bastion2' so saves and unlocks carry over.
+      id: 'bastion2', name: 'BASTION', ver: 'v3', desc: 'Widebody fastback with a low sculpted nose, deep-dish wheels, four ring tail lights and twin turbines.',
+      glb: 'models/bastion3.glb', v: 2, hand: true, wheel: 'BastionWheel', wheelMirror: true,
+      kit: { rear: [[-0.306, 0.333, 2.575], [0.306, 0.333, 2.575]], rearW: 1.8, sideX: 0.80, sideY: 0.49, wheelR: 0.395, wheelX: 0.918 },
+    },
+    {
+      id: 'bastion_v2', name: 'BASTION v2', desc: 'Hand-built widebody grand tourer: long domed hood, ducktail, four ring tail lights and twin turbines.',
       glb: 'models/bastion2.glb', v: 2, hand: true, // modelled in Blender by tools/model_bastion2.py, no AI texture
       kit: { rear: [[-0.3, 0.37, 2.56], [0.3, 0.37, 2.56]], rearW: 1.8, sideX: 1.06, sideY: 0.5, wheelR: 0.42, wheelX: 0.92 },
     },
@@ -354,7 +360,13 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       kit: { rear: [[0.4, 1.0, 2.56], [-0.4, 1.0, 2.56]], rearW: 2.1, sideX: 1.18, sideY: 0.45, wheelR: 0.42, wheelX: 0.92 },
     },
     {
-      id: 'shard', name: 'SHARD', desc: 'Folded-steel armoured truck: flat slab roof, hexagonal arches and a big turbine in the cargo bed.',
+      // in-game SHARD is v3 (tools/model_shard3.py); the id stays 'shard' so saves and unlocks carry over
+      id: 'shard', name: 'SHARD', ver: 'v3', desc: 'Faceted turbine truck with a flat cab roof, hexagonal fenders and block-tread tires.',
+      glb: 'models/shard3.glb', v: 1, hand: true, wheel: 'ShardWheel', wheelMirror: true,
+      kit: { rear: [[0, 1.603, 2.341]], rearW: 2.65, sideX: 0.81, sideY: 0.68, wheelR: 0.49, wheelX: 0.974 },
+    },
+    {
+      id: 'shard_v1', name: 'SHARD v1', desc: 'Folded-steel armoured truck: flat slab roof, hexagonal arches and a big turbine in the cargo bed.',
       glb: 'models/shard.glb', v: 2, hand: true,
       kit: { rear: [[0, 1.38, 2.52]], rearW: 2.2, sideX: 1.0, sideY: 0.72, wheelR: 0.47, wheelX: 0.95 },
     },
@@ -365,12 +377,18 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       kit: { rear: [[0, 1.7, 2.52]], rearW: 2.2, sideX: 1.0, sideY: 0.72, wheelR: 0.47, wheelX: 0.95 },
     },
     {
-      id: 'tuktuk', name: 'TUK TUK', desc: 'A three-wheel rickshaw from the lake road: one front wheel, a canopy on posts, a big wing and two rocket nozzles.',
+      // in-game TUK TUK is v3 (tools/model_tuktuk3.py); the id stays 'tuktuk' so saves and unlocks carry over
+      id: 'tuktuk', name: 'TUK TUK', ver: 'v3', desc: 'Open rickshaw with a rolled canopy, a single front wheel and twin exhaust bells.',
+      glb: 'models/tuktuk3.glb', v: 1, hand: true, wheel: 'TukTukWheel',
+      kit: { rear: [[-0.412, 0.686, 2.645], [0.412, 0.686, 2.645]], rearW: 1.7, sideX: 0.796, sideY: 0.417, wheelR: 0.41, wheelX: 0.88, frontOne: true },
+    },
+    {
+      id: 'tuktuk_v1', name: 'TUK TUK v1', desc: 'A three-wheel rickshaw from the lake road: one front wheel, a canopy on posts, a big wing and two rocket nozzles.',
       glb: 'models/tuktuk.glb', v: 1, hand: true,
       kit: { rear: [[0.32, 0.6, 2.62], [-0.32, 0.6, 2.62]], rearW: 1.7, sideX: 0.7, sideY: 0.55, wheelR: 0.38, wheelX: 0.88, frontOne: true },
     },
     {
-      // Showroom-only remodel of TUK TUK, closer to the concept images. Not in G.GARAGE_CARS until Oscar picks it.
+      // Showroom-only remodel of TUK TUK, closer to the concept images. Showroom only.
       id: 'tuktuk2', name: 'TUK TUK v2', desc: 'A three-wheel rickshaw from the lake road: one front wheel under a big round headlight, a curled canopy, a pleated bench and two ribbed rocket nozzles.',
       glb: 'models/tuktuk2.glb', v: 1, hand: true,
       kit: { rear: [[0.3, 0.5, 2.52], [-0.3, 0.5, 2.52]], rearW: 1.7, sideX: 1.0, sideY: 0.6, wheelR: 0.34, wheelX: 0.86, frontOne: true },
@@ -382,7 +400,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
     { name: 'Violet', hex: 0x6a2bb3 }, { name: 'Sakura', hex: 0xe87fa8 }, { name: 'Graphite', hex: 0x3a3d42 }, { name: 'Onyx', hex: 0x0c0d0f },
   ];
   // Garage roster, in display order. START_CARS can be picked from the first run; the rest show locked.
-  // The Meshy/Tripo cars (comet, bastion, pebble) and the v2 remodels (tuktuk2, shard2) stay showroom-only. Ctrl+Shift+U toggles "unlock all" for testing.
+  // The Meshy/Tripo cars (comet, bastion, pebble) and the older versions of the hand-built cars (bastion_v2, shard_v1, shard2, tuktuk_v1, tuktuk2) stay showroom-only. Ctrl+Shift+U toggles "unlock all" for testing.
   G.GARAGE_CARS = ['thruster', 'mantis', 'ridgeback', 'halo', 'brick', 'rhino', 'comet2', 'bastion2', 'atlas', 'shard', 'tuktuk'];
   G.START_CARS = ['thruster', 'mantis', 'ridgeback'];
   G.carInfo = (id) => G.CARS.find((c) => c.id === id) || G.CARS[0];
@@ -557,6 +575,22 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
         const name = (o.material && o.material.name) || '';
         if (swap[name]) o.material = swap[name];
       });
+      // car.wheel: the GLB brings its own wheel (one mesh, true size, centred on its axle); it replaces the code wheels
+      // on every visible wheel, mirrored on the left when car.wheelMirror
+      const rim = car.wheel && body.getObjectByName(car.wheel);
+      if (rim) {
+        rim.removeFromParent();
+        for (const { pivot, spin } of model.wheels) {
+          if (!pivot.visible) continue;
+          const side = Math.sign(pivot.position.x);
+          pivot.clear(); spin.clear();
+          pivot.position.x = side * car.kit.wheelX;
+          spin.position.set(0, car.kit.wheelR - 0.37, 0);
+          const r = rim.clone(true);
+          if (car.wheelMirror && side) r.scale.x = side;
+          spin.add(r); pivot.add(spin);
+        }
+      }
       model.group.add(body);
       model.carId = id;
       return model;

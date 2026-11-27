@@ -13,13 +13,21 @@ How the RoadsterThruster cars are made, and the numbers they have to fit.
 | brick | BRICK | `tools/model_brick.py` | locked |
 | rhino | RHINO | `tools/model_rhino.py` | locked |
 | comet2 | COMET | `tools/model_comet2.py` | locked |
-| bastion2 | BASTION | `tools/model_bastion2.py` | locked |
+| bastion2 | BASTION (v3) | `tools/model_bastion3.py` → `models/bastion3.glb`, own wheel `BastionWheel` | locked |
+| bastion_v2 | BASTION v2 | `tools/model_bastion2.py` | showroom only, not in the Garage |
 | atlas | ATLAS | `tools/model_atlas.py` | locked |
-| shard | SHARD | `tools/model_shard.py` | locked |
+| shard | SHARD (v3) | `tools/model_shard3.py` → `models/shard3.glb`, own wheel `ShardWheel` | locked |
+| shard_v1 | SHARD v1 | `tools/model_shard.py` | showroom only, not in the Garage |
 | shard2 | SHARD v2 | `tools/model_shard2.py` (taller remodel closer to the concepts) | showroom only, not in the Garage |
-| tuktuk | TUK TUK | `tools/model_tuktuk.py` (one front wheel: kit `frontOne`) | locked |
+| tuktuk | TUK TUK (v3) | `tools/model_tuktuk3.py` → `models/tuktuk3.glb`, own wheel `TukTukWheel`, one front wheel (kit `frontOne`) | locked |
+| tuktuk_v1 | TUK TUK v1 | `tools/model_tuktuk.py` | showroom only, not in the Garage |
 | tuktuk2 | TUK TUK v2 | `tools/model_tuktuk2.py` (remodel closer to the concepts, one front wheel) | showroom only, not in the Garage |
 | comet, bastion | COMET, BASTION | Meshy + `tools/prep_car.py` | showroom only |
+
+When a remodel goes into the game it takes over the old car's id (saves and unlocks are keyed by id) and the old
+version moves to a new showroom-only id. `ver: 'v3'` on a car entry is shown only in the showroom list, which marks
+Garage cars "(in game)". A car whose GLB carries its own wheel mesh names it in `wheel` (`wheelMirror: true` flips it
+on the left side); `G.buildCar` puts a copy on every wheel in place of the code-built ones.
 | pebble | PEBBLE | Tripo + `tools/prep_car.py` | showroom only |
 
 ### Locks
