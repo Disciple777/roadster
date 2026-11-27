@@ -124,6 +124,11 @@
     const T = THREE, $ = (id) => document.getElementById(id);
 
     G.CARS.push({
+      id: 'bastion3', name: 'BASTION v3', hand: true, glb: 'models/bastion3.glb', v: 1,
+      desc: 'Widebody fastback with a low sculpted nose, deep-dish wheels, four ring tail lights and twin turbines.',
+      kit: { rear: [[-.306, .333, 2.575], [.306, .333, 2.575]], rearW: 1.8,
+        sideX: .80, sideY: .49, wheelR: .395, wheelX: .918 },
+    }, {
       id: 'tuktuk3', name: 'TUK TUK v3', hand: true, glb: 'models/tuktuk3.glb', v: 1,
       desc: 'Open rickshaw with a rolled canopy, a single front wheel and twin exhaust bells.',
       kit: { rear: [[-.412, .686, 2.645], [.412, .686, 2.645]], rearW: 1.7,
@@ -201,19 +206,26 @@
 
     // ---------- cars ----------
     let model = null, other = null, bodyGeos = [];
+    const showroomWheels = { bastion3: 'BastionWheel', tuktuk3: 'TukTukWheel' };
     const orig = new Map(); // geometry -> { pos, nrm } untouched copies for the smoothing preview
     async function build(id, x) {
       await G.loadCar(id);
       const m = G.buildCar(id, S.paint, { shadows: true });
-      if (id === 'tuktuk3' && m.carId === id) {
-        const wheel = m.group.getObjectByName('TukTukWheel');
+      const wheelName = showroomWheels[id];
+      const wheel = wheelName && m.carId === id && m.group.getObjectByName(wheelName);
+      if (wheel) {
+        const kit = G.carInfo(id).kit;
         wheel.removeFromParent();
         for (const { pivot, spin } of m.wheels) {
-          pivot.clear();
           if (!pivot.visible) continue;
+          const side = Math.sign(pivot.position.x);
+          pivot.clear();
+          pivot.position.x = side * kit.wheelX;
           spin.clear();
-          spin.position.y = G.carInfo(id).kit.wheelR - .37;
-          spin.add(wheel.clone(true));
+          spin.position.y = kit.wheelR - .37;
+          const rim = wheel.clone(true);
+          if (id === 'bastion3') rim.scale.x = side;
+          spin.add(rim);
           pivot.add(spin);
         }
       }
@@ -360,7 +372,11 @@
     // car pickers
     for (const sel of ['car', 'cmp']) {
       if (sel === 'cmp') $('cmp').add(new Option('— nothing —', ''));
-      for (const c of G.CARS) $(sel).add(new Option(c.name + (G.GARAGE_CARS && !G.GARAGE_CARS.includes(c.id) ? (c.hand ? ' (showroom only)' : ' (old AI model)') : ''), c.id));
+      for (const c of G.CARS) {
+        const name = c.id === 'bastion2' ? `${c.name} v2` : c.name;
+        const suffix = G.GARAGE_CARS && !G.GARAGE_CARS.includes(c.id) ? (c.hand ? ' (showroom only)' : ' (old AI model)') : '';
+        $(sel).add(new Option(name + suffix, c.id));
+      }
     }
     $('car').value = S.car; $('cmp').value = S.cmp || '';
     $('car').onchange = () => { S.car = $('car').value; save(); setCar(); };
