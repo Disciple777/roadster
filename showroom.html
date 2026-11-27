@@ -129,6 +129,11 @@
       kit: { rear: [[-.306, .333, 2.575], [.306, .333, 2.575]], rearW: 1.8,
         sideX: .80, sideY: .49, wheelR: .395, wheelX: .918 },
     }, {
+      id: 'shard3', name: 'SHARD v3', hand: true, glb: 'models/shard3.glb', v: 1,
+      desc: 'Faceted turbine truck with a flat cab roof, hexagonal fenders and block-tread tires.',
+      kit: { rear: [[0, 1.603, 2.341]], rearW: 2.65,
+        sideX: .81, sideY: .68, wheelR: .490, wheelX: .974 },
+    }, {
       id: 'tuktuk3', name: 'TUK TUK v3', hand: true, glb: 'models/tuktuk3.glb', v: 1,
       desc: 'Open rickshaw with a rolled canopy, a single front wheel and twin exhaust bells.',
       kit: { rear: [[-.412, .686, 2.645], [.412, .686, 2.645]], rearW: 1.7,
@@ -206,7 +211,7 @@
 
     // ---------- cars ----------
     let model = null, other = null, bodyGeos = [];
-    const showroomWheels = { bastion3: 'BastionWheel', tuktuk3: 'TukTukWheel' };
+    const showroomWheels = { bastion3: 'BastionWheel', shard3: 'ShardWheel', tuktuk3: 'TukTukWheel' };
     const orig = new Map(); // geometry -> { pos, nrm } untouched copies for the smoothing preview
     async function build(id, x) {
       await G.loadCar(id);
@@ -224,7 +229,7 @@
           spin.clear();
           spin.position.y = kit.wheelR - .37;
           const rim = wheel.clone(true);
-          if (id === 'bastion3') rim.scale.x = side;
+          if (id === 'bastion3' || id === 'shard3') rim.scale.x = side;
           spin.add(rim);
           pivot.add(spin);
         }
