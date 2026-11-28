@@ -1073,7 +1073,7 @@
       if (fwd.lengthSq() < 0.01) fwd.set(0, 0, -1);
       fwd.normalize();
       const pfx = fwd.x, pfz = fwd.z, prx = -pfz, prz = pfx;
-      const PL = 4.6, PW = 2.05, MP = G.TUNING.mass;
+      const PL = 4.6 * G.carSize(pl), PW = 2.05 * G.carSize(pl), MP = G.TUNING.mass;
       for (const c of list) {
         const top = this.topOf(c);
         if (pl.pos.y + 0.18 > top - 0.25) continue;     // above the roof

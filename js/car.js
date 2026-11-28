@@ -380,6 +380,7 @@ vec3 flakeHash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p
       // in-game TUK TUK is v3 (tools/model_tuktuk3.py); the id stays 'tuktuk' so saves and unlocks carry over
       id: 'tuktuk', name: 'TUK TUK', ver: 'v3', desc: 'Open rickshaw with a rolled canopy, a single front wheel and twin exhaust bells.',
       glb: 'models/tuktuk3.glb', v: 1, hand: true, wheel: 'TukTukWheel',
+      size: 0.65, // a real tuk-tuk is much smaller than a car: the whole model (and its crash box) is drawn at 65%
       kit: { rear: [[-0.412, 0.686, 2.645], [0.412, 0.686, 2.645]], rearW: 1.7, sideX: 0.796, sideY: 0.417, wheelR: 0.41, wheelX: 0.88, frontOne: true },
     },
     {
@@ -593,6 +594,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
       }
       model.group.add(body);
       model.carId = id;
+      if (car.size) { model.size = car.size; model.group.scale.setScalar(car.size); }
       return model;
     }
     body.traverse((o) => {
@@ -647,7 +649,8 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
       const score = y + 0.35 * Math.abs(zc - DRIVER);
       if (score < bestScore) { bestScore = score; best = { y, z: zc }; }
     }
-    return (eyeCache[key] = best);
+    const s = model.size || 1; // worked out in the model's own units; a scaled car scales its eye too
+    return (eyeCache[key] = { y: best.y * s, z: best.z * s });
   };
 
   G.setPaint = function (model, hex) {
@@ -1078,7 +1081,8 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
       m.group.quaternion.copy(this.q);
       for (let i = 0; i < 4; i++) {
         const wh = this.wheels[i], mw = m.wheels[i];
-        mw.pivot.position.y = ANCHOR_Y - Math.min(wh.len, REST);
+        // a scaled car (model.size) keeps its wheels on the ground at rest and moves them the real suspension travel
+        mw.pivot.position.y = ANCHOR_Y - REST + (REST - Math.min(wh.len, REST)) / (m.size || 1);
         mw.pivot.rotation.y = wh.front ? -this.steerAngle : 0;
         mw.spin.rotation.x = -wh.spin;
       }
@@ -1089,6 +1093,7 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
   // roadster vs roadster (player or AI, same rules both ways): 2D OBB overlap, equal masses,
   // impulse at the contact point so an off-centre shunt spins both cars the same way a real one would
   const CAR_L = 4.6, CAR_W = 2.05;
+  G.carSize = (b) => (b && b.model && b.model.size) || 1; // crash box scale for a smaller car (TUK TUK)
   const _f = (b, out) => { out.set(0, 0, -1).applyQuaternion(b.q); out.y = 0; if (out.lengthSq() < 0.01) out.set(0, 0, -1); return out.normalize(); };
   const _fa = new T.Vector3(), _fb = new T.Vector3();
   G.collideCars = function (A, B) {
@@ -1098,9 +1103,10 @@ material.clearcoat *= mix(0.25, 1.0, paintMask);`);
     const fa = _f(A, _fa), fb = _f(B, _fb);
     const axes = [[fa.x, fa.z], [-fa.z, fa.x], [fb.x, fb.z], [-fb.z, fb.x]];
     let minO = 1e9, nx = 0, nz = 0;
+    const sa = G.carSize(A), sb = G.carSize(B);
     for (const [ax, az] of axes) {
-      const ra = Math.abs(fa.x * ax + fa.z * az) * CAR_L / 2 + Math.abs(-fa.z * ax + fa.x * az) * CAR_W / 2;
-      const rb = Math.abs(fb.x * ax + fb.z * az) * CAR_L / 2 + Math.abs(-fb.z * ax + fb.x * az) * CAR_W / 2;
+      const ra = (Math.abs(fa.x * ax + fa.z * az) * CAR_L / 2 + Math.abs(-fa.z * ax + fa.x * az) * CAR_W / 2) * sa;
+      const rb = (Math.abs(fb.x * ax + fb.z * az) * CAR_L / 2 + Math.abs(-fb.z * ax + fb.x * az) * CAR_W / 2) * sb;
       const d = dx * ax + dz * az, o = ra + rb - Math.abs(d);
       if (o <= 0) return;
       if (o < minO) { minO = o; const sg = d > 0 ? 1 : -1; nx = ax * sg; nz = az * sg; } // n points A -> B

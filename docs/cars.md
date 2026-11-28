@@ -28,6 +28,8 @@ When a remodel goes into the game it takes over the old car's id (saves and unlo
 version moves to a new showroom-only id. `ver: 'v3'` on a car entry is shown only in the showroom list, which marks
 Garage cars "(in game)". A car whose GLB carries its own wheel mesh names it in `wheel` (`wheelMirror: true` flips it
 on the left side); `G.buildCar` puts a copy on every wheel in place of the code-built ones.
+`size` (TUK TUK: 0.65) draws the whole car smaller than the shared physics car and shrinks its crash box with it
+(`G.carSize`); the suspension and the cockpit camera are corrected for it.
 | pebble | PEBBLE | Tripo + `tools/prep_car.py` | showroom only |
 
 ### Locks
